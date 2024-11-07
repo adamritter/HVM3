@@ -4,7 +4,6 @@ dist-newstyle/
 *.hvm1
 main
 Main1
-*.c
 cabal-dev/
 .cabal-sandbox/
 cabal.sandbox.config
