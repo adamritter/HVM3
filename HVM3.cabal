@@ -16,20 +16,20 @@ common warnings
 executable hvml
     import:           warnings
     main-is:          Main.hs
-    other-modules:    HVM.Lazy.Type
-                    , HVM.Lazy.Inject
-                    , HVM.Lazy.Extract
-                    , HVM.Lazy.Parse
-                    , HVM.Lazy.Show
-                    , HVM.Lazy.Normal
+    other-modules:    HVML.Type
+                    , HVML.Inject
+                    , HVML.Extract
+                    , HVML.Parse
+                    , HVML.Show
+                    , HVML.Normal
     build-depends:    base ^>=4.20.0.0,
                       mtl ^>=2.3.1,
                       containers ^>=0.7,
                       unordered-containers ^>=0.2.19.1,
                       parsec ^>=3.1.17.0,
                       hashable ^>=1.5.0.0,
-    hs-source-dirs:   app
+    hs-source-dirs:   src
     default-language: GHC2024
-    c-sources:        app/HVM/Lazy/Runtime.c
+    c-sources:        src/HVML/Runtime.c
     extra-libraries:  c
     ghc-options:     -Wno-all

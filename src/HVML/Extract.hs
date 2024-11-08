@@ -1,7 +1,7 @@
-module HVM.Lazy.Extract where
+module HVML.Extract where
 
+import HVML.Type
 import qualified Data.IntSet as IS
-import HVM.Lazy.Type
 
 extractCore :: Term -> IS.IntSet -> HVM (IS.IntSet, Core)
 extractCore term dups = case tagT (termTag term) of

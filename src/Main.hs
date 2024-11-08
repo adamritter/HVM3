@@ -6,12 +6,12 @@ import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(ExitSuccess, ExitFailure))
 import System.IO (readFile)
 
-import HVM.Lazy.Type
-import HVM.Lazy.Inject
-import HVM.Lazy.Extract
-import HVM.Lazy.Parse
-import HVM.Lazy.Show
-import HVM.Lazy.Normal
+import HVML.Type
+import HVML.Inject
+import HVML.Extract
+import HVML.Parse
+import HVML.Show
+import HVML.Normal
 
 -- Main
 -- ----

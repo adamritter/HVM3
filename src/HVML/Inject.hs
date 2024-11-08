@@ -1,7 +1,7 @@
-module HVM.Lazy.Inject where
+module HVML.Inject where
 
 import Data.Word
-import HVM.Lazy.Type
+import HVML.Type
 import qualified Data.IntMap.Strict as IM
 
 type VarMap = IM.IntMap (Maybe Term)

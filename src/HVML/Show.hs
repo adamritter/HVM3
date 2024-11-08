@@ -1,8 +1,8 @@
-module HVM.Lazy.Show where
+module HVML.Show where
 
 import Data.Char (intToDigit)
 import Data.Word
-import HVM.Lazy.Type
+import HVML.Type
 import Numeric (showIntAtBase)
 
 -- Core Stringification

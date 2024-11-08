@@ -1,6 +1,6 @@
-module HVM.Lazy.Normal where
+module HVML.Normal where
 
-import HVM.Lazy.Type
+import HVML.Type
 
 normal :: Term -> HVM Term
 normal term = do

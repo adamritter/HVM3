@@ -1,4 +1,4 @@
-module HVM.Lazy.Type where
+module HVML.Type where
 
 import Data.Word
 

@@ -1,8 +1,8 @@
-module HVM.Lazy.Parse where
+module HVML.Parse where
 
 import Text.Parsec hiding (State)
 import Text.Parsec.String
-import HVM.Lazy.Type
+import HVML.Type
 
 parseCore :: Parser Core
 parseCore = do
