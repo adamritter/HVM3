@@ -42,6 +42,8 @@ void hvm_free() {
 // Constants
 // ---------
 
+const  u64    TEST = 1234;
+
 #define DP0 0x00
 #define DP1 0x01
 #define VAR 0x02
@@ -56,7 +58,7 @@ void hvm_free() {
 // Heap
 // ----
 
-Loc get_end() {
+Loc get_len() {
   return SIZE;
 }
 
@@ -64,7 +66,7 @@ Loc get_itr() {
   return ITRS;
 }
 
-void set_end(Loc value) {
+void set_len(Loc value) {
   SIZE = value;
 }
 
@@ -161,8 +163,8 @@ void print_term(Term term) {
 }
 
 void print_heap() {
-  Loc end = get_end();
-  for (Loc i = 0; i < end; i++) {
+  Loc len = get_len();
+  for (Loc i = 0; i < len; i++) {
     Term term = got(i);
     if (term != 0) {
       printf("set(0x%09x, ", i);
@@ -380,59 +382,59 @@ Term reduce(Term term) {
   return 0;
 }
 
-Term normal(Term term) {
-  Term wnf = reduce(term);
-  Tag tag = get_tag(wnf);
-  Lab lab = get_lab(wnf);
-  Loc loc = get_loc(wnf);
-  switch (tag) {
-    case APP: {
-      Term fun;
-      Term arg;
-      fun = got(loc + 0);
-      fun = normal(fun);
-      arg = got(loc + 1);
-      arg = normal(arg);
-      set(loc + 0, fun);
-      set(loc + 1, arg);
-      return wnf;
-    }
-    case LAM: {
-      Term bod;
-      bod = got(loc + 1);
-      bod = normal(bod);
-      set(loc + 1, bod);
-      return wnf;
-    }
-    case SUP: {
-      Term tm0;
-      Term tm1;
-      tm0 = got(loc + 0);
-      tm0 = normal(tm0);
-      tm1 = got(loc + 1);
-      tm1 = normal(tm1);
-      set(loc + 0, tm0);
-      set(loc + 1, tm1);
-      return wnf;
-    }
-    case DP0: {
-      Term val;
-      val = got(loc + 2);
-      val = normal(val);
-      set(loc + 2, val);
-      return wnf;
-    }
-    case DP1: {
-      Term val;
-      val = got(loc + 2);
-      val = normal(val);
-      set(loc + 2, val);
-      return wnf;
-    }
-    default:
-      return wnf;
-  }
-}
+//Term normal(Term term) {
+  //Term wnf = reduce(term);
+  //Tag tag = get_tag(wnf);
+  //Lab lab = get_lab(wnf);
+  //Loc loc = get_loc(wnf);
+  //switch (tag) {
+    //case APP: {
+      //Term fun;
+      //Term arg;
+      //fun = got(loc + 0);
+      //fun = normal(fun);
+      //arg = got(loc + 1);
+      //arg = normal(arg);
+      //set(loc + 0, fun);
+      //set(loc + 1, arg);
+      //return wnf;
+    //}
+    //case LAM: {
+      //Term bod;
+      //bod = got(loc + 1);
+      //bod = normal(bod);
+      //set(loc + 1, bod);
+      //return wnf;
+    //}
+    //case SUP: {
+      //Term tm0;
+      //Term tm1;
+      //tm0 = got(loc + 0);
+      //tm0 = normal(tm0);
+      //tm1 = got(loc + 1);
+      //tm1 = normal(tm1);
+      //set(loc + 0, tm0);
+      //set(loc + 1, tm1);
+      //return wnf;
+    //}
+    //case DP0: {
+      //Term val;
+      //val = got(loc + 2);
+      //val = normal(val);
+      //set(loc + 2, val);
+      //return wnf;
+    //}
+    //case DP1: {
+      //Term val;
+      //val = got(loc + 2);
+      //val = normal(val);
+      //set(loc + 2, val);
+      //return wnf;
+    //}
+    //default:
+      //return wnf;
+  //}
+//}
 
 // Main
 // ----
@@ -452,7 +454,7 @@ Term normal(Term term) {
 
   //printf("Itrs: %u\n", get_itr());
   //double time_spent = (double)(end - start) / CLOCKS_PER_SEC * 1000;
-  //printf("Size: %u nodes\n", get_end());
+  //printf("Size: %u nodes\n", get_len());
   //printf("Time: %.2f seconds\n", time_spent / 1000.0);
   //printf("MIPS: %.2f\n", (get_itr() / 1000000.0) / (time_spent / 1000.0));
 
