@@ -1,28 +1,25 @@
-{-# LANGUAGE BangPatterns #-}
+-- main.c:
+-- //./main.c//
+
 {-# OPTIONS_GHC -Wno-all #-}
 
 module Main where
 
--- TASK: translate HVM.kind to Haskell.
--- follow the exact same order of functions.
--- both files must display identical behavior.
--- do NOT use the ' character on variable names.
--- use numbers instead (var0, var1, etc.)
--- do it now:
-
 import Data.Bits
 import Data.Char (intToDigit)
-import Data.Hashable
 import Data.IORef
 import Data.Word
+import Foreign.Ptr
 import Numeric (showIntAtBase)
+import System.CPUTime
 import Text.Parsec hiding (State)
 import Text.Parsec.String
+import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
-import qualified Data.HashMap.Strict as HM
-import System.CPUTime
 
 import Debug.Trace
+
+debug a b = b
 
 -- Core Types
 -- ----------
@@ -44,56 +41,75 @@ type Lab  = Word64
 type Loc  = Word64
 type Term = Word64
 
-data TAG = AIR | SUB | VAR | DP0 | DP1 | APP | ERA | LAM | SUP
+data TAG = SUB | VAR | DP0 | DP1 | APP | ERA | LAM | SUP
   deriving (Eq, Show)
 
-tagT :: Tag -> TAG
-tagT 0x00 = AIR
-tagT 0x01 = SUB
-tagT 0x02 = VAR
-tagT 0x03 = DP0
-tagT 0x04 = DP1
-tagT 0x05 = APP
-tagT 0x06 = ERA
-tagT 0x07 = LAM
-tagT 0x08 = SUP
-tagT _    = error "Invalid tag"
+foreign import ccall unsafe "main.c alloc_node"
+  alloc_node :: Word64 -> IO Word64
 
-data Heap = Heap 
-  { mem :: IORef (HM.HashMap Word64 Term)
-  , ini :: IORef Word64
-  , end :: IORef Word64
-  , itr :: IORef Word64
-  }
+foreign import ccall unsafe "main.c set"
+  set :: Word64 -> Term -> IO ()
+
+foreign import ccall unsafe "main.c got"
+  got :: Word64 -> IO Term
+
+foreign import ccall unsafe "main.c take"
+  take :: Word64 -> IO Term
+
+foreign import ccall unsafe "main.c hvm_init"
+  hvm_init :: IO ()
+
+foreign import ccall unsafe "main.c hvm_free"
+  hvm_free :: IO ()
+
+foreign import ccall unsafe "main.c get_end"
+  get_end :: IO Word64
+
+foreign import ccall unsafe "main.c get_itr"
+  get_itr :: IO Word64
+
+foreign import ccall unsafe "main.c inc_itr"
+  inc_itr :: IO Word64
+
+foreign import ccall unsafe "main.c reduce"
+  c_reduce :: Term -> IO Term
+
+foreign import ccall unsafe "main.c normal"
+  c_normal :: Term -> IO Term
 
 type HVM = IO
 
 -- Constants
 -- ---------
 
-_AIR_, _SUB_, _VAR_, _DP0_, _DP1_, _APP_, _ERA_, _LAM_, _SUP_ :: Tag
-_AIR_ = 0x00
-_SUB_ = 0x01
+tagT :: Tag -> TAG
+tagT 0x00 = DP0
+tagT 0x01 = DP1
+tagT 0x02 = VAR
+tagT 0x03 = APP
+tagT 0x04 = ERA
+tagT 0x05 = LAM
+tagT 0x06 = SUP
+tagT 0x07 = SUB
+
+_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_ :: Tag
+_DP0_ = 0x00
+_DP1_ = 0x01
 _VAR_ = 0x02
-_DP0_ = 0x03
-_DP1_ = 0x04
-_APP_ = 0x05
-_ERA_ = 0x06
-_LAM_ = 0x07
-_SUP_ = 0x08
+_APP_ = 0x03
+_ERA_ = 0x04
+_LAM_ = 0x05
+_SUP_ = 0x06
+_SUB_ = 0x07
 
 _VOID_ :: Term
 _VOID_ = 0x00000000000000
 
--- Initialization
--- --------------
-
-newHeap :: IO Heap
-newHeap = Heap <$> newIORef HM.empty <*> newIORef 0 <*> newIORef 1 <*> newIORef 0
+-- Terms
+-- ------
 
 newTerm :: Tag -> Lab -> Loc -> Term
 newTerm tag lab loc = 
-
   let tagEnc = tag
       labEnc = shiftL lab 8
       locEnc = shiftL loc 32
@@ -118,213 +134,163 @@ getKey term = case tagT (getTag term) of
 tagEq :: Tag -> Tag -> Bool
 tagEq x y = x == y
 
-getIni :: Heap -> HVM Word64
-getIni heap = readIORef (ini heap)
-
-getEnd :: Heap -> HVM Word64 
-getEnd heap = readIORef (end heap)
-
-getMem :: Heap -> HVM (HM.HashMap Word64 Term)
-getMem heap = readIORef (mem heap)
-
-getItr :: Heap -> HVM Word64
-getItr heap = readIORef (itr heap)
-
--- Memory
--- ------
-
-swap :: Heap -> Loc -> Term -> HVM Term
-swap heap loc term = do
-  memRef <- readIORef (mem heap)
-  let oldTerm = HM.lookupDefault 0 loc memRef
-  writeIORef (mem heap) (HM.insert loc term memRef)
-  return oldTerm
-
-got :: Heap -> Word64 -> HVM Term
-got heap loc = do
-  memRef <- readIORef (mem heap)
-  return $ HM.lookupDefault 0 loc memRef
-
-set :: Heap -> Word64 -> Term -> HVM ()
-set heap loc term = do
-  _ <- swap heap loc term
-  return ()
-
-take :: Heap -> Word64 -> HVM Term
-take heap loc = swap heap loc _VOID_
-
-just :: Word64 -> HVM Word64
-just = return
-
--- Allocation
--- ----------
-
-allocNode :: Heap -> Word64 -> HVM Word64
-allocNode heap arity = do
-  endRef <- readIORef (end heap)
-  writeIORef (end heap) (endRef + arity)
-  return endRef
-
-incItr :: Heap -> HVM Word64
-incItr heap = do
-  itrRef <- readIORef (itr heap)
-  writeIORef (itr heap) (itrRef + 1)
-  readIORef (end heap)
-
 -- Injection
 -- ---------
 
-type VarMap = HM.HashMap String (Maybe Term)
+type VarMap = IM.IntMap (Maybe Term)
 
-hmSwap :: (Eq k, Hashable k) => k -> v -> HM.HashMap k v -> (Maybe v, HM.HashMap k v)
-hmSwap k v m = 
-  let old = HM.lookup k m
-      new = HM.insert k v m
-  in (old, new)
-
-injectBind :: Heap -> String -> Term -> VarMap -> HVM VarMap
-injectBind heap nam var vars = do
+injectBind :: String -> Term -> VarMap -> HVM VarMap
+injectBind nam var vars = do
   let subKey = getKey var
-  let (varLoc, vars') = hmSwap nam (Just var) vars
-  case varLoc of
+  let namHash = hash nam
+  case IM.lookup namHash vars of
     Nothing -> do
-      set heap subKey (newTerm _SUB_ 0 0)
-      return vars'
-    Just (Just oldVarLoc) -> do
-      set heap oldVarLoc var
-      set heap subKey (newTerm _SUB_ 0 0)
-      return vars'
-    Just Nothing -> do
-      set heap subKey (newTerm _SUB_ 0 0)
-      return vars'
+      set subKey (newTerm _SUB_ 0 0)
+      return $ IM.insert namHash (Just var) vars
+    Just mOldVar -> case mOldVar of
+      Nothing -> do
+        set subKey (newTerm _SUB_ 0 0)
+        return $ IM.insert namHash (Just var) vars
+      Just oldVar -> do
+        set oldVar var
+        set subKey (newTerm _SUB_ 0 0)
+        return $ IM.insert namHash (Just var) vars
+  where
+    hash :: String -> Int
+    hash = foldl (\h c -> 33 * h + fromEnum c) 5381
 
-injectCore :: Heap -> Core -> Word64 -> VarMap -> HVM VarMap
-injectCore heap Era loc vars = do
-  set heap loc (newTerm _ERA_ 0 0)
+injectCore :: Core -> Word64 -> VarMap -> HVM VarMap
+injectCore Era loc vars = do
+  set loc (newTerm _ERA_ 0 0)
   return vars
-injectCore heap (Lam vr0 bod) loc vars = do
-  lam   <- allocNode heap 2
-  vars0 <- injectBind heap vr0 (newTerm _VAR_ 0 (lam + 0)) vars
-  vars1 <- injectCore heap bod (lam + 1) vars0
-  set heap loc (newTerm _LAM_ 0 lam)
+injectCore (Lam vr0 bod) loc vars = do
+  lam   <- alloc_node 2
+  vars0 <- injectBind vr0 (newTerm _VAR_ 0 (lam + 0)) vars
+  vars1 <- injectCore bod (lam + 1) vars0
+  set loc (newTerm _LAM_ 0 lam)
   return vars1
-injectCore heap (App fun arg) loc vars = do
-  app   <- allocNode heap 2
-  vars0 <- injectCore heap fun (app + 0) vars
-  vars1 <- injectCore heap arg (app + 1) vars0
-  set heap loc (newTerm _APP_ 0 app)
+injectCore (App fun arg) loc vars = do
+  app   <- alloc_node 2
+  vars0 <- injectCore fun (app + 0) vars
+  vars1 <- injectCore arg (app + 1) vars0
+  set loc (newTerm _APP_ 0 app)
   return vars1
-injectCore heap (Sup tm0 tm1) loc vars = do
-  sup   <- allocNode heap 2
-  vars0 <- injectCore heap tm0 (sup + 0) vars
-  vars1 <- injectCore heap tm1 (sup + 1) vars0
-  set heap loc (newTerm _SUP_ 0 sup)
+injectCore (Sup tm0 tm1) loc vars = do
+  sup   <- alloc_node 2
+  vars0 <- injectCore tm0 (sup + 0) vars
+  vars1 <- injectCore tm1 (sup + 1) vars0
+  set loc (newTerm _SUP_ 0 sup)
   return vars1
-injectCore heap (Dup dp0 dp1 val bod) loc vars = do
-  dup   <- allocNode heap 3
-  vars0 <- injectBind heap dp0 (newTerm _DP0_ 0 dup) vars
-  vars1 <- injectBind heap dp1 (newTerm _DP1_ 0 dup) vars0
-  vars2 <- injectCore heap val (dup + 2) vars1
-  injectCore heap bod loc vars2
-injectCore heap (Var uid) loc vars = do
-  let (var, vars') = hmSwap uid (Just loc) vars
-  case var of
-    Nothing -> return vars'
-    Just (Just oldVar) -> do
-      set heap loc oldVar
-      return vars'
-    Just Nothing -> return vars'
+injectCore (Dup dp0 dp1 val bod) loc vars = do
+  dup   <- alloc_node 3
+  vars0 <- injectBind dp0 (newTerm _DP0_ 0 dup) vars
+  vars1 <- injectBind dp1 (newTerm _DP1_ 0 dup) vars0
+  vars2 <- injectCore val (dup + 2) vars1
+  injectCore bod loc vars2
+injectCore (Var uid) loc vars = do
+  let namHash = hash uid
+  case IM.lookup namHash vars of
+    Nothing -> return $ IM.insert namHash (Just loc) vars
+    Just mOldVar -> case mOldVar of
+      Nothing -> return $ IM.insert namHash (Just loc) vars
+      Just oldVar -> do
+        set loc oldVar
+        return $ IM.insert namHash (Just loc) vars
+  where
+    hash :: String -> Int
+    hash = foldl (\h c -> 33 * h + fromEnum c) 5381
 
-doInjectCore :: Heap -> Core -> HVM Term
-doInjectCore heap core = do
-  injectCore heap core 0 HM.empty
-  got heap 0
+doInjectCore :: Core -> HVM Term
+doInjectCore core = do
+  injectCore core 0 IM.empty
+  got 0
 
-extractCore :: Heap -> Term -> IS.IntSet -> HVM (IS.IntSet, Core)
-extractCore heap term dups = case tagT (getTag term) of
+-- Extraction
+-- ----------
+
+extractCore :: Term -> IS.IntSet -> HVM (IS.IntSet, Core)
+extractCore term dups = case tagT (getTag term) of
   ERA -> return (dups, Era)
   LAM -> do
     let loc = getLoc term
-    bod <- got heap (loc + 1)
+    bod <- got (loc + 1)
     let var = show (loc + 0)
-    (dups0, bod0) <- extractCore heap bod dups
+    (dups0, bod0) <- extractCore bod dups
     return (dups0, Lam var bod0)
   APP -> do
     let loc = getLoc term
-    fun <- got heap (loc + 0)
-    arg <- got heap (loc + 1)
-    (dups0, fun0) <- extractCore heap fun dups
-    (dups1, arg0) <- extractCore heap arg dups0
+    fun <- got (loc + 0)
+    arg <- got (loc + 1)
+    (dups0, fun0) <- extractCore fun dups
+    (dups1, arg0) <- extractCore arg dups0
     return (dups1, App fun0 arg0)
   SUP -> do
     let loc = getLoc term
-    tm0 <- got heap (loc + 0)
-    tm1 <- got heap (loc + 1)
-    (dups0, tm00) <- extractCore heap tm0 dups
-    (dups1, tm10) <- extractCore heap tm1 dups0
+    tm0 <- got (loc + 0)
+    tm1 <- got (loc + 1)
+    (dups0, tm00) <- extractCore tm0 dups
+    (dups1, tm10) <- extractCore tm1 dups0
     return (dups1, Sup tm00 tm10)
   VAR -> do
     let key = getKey term
-    sub <- got heap key
+    sub <- got key
     if tagEq (getTag sub) _SUB_
       then return (dups, Var (show key))
-      else extractCore heap sub dups
+      else extractCore sub dups
   DP0 -> do
     let loc = getLoc term
     let key = getKey term
-    sub <- got heap key
+    sub <- got key
     if tagEq (getTag sub) _SUB_
       then if IS.member (fromIntegral loc) dups
         then return (dups, Var (show key))
         else do
           let dp0 = show (loc + 0)
           let dp1 = show (loc + 1)
-          val <- got heap (loc + 2)
-          (dups0, val0) <- extractCore heap val (IS.insert (fromIntegral loc) dups)
+          val <- got (loc + 2)
+          (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
           return (dups0, Dup dp0 dp1 val0 (Var dp0))
-      else extractCore heap sub dups
+      else extractCore sub dups
   DP1 -> do
     let loc = getLoc term
     let key = getKey term
-    sub <- got heap key
+    sub <- got key
     if tagEq (getTag sub) _SUB_
       then if IS.member (fromIntegral loc) dups
         then return (dups, Var (show key))
         else do
           let dp0 = show (loc + 0)
           let dp1 = show (loc + 1)
-          val <- got heap (loc + 2)
-          (dups0, val0) <- extractCore heap val (IS.insert (fromIntegral loc) dups)
+          val <- got (loc + 2)
+          (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
           return (dups0, Dup dp0 dp1 val0 (Var dp1))
-      else extractCore heap sub dups
+      else extractCore sub dups
   _ -> return (dups, Era)
 
-doExtractCore :: Heap -> Term -> HVM Core
-doExtractCore heap term = do
-  (_, core) <- extractCore heap term IS.empty
+doExtractCore :: Term -> HVM Core
+doExtractCore term = do
+  (_, core) <- extractCore term IS.empty
   return core
 
 -- Dumping
 -- -------
 
-dumpHeapRange :: Heap -> Word64 -> Word64 -> HVM [(Word64, Term)]
-dumpHeapRange heap ini end =
-  if ini < end
-    then do
-      head <- got heap ini
-      tail <- dumpHeapRange heap (ini + 1) end
-      if head == 0
-        then return tail
-        else return ((ini, head) : tail)
-    else return []
+dumpHeapRange :: Word64 -> Word64 -> HVM [(Word64, Term)]
+dumpHeapRange ini end =
+  if ini < end then do
+    head <- got ini
+    tail <- dumpHeapRange (ini + 1) end
+    if head == 0
+      then return tail
+      else return ((ini, head) : tail)
+  else return []
 
-dumpHeap :: Heap -> HVM ([(Word64, Term)], Word64, Word64, Word64)
-dumpHeap heap = do
-  ini <- getIni heap
-  end <- getEnd heap
-  itr <- getItr heap
-  terms <- dumpHeapRange heap ini end
-  return (terms, ini, end, itr)
+dumpHeap :: HVM ([(Word64, Term)], Word64)
+dumpHeap = do
+  end <- get_end
+  itr <- get_itr
+  terms <- dumpHeapRange 0 end
+  return (terms, itr)
 
 -- Parsing
 -- -------
@@ -417,15 +383,13 @@ termToString term =
       loc = locToString (getLoc term)
   in "new_term(" ++ tag ++ ",0x" ++ lab ++ ",0x" ++ loc ++ ")"
 
-heapToString :: ([(Word64, Term)], Word64, Word64, Word64) -> String
-heapToString (terms, ini, end, itr) = 
-  "set_ini(heap, 0x" ++ padLeft (showHex ini) 9 '0' ++ ");\n" ++
-  "set_end(heap, 0x" ++ padLeft (showHex end) 9 '0' ++ ");\n" ++
-  "set_itr(heap, 0x" ++ padLeft (showHex itr) 9 '0' ++ ");\n" ++
+heapToString :: ([(Word64, Term)], Word64) -> String
+heapToString (terms, itr) = 
+  "set_itr(0x" ++ padLeft (showHex itr) 9 '0' ++ ");\n" ++
   foldr (\(k,v) txt ->
     let addr = padLeft (showHex k) 9 '0'
         term = termToString v
-    in "set(heap, 0x" ++ addr ++ ", " ++ term ++ ");\n" ++ txt) "" terms
+    in "set(0x" ++ addr ++ ", " ++ term ++ ");\n" ++ txt) "" terms
 
 -- Helper functions
 
@@ -438,175 +402,175 @@ showHex x = showIntAtBase 16 intToDigit (fromIntegral x) ""
 -- Evaluation
 -- ----------
 
-reduce :: Heap -> Term -> HVM Term
-reduce heap term = trace ("NEXT: " ++ termToString term) $ do
+reduce :: Term -> HVM Term
+reduce term = debug ("NEXT: " ++ termToString term) $ do
   let tag = getTag term
       lab = getLab term
       loc = getLoc term
   case tagT tag of
     APP -> do
-      fun <- got heap (loc + 0)
-      arg <- got heap (loc + 1)
-      reduceApp heap lab loc fun arg
+      fun <- got (loc + 0)
+      arg <- got (loc + 1)
+      reduceApp lab loc fun arg
     DP0 -> do
       let key = getKey term
-      sub <- got heap key
+      sub <- got key
       if tagEq (getTag sub) _SUB_
         then do
-          dp0 <- got heap (loc + 0)
-          dp1 <- got heap (loc + 1)
-          val <- got heap (loc + 2)
-          reduceDup heap 0 lab loc dp0 dp1 val
-        else reduce heap sub
+          dp0 <- got (loc + 0)
+          dp1 <- got (loc + 1)
+          val <- got (loc + 2)
+          reduceDup 0 lab loc dp0 dp1 val
+        else reduce sub
     DP1 -> do
       let key = getKey term
-      sub <- got heap key
+      sub <- got key
       if tagEq (getTag sub) _SUB_
         then do
-          dp0 <- got heap (loc + 0)
-          dp1 <- got heap (loc + 1)
-          val <- got heap (loc + 2)
-          reduceDup heap 1 lab loc dp0 dp1 val
-        else reduce heap sub
+          dp0 <- got (loc + 0)
+          dp1 <- got (loc + 1)
+          val <- got (loc + 2)
+          reduceDup 1 lab loc dp0 dp1 val
+        else reduce sub
     VAR -> do
-      sub <- got heap (loc + 0)
+      sub <- got (loc + 0)
       if tagEq (getTag sub) _SUB_
         then return $ newTerm (getTag term) lab loc
-        else reduce heap sub
+        else reduce sub
     _ -> return term
 
-reduceApp :: Heap -> Word64 -> Word64 -> Term -> Term -> HVM Term
-reduceApp heap lab loc fun arg = do
-  fun <- reduce heap fun
+reduceApp :: Word64 -> Word64 -> Term -> Term -> HVM Term
+reduceApp lab loc fun arg = do
+  fun <- reduce fun
   let funTag = getTag fun
       funLab = getLab fun
       funLoc = getLoc fun
   case tagT funTag of
-    ERA -> trace "APP-ERA" $ do
-      _ <- incItr heap
+    ERA -> debug "APP-ERA" $ do
+      inc_itr
       return fun
-    LAM -> trace "APP-LAM" $ do
-      _ <- incItr heap
-      bod <- got heap (funLoc + 1)
-      set heap (funLoc + 0) arg
-      set heap (loc + 0) 0
-      set heap (loc + 1) 0
-      set heap (funLoc + 1) 0
-      reduce heap bod
-    SUP -> trace "APP-SUP" $ do
-      _ <- incItr heap
-      tm0 <- got heap (funLoc + 0)
-      tm1 <- got heap (funLoc + 1)
-      du0 <- allocNode heap 3
-      su0 <- allocNode heap 2
-      ap0 <- allocNode heap 2
-      ap1 <- allocNode heap 2
-      set heap (du0 + 0) (newTerm _SUB_ 0 0)
-      set heap (du0 + 1) (newTerm _SUB_ 0 0)
-      set heap (du0 + 2) (newTerm _ERA_ 0 7)
-      set heap (du0 + 2) arg
-      set heap (ap0 + 0) tm0
-      set heap (ap0 + 1) (newTerm _DP0_ 0 du0)
-      set heap (ap1 + 0) tm1
-      set heap (ap1 + 1) (newTerm _DP1_ 0 du0)
-      set heap (su0 + 0) (newTerm _APP_ 0 ap0)
-      set heap (su0 + 1) (newTerm _APP_ 0 ap1)
-      set heap (loc + 0) 0
-      set heap (loc + 1) 0
-      set heap (funLoc + 0) 0
-      set heap (funLoc + 1) 0
+    LAM -> debug "APP-LAM" $ do
+      inc_itr
+      bod <- got (funLoc + 1)
+      set (funLoc + 0) arg
+      set (loc + 0) 0
+      set (loc + 1) 0
+      set (funLoc + 1) 0
+      reduce bod
+    SUP -> debug "APP-SUP" $ do
+      inc_itr
+      tm0 <- got (funLoc + 0)
+      tm1 <- got (funLoc + 1)
+      du0 <- alloc_node 3
+      su0 <- alloc_node 2
+      ap0 <- alloc_node 2
+      ap1 <- alloc_node 2
+      set (du0 + 0) (newTerm _SUB_ 0 0)
+      set (du0 + 1) (newTerm _SUB_ 0 0)
+      set (du0 + 2) (newTerm _ERA_ 0 7)
+      set (du0 + 2) arg
+      set (ap0 + 0) tm0
+      set (ap0 + 1) (newTerm _DP0_ 0 du0)
+      set (ap1 + 0) tm1
+      set (ap1 + 1) (newTerm _DP1_ 0 du0)
+      set (su0 + 0) (newTerm _APP_ 0 ap0)
+      set (su0 + 1) (newTerm _APP_ 0 ap1)
+      set (loc + 0) 0
+      set (loc + 1) 0
+      set (funLoc + 0) 0
+      set (funLoc + 1) 0
       return $ newTerm _SUP_ 0 su0
     _ -> do
-      set heap (loc + 0) fun
+      set (loc + 0) fun
       return $ newTerm _APP_ lab loc
 
-reduceDup :: Heap -> Word64 -> Word64 -> Word64 -> Term -> Term -> Term -> HVM Term
-reduceDup heap n lab loc dp0 dp1 val = do
-  val <- reduce heap val
+reduceDup :: Word64 -> Word64 -> Word64 -> Term -> Term -> Term -> HVM Term
+reduceDup n lab loc dp0 dp1 val = do
+  val <- reduce val
   let valTag = getTag val
       valLab = getLab val
       valLoc = getLoc val
   case tagT valTag of
-    ERA -> trace "DUP-ERA" $ do
-      _ <- incItr heap
-      set heap (loc + 0) val
-      set heap (loc + 1) val
-      set heap (loc + 2) 0
-      got heap (loc + n)
-    LAM -> trace "DUP-LAM" $ do
-      _ <- incItr heap
+    ERA -> debug "DUP-ERA" $ do
+      inc_itr
+      set (loc + 0) val
+      set (loc + 1) val
+      set (loc + 2) 0
+      got (loc + n)
+    LAM -> debug "DUP-LAM" $ do
+      inc_itr
       let vr0 = valLoc + 0
-      bod <- got heap (valLoc + 1)
-      du0 <- allocNode heap 3
-      lm0 <- allocNode heap 2
-      lm1 <- allocNode heap 2
-      su0 <- allocNode heap 2
-      set heap (du0 + 0) (newTerm _SUB_ 0 0)
-      set heap (du0 + 1) (newTerm _SUB_ 0 0)
-      set heap (du0 + 2) bod
-      set heap (lm0 + 0) (newTerm _SUB_ 0 0)
-      set heap (lm0 + 1) (newTerm _DP0_ 0 du0)
-      set heap (lm1 + 0) (newTerm _SUB_ 0 0)
-      set heap (lm1 + 1) (newTerm _DP1_ 0 du0)
-      set heap (su0 + 0) (newTerm _VAR_ 0 lm0)
-      set heap (su0 + 1) (newTerm _VAR_ 0 lm1)
-      set heap (loc + 0) (newTerm _LAM_ 0 lm0)
-      set heap (loc + 1) (newTerm _LAM_ 0 lm1)
-      set heap (vr0 + 0) (newTerm _SUP_ 0 su0)
-      set heap (loc + 2) 0
-      set heap (valLoc + 1) 0
-      got heap (loc + n) >>= reduce heap
-    SUP -> trace "DUP-SUP" $ do
-      _ <- incItr heap
-      tm0 <- got heap (valLoc + 0)
-      tm1 <- got heap (valLoc + 1)
-      set heap (loc + 0) tm0
-      set heap (loc + 1) tm1
-      set heap (loc + 2) 0
-      set heap (valLoc + 0) 0
-      set heap (valLoc + 1) 0
-      got heap (loc + n) >>= reduce heap
+      bod <- got (valLoc + 1)
+      du0 <- alloc_node 3
+      lm0 <- alloc_node 2
+      lm1 <- alloc_node 2
+      su0 <- alloc_node 2
+      set (du0 + 0) (newTerm _SUB_ 0 0)
+      set (du0 + 1) (newTerm _SUB_ 0 0)
+      set (du0 + 2) bod
+      set (lm0 + 0) (newTerm _SUB_ 0 0)
+      set (lm0 + 1) (newTerm _DP0_ 0 du0)
+      set (lm1 + 0) (newTerm _SUB_ 0 0)
+      set (lm1 + 1) (newTerm _DP1_ 0 du0)
+      set (su0 + 0) (newTerm _VAR_ 0 lm0)
+      set (su0 + 1) (newTerm _VAR_ 0 lm1)
+      set (loc + 0) (newTerm _LAM_ 0 lm0)
+      set (loc + 1) (newTerm _LAM_ 0 lm1)
+      set (vr0 + 0) (newTerm _SUP_ 0 su0)
+      set (loc + 2) 0
+      set (valLoc + 1) 0
+      got (loc + n) >>= reduce
+    SUP -> debug "DUP-SUP" $ do
+      inc_itr
+      tm0 <- got (valLoc + 0)
+      tm1 <- got (valLoc + 1)
+      set (loc + 0) tm0
+      set (loc + 1) tm1
+      set (loc + 2) 0
+      set (valLoc + 0) 0
+      set (valLoc + 1) 0
+      got (loc + n) >>= reduce
     _ -> do
-      set heap (loc + 2) val
+      set (loc + 2) val
       return $ newTerm (if n == 0 then _DP0_ else _DP1_) lab loc
 
-normal :: Heap -> Term -> HVM Term
-normal heap term = do
-  wnf <- reduce heap term
+normal :: Term -> HVM Term
+normal term = do
+  wnf <- reduce term
   let tag = getTag wnf
       lab = getLab wnf
       loc = getLoc wnf
   case tagT tag of
     APP -> do
-      fun <- got heap (loc + 0)
-      fun <- normal heap fun
-      arg <- got heap (loc + 1)
-      arg <- normal heap arg
-      set heap (loc + 0) fun
-      set heap (loc + 1) arg
+      fun <- got (loc + 0)
+      fun <- normal fun
+      arg <- got (loc + 1)
+      arg <- normal arg
+      set (loc + 0) fun
+      set (loc + 1) arg
       return wnf
     LAM -> do
-      bod <- got heap (loc + 1)
-      bod <- normal heap bod
-      set heap (loc + 1) bod
+      bod <- got (loc + 1)
+      bod <- normal bod
+      set (loc + 1) bod
       return wnf
     SUP -> do
-      tm0 <- got heap (loc + 0)
-      tm1 <- got heap (loc + 1)
-      tm0 <- normal heap tm0
-      tm1 <- normal heap tm1
-      set heap (loc + 0) tm0
-      set heap (loc + 1) tm1
+      tm0 <- got (loc + 0)
+      tm1 <- got (loc + 1)
+      tm0 <- normal tm0
+      tm1 <- normal tm1
+      set (loc + 0) tm0
+      set (loc + 1) tm1
       return wnf
     DP0 -> do
-      val <- got heap (loc + 2)
-      val <- normal heap val
-      set heap (loc + 2) val
+      val <- got (loc + 2)
+      val <- normal val
+      set (loc + 2) val
       return wnf
     DP1 -> do
-      val <- got heap (loc + 2)
-      val <- normal heap val
-      set heap (loc + 2) val
+      val <- got (loc + 2)
+      val <- normal val
+      set (loc + 2) val
       return wnf
     _ -> return wnf
 
@@ -624,60 +588,16 @@ genPow2 n =
       final = concat ["λx (f", show (n-1), "a (f", show (n-1), "b x))"]
   in concat $ [base] ++ [concat (dups ++ [" " ++ final])]
 
--- main :: IO ()
--- main = do
-
-  -- let term = doParseCore $ unlines
-        -- [ "(("
-        -- , genPow2 15
-        -- , "  λX ((X λT0 λF0 F0) λT1 λF1 T1))"
-        -- , "  λT2 λF2 T2)"
-        -- ]
-
-  -- -- let term = doParseCore "({λx x λy y} λa a)"
-  -- putStrLn "[CORE]"
-  -- putStrLn $ coreToString term
-  -- putStrLn $ ""
-
-  -- heap <- newHeap
-  -- root <- doInjectCore heap term
-  
-  -- -- putStrLn "[HEAP]"
-  -- -- heap' <- dumpHeap heap
-  -- -- putStrLn $ heapToString heap'
-  -- putStrLn "[CORE]"
-  -- core <- doExtractCore heap root
-  -- putStrLn $ coreToString core
-  -- putStrLn ""
-  
-  -- putStrLn "[Normalizing...]"
-  -- norm <- normal heap root
-  -- set heap 0 norm
-  -- putStrLn ""
-  
-  -- -- putStrLn "[HEAP_NF]"
-  -- -- heap'' <- dumpHeap heap
-  -- -- putStrLn $ heapToString heap''
-  -- putStrLn "[CORE_NF]"
-  -- norm' <- doExtractCore heap norm
-  -- putStrLn $ coreToString norm'
-  -- putStrLn ""
-  
-  -- itr <- getItr heap
-  -- putStrLn "[ITR]"
-  -- print itr
-
--- TODO: rewrite main to print the time it took to normalize the term, in ms. keep all else the same. don't change anything else.
 main :: IO ()
 main = do
   start <- getCPUTime
-  heap <- newHeap
+  hvm_init
 
   let term = doParseCore $ unlines
-        [ "(λa * (("
+        [ "(("
         , genPow2 24
         , "  λX ((X λT0 λF0 F0) λT1 λF1 T1))"
-        , "  λT2 λF2 T2))"
+        , "  λT2 λF2 T2)"
         ]
   -- let term = doParseCore "(λx x λy y)"
 
@@ -686,31 +606,38 @@ main = do
   putStrLn $ ""
 
   -- Inject core term
-  root <- doInjectCore heap term
+  root <- doInjectCore term
+  -- TODO: print root
 
-  putStrLn "[HEAP]"
-  heap' <- dumpHeap heap
-  putStrLn $ heapToString heap'
+  -- putStrLn "[HEAP]"
+  -- heap' <- dumpHeap
+  -- putStrLn $ heapToString heap'
   
-  putStrLn "[CORE]"
-  core <- doExtractCore heap root
-  putStrLn $ coreToString core
-  putStrLn ""
+  -- putStrLn "[CORE_EX]"
+  -- core <- doExtractCore root
+  -- putStrLn $ coreToString core
+  -- putStrLn ""
   
   putStrLn "[Normalizing...]"
-  norm <- normal heap root
-  set heap 0 norm
+  -- norm <- normal root
+  norm <- c_normal root
+  set 0 norm
   putStrLn ""
   
   putStrLn "[CORE_NF]"
-  norm' <- doExtractCore heap norm
+  norm' <- doExtractCore norm
   putStrLn $ coreToString norm'
   putStrLn ""
   
   end <- getCPUTime
   let diff = fromIntegral (end - start) / (10^9) :: Double
   
-  itr <- getItr heap
-  putStrLn "[ITR]"
-  print itr
-  putStrLn $ "[TIME] " ++ show diff ++ "ms"
+  itr <- get_itr
+  len <- get_end
+  let mips = (fromIntegral itr / 1000000.0) / (diff / 1000.0)
+  putStrLn $ "ITRS: " ++ show itr
+  putStrLn $ "TIME: " ++ show diff ++ "ms"
+  putStrLn $ "SIZE: " ++ show len
+  putStrLn $ "MIPS: " ++ show mips
+  
+  hvm_free
