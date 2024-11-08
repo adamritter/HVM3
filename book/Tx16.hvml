@@ -1,0 +1,22 @@
+((
+  λf
+    &{f00x f00y} = f
+    &{f01x f01y} = λk01 (f00x (f00y k01))
+    &{f02x f02y} = λk02 (f01x (f01y k02))
+    &{f03x f03y} = λk03 (f02x (f02y k03))
+    &{f04x f04y} = λk04 (f03x (f03y k04))
+    &{f05x f05y} = λk05 (f04x (f04y k05))
+    &{f06x f06y} = λk06 (f05x (f05y k06))
+    &{f07x f07y} = λk07 (f06x (f06y k07))
+    &{f08x f08y} = λk08 (f07x (f07y k08))
+    &{f09x f09y} = λk09 (f08x (f08y k09))
+    &{f0Ax f0Ay} = λk0A (f09x (f09y k0A))
+    &{f0Bx f0By} = λk0B (f0Ax (f0Ay k0B))
+    &{f0Cx f0Cy} = λk0C (f0Bx (f0By k0C))
+    &{f0Dx f0Dy} = λk0D (f0Cx (f0Cy k0D))
+    &{f0Ex f0Ey} = λk0E (f0Dx (f0Dy k0E))
+    &{f0Fx f0Fy} = λk0F (f0Ex (f0Ey k0F))
+    &{f10x f10y} = λk10 (f0Fx (f0Fy k10))
+    f10x
+  λX ((X λT0 λF0 F0) λT1 λF1 T1))
+  λT2 λF2 T2)

@@ -77,30 +77,30 @@ void set_itr(Loc value) {
 // Terms
 // ------
 
-Term new_term(Tag tag, Lab lab, Loc loc) {
+Term term_new(Tag tag, Lab lab, Loc loc) {
   Term tag_enc = tag;
   Term lab_enc = ((Term)lab) << 8;
   Term loc_enc = ((Term)loc) << 32;
   return tag_enc | lab_enc | loc_enc;
 }
 
-Tag get_tag(Term x) {
+Tag term_tag(Term x) {
   return x & 0xFF;
 }
 
-Lab get_lab(Term x) {
+Lab term_lab(Term x) {
   return (x >> 8) & 0xFFFFFF;
 }
 
-Loc get_loc(Term x) {
+Loc term_loc(Term x) {
   return (x >> 32) & 0xFFFFFFFF;
 }
 
-Loc get_key(Term term) {
-  switch (get_tag(term)) {
-    case VAR: return get_loc(term) + 0;
-    case DP0: return get_loc(term) + 0;
-    case DP1: return get_loc(term) + 1;
+Loc term_key(Term term) {
+  switch (term_tag(term)) {
+    case VAR: return term_loc(term) + 0;
+    case DP0: return term_loc(term) + 0;
+    case DP1: return term_loc(term) + 1;
     default:  return 0;
   }
 }
@@ -157,9 +157,9 @@ void print_tag(Tag tag) {
 }
 
 void print_term(Term term) {
-  printf("new_term(");
-  print_tag(get_tag(term));
-  printf(",0x%06x,0x%09x)", get_lab(term), get_loc(term));
+  printf("term_new(");
+  print_tag(term_tag(term));
+  printf(",0x%06x,0x%09x)", term_lab(term), term_loc(term));
 }
 
 void print_heap() {
@@ -191,8 +191,8 @@ Term reduce_app_era(Term app, Term era) {
 // body
 Term reduce_app_lam(Term app, Term lam) {
   inc_itr();
-  Loc app_loc = get_loc(app);
-  Loc lam_loc = get_loc(lam);
+  Loc app_loc = term_loc(app);
+  Loc lam_loc = term_loc(lam);
   Term arg    = got(app_loc + 1);
   Term bod    = got(lam_loc + 1);
   set(lam_loc + 0, arg);
@@ -205,8 +205,8 @@ Term reduce_app_lam(Term app, Term lam) {
 // {(a x0) (b x1)}
 Term reduce_app_sup(Term app, Term sup) {
   inc_itr();
-  Loc app_loc = get_loc(app);
-  Loc sup_loc = get_loc(sup);
+  Loc app_loc = term_loc(app);
+  Loc sup_loc = term_loc(sup);
   Term arg    = got(app_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
@@ -214,16 +214,16 @@ Term reduce_app_sup(Term app, Term sup) {
   Loc su0     = alloc_node(2);
   Loc ap0     = alloc_node(2);
   Loc ap1     = alloc_node(2);
-  set(du0 + 0, new_term(SUB, 0, 0));
-  set(du0 + 1, new_term(SUB, 0, 0));
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, term_new(SUB, 0, 0));
   set(du0 + 2, arg);
   set(ap0 + 0, tm0);
-  set(ap0 + 1, new_term(DP0, 0, du0));
+  set(ap0 + 1, term_new(DP0, 0, du0));
   set(ap1 + 0, tm1);
-  set(ap1 + 1, new_term(DP1, 0, du0));
-  set(su0 + 0, new_term(APP, 0, ap0));
-  set(su0 + 1, new_term(APP, 0, ap1));
-  return new_term(SUP, 0, su0);
+  set(ap1 + 1, term_new(DP1, 0, du0));
+  set(su0 + 0, term_new(APP, 0, ap0));
+  set(su0 + 1, term_new(APP, 0, ap1));
+  return term_new(SUP, 0, su0);
 }
 
 // & {x y} = *
@@ -232,8 +232,8 @@ Term reduce_app_sup(Term app, Term sup) {
 // y <- *
 Term reduce_dup_era(Term dup, Term era) {
   inc_itr();
-  Loc dup_loc = get_loc(dup);
-  Tag dup_num = get_tag(dup) == DP0 ? 0 : 1;
+  Loc dup_loc = term_loc(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   set(dup_loc + 0, era);
   set(dup_loc + 1, era);
   return got(dup_loc + dup_num);
@@ -247,26 +247,26 @@ Term reduce_dup_era(Term dup, Term era) {
 // x <- {x0 x1}
 Term reduce_dup_lam(Term dup, Term lam) {
   inc_itr();
-  Loc dup_loc = get_loc(dup);
-  Tag dup_num = get_tag(dup) == DP0 ? 0 : 1;
-  Loc lam_loc = get_loc(lam);
+  Loc dup_loc = term_loc(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Loc lam_loc = term_loc(lam);
   Term bod    = got(lam_loc + 1);
   Loc du0     = alloc_node(3);
   Loc lm0     = alloc_node(2);
   Loc lm1     = alloc_node(2);
   Loc su0     = alloc_node(2);
-  set(du0 + 0, new_term(SUB, 0, 0));
-  set(du0 + 1, new_term(SUB, 0, 0));
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, term_new(SUB, 0, 0));
   set(du0 + 2, bod);
-  set(lm0 + 0, new_term(SUB, 0, 0));
-  set(lm0 + 1, new_term(DP0, 0, du0));
-  set(lm1 + 0, new_term(SUB, 0, 0));
-  set(lm1 + 1, new_term(DP1, 0, du0));
-  set(su0 + 0, new_term(VAR, 0, lm0));
-  set(su0 + 1, new_term(VAR, 0, lm1));
-  set(dup_loc + 0, new_term(LAM, 0, lm0));
-  set(dup_loc + 1, new_term(LAM, 0, lm1));
-  set(lam_loc + 0, new_term(SUP, 0, su0));
+  set(lm0 + 0, term_new(SUB, 0, 0));
+  set(lm0 + 1, term_new(DP0, 0, du0));
+  set(lm1 + 0, term_new(SUB, 0, 0));
+  set(lm1 + 1, term_new(DP1, 0, du0));
+  set(su0 + 0, term_new(VAR, 0, lm0));
+  set(su0 + 1, term_new(VAR, 0, lm1));
+  set(dup_loc + 0, term_new(LAM, 0, lm0));
+  set(dup_loc + 1, term_new(LAM, 0, lm1));
+  set(lam_loc + 0, term_new(SUP, 0, su0));
   return got(dup_loc + dup_num);
 }
 
@@ -276,9 +276,9 @@ Term reduce_dup_lam(Term dup, Term lam) {
 // y <- b
 Term reduce_dup_sup(Term dup, Term sup) {
   inc_itr();
-  Loc dup_loc = get_loc(dup);
-  Tag dup_num = get_tag(dup) == DP0 ? 0 : 1;
-  Loc sup_loc = get_loc(sup);
+  Loc dup_loc = term_loc(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Loc sup_loc = term_loc(sup);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
   set(dup_loc + 0, tm0);
@@ -290,9 +290,9 @@ Term reduce(Term term) {
   Loc   spos = 0;
   Term  next = term;
   while (1) {
-    Tag tag = get_tag(next);
-    Lab lab = get_lab(next);
-    Loc loc = get_loc(next);
+    Tag tag = term_tag(next);
+    Lab lab = term_lab(next);
+    Loc loc = term_loc(next);
     switch (tag) {
       case APP: {
         PATH[spos++] = next;
@@ -301,9 +301,9 @@ Term reduce(Term term) {
       }
       case DP0:
       case DP1: {
-        Loc key = get_key(next);
+        Loc key = term_key(next);
         Term sub = got(key);
-        if (get_tag(sub) == SUB) {
+        if (term_tag(sub) == SUB) {
           PATH[spos++] = next;
           next = got(loc + 2);
           continue;
@@ -313,9 +313,9 @@ Term reduce(Term term) {
         }
       }
       case VAR: {
-        Loc key = get_key(next);
+        Loc key = term_key(next);
         Term sub = got(key);
-        if (get_tag(sub) == SUB) {
+        if (term_tag(sub) == SUB) {
           break;
         } else {
           next = sub;
@@ -327,9 +327,9 @@ Term reduce(Term term) {
           break;
         } else {
           Term prev = PATH[--spos];
-          Tag ptag = get_tag(prev);
-          Lab plab = get_lab(prev);
-          Loc ploc = get_loc(prev);
+          Tag ptag = term_tag(prev);
+          Lab plab = term_lab(prev);
+          Loc ploc = term_loc(prev);
           switch (ptag) {
             case APP: {
               switch (tag) {
@@ -360,9 +360,9 @@ Term reduce(Term term) {
       return next;
     } else {
       Term host = PATH[--spos];
-      Tag htag = get_tag(host);
-      Lab hlab = get_lab(host);
-      Loc hloc = get_loc(host);
+      Tag htag = term_tag(host);
+      Lab hlab = term_lab(host);
+      Loc hloc = term_loc(host);
       switch (htag) {
         case APP: {
           set(hloc + 0, next);
@@ -384,9 +384,9 @@ Term reduce(Term term) {
 
 //Term normal(Term term) {
   //Term wnf = reduce(term);
-  //Tag tag = get_tag(wnf);
-  //Lab lab = get_lab(wnf);
-  //Loc loc = get_loc(wnf);
+  //Tag tag = term_tag(wnf);
+  //Lab lab = term_lab(wnf);
+  //Loc loc = term_loc(wnf);
   //switch (tag) {
     //case APP: {
       //Term fun;
