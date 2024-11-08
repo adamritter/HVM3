@@ -11,7 +11,7 @@ import HVM.Lazy.Inject
 import HVM.Lazy.Extract
 import HVM.Lazy.Parse
 import HVM.Lazy.Show
-import HVM.Lazy.Reduce
+import HVM.Lazy.Normal
 
 -- Main
 -- ----
@@ -21,6 +21,7 @@ main = do
   args <- getArgs
   result <- case args of
     ["run", file, "-s"] -> cliRun file True
+    ["run", "-s", file] -> cliRun file True
     ["run", file]       -> cliRun file False
     ["help"]            -> printHelp
     _                   -> printHelp

@@ -1,4 +1,4 @@
-module HVM.Lazy.Reduce where
+module HVM.Lazy.Normal where
 
 import HVM.Lazy.Type
 
