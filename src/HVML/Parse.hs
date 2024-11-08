@@ -46,9 +46,10 @@ parseCore = do
 parseName :: Parser String
 parseName = spaces >> many1 (alphaNum <|> char '_')
 
-consume str = spaces >> string str
-
 doParseCore :: String -> Core
 doParseCore code = case parse parseCore "" code of
   Right core -> core
   Left _     -> Era
+
+consume :: String -> Parser String
+consume str = spaces >> string str

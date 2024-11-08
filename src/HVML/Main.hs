@@ -21,7 +21,6 @@ main = do
   args <- getArgs
   result <- case args of
     ["run", file, "-s"] -> cliRun file True
-    ["run", "-s", file] -> cliRun file True
     ["run", file]       -> cliRun file False
     ["help"]            -> printHelp
     _                   -> printHelp
@@ -64,7 +63,7 @@ cliRun filePath showStats = do
 
 printHelp :: IO (Either String ())
 printHelp = do
-  putStrLn "HVM usage:"
-  putStrLn "  hvm run [-s] <file>  # Normalizes the specified file"
-  putStrLn "  hvm help             # Shows this help message"
+  putStrLn "HVM-Lazy usage:"
+  putStrLn "  hvml run [-s] <file>  # Normalizes the specified file"
+  putStrLn "  hvml help             # Shows this help message"
   return $ Right ()
