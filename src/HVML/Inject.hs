@@ -2,6 +2,7 @@
 
 module HVML.Inject where
 
+import Control.Monad (foldM)
 import Data.Word
 import HVML.Type
 import qualified Data.IntMap.Strict as IM
@@ -40,6 +41,19 @@ injectCore book (Dup dp0 dp1 val bod) loc vars = do
 injectCore book (Ref nam fid) loc vars = do
   set loc (termNew _REF_ 0 fid)
   return vars
+injectCore book (Ctr cid fds) loc vars = do
+  let arity = length fds
+  ctr   <- allocNode (fromIntegral arity)
+  vars0 <- foldM (\vs (ix,fd) -> injectCore book fd (ctr + ix) vs) vars (zip [0..] fds)
+  set loc (termNew _CTR_ (u12v2New cid (fromIntegral (length fds))) ctr)
+  return vars0
+injectCore book (Mat val css) loc vars = do
+  mat   <- allocNode (1 + fromIntegral (length css))
+  vars0 <- injectCore book val (mat + 0) vars
+  vars1 <- foldM (\vs (ix,bod) -> do
+    injectCore book bod (mat + 1 + ix) vs) vars0 (zip [0..] css)
+  set loc (termNew _MAT_ (fromIntegral (length css)) mat)
+  return vars1
 injectCore _ (Var uid) loc vars = do
   let namHash = hash uid
   case IM.lookup namHash vars of

@@ -1,5 +1,10 @@
+-- //./Type.hs//
+-- //./Show.hs//
+-- //./Inject.hs//
+
 module HVML.Extract where
 
+import Control.Monad (foldM)
 import HVML.Type
 import qualified Data.IntSet as IS
 
@@ -60,10 +65,35 @@ extractCore term dups = case tagT (termTag term) of
           (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
           return (dups0, Dup dp0 dp1 val0 (Var dp1))
       else extractCore sub dups
+  CTR -> do
+    let loc = termLoc term
+    let lab = termLab term
+    let cid = u12v2X lab
+    let ari = u12v2Y lab
+    fds <- if ari == 0
+      then return []
+      else mapM (\i -> got (loc + i)) [0..ari-1]
+    (dups0, fds) <- foldM (\ (dups,fds) fd -> do
+      (dups0, fd0) <- extractCore fd dups
+      return (dups0, fds ++ [fd0])) (dups,[]) fds
+    return (dups0, Ctr cid fds)
+  MAT -> do
+    let loc = termLoc term
+    let ari = termLab term
+    val <- got (loc + 0)
+    css <- if ari == 0
+      then return []
+      else mapM (\i -> got (loc + 1 + i)) [0..ari-1]
+    (dups0, val0) <- extractCore val dups
+    (dups1, css0) <- foldM (\ (dups,css) cs -> do
+      (dups0, cs0) <- extractCore cs dups
+      return (dups0, css ++ [cs0])) (dups0,[]) css
+    return (dups1, Mat val0 css0)
   REF -> do
     let loc = termLoc term
     return (dups, Ref "?" loc)
-  _ -> return (dups, Era)
+  _ -> do
+    return (dups, Era)
 
 doExtractCore :: Term -> HVM Core
 doExtractCore term = do

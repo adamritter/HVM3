@@ -1,3 +1,6 @@
+//./Type.hs//
+//./Inject.hs//
+
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -46,6 +49,8 @@ static State HVM = {
 #define SUP 0x06
 #define SUB 0x07
 #define REF 0x08
+#define CTR 0x09
+#define MAT 0x0A
 
 #define VOID 0x00000000000000
 
@@ -100,6 +105,21 @@ Loc term_key(Term term) {
   }
 }
 
+// u12v2
+// -----
+
+u64 u12v2_new(u64 x, u64 y) {
+  return (y << 12) | x;
+}
+
+u64 u12v2_x(u64 u12v2) {
+  return u12v2 & 0x3FF;
+}
+
+u64 u12v2_y(u64 u12v2) {
+  return u12v2 >> 12;
+}
+
 // Atomics
 // -------
 
@@ -148,6 +168,8 @@ void print_tag(Tag tag) {
     case LAM: printf("LAM"); break;
     case SUP: printf("SUP"); break;
     case REF: printf("REF"); break;
+    case CTR: printf("CTR"); break;
+    case MAT: printf("MAT"); break;
     default : printf("???"); break;
   }
 }
@@ -173,8 +195,16 @@ void print_heap() {
 // Evaluation
 // ----------
 
+// @foo
+// --------- REF
+// book[foo]
+Term reduce_ref(Term ref) {
+  inc_itr();
+  return HVM.book[term_loc(ref)]();
+}
+
 // (* a)
-// ----- APP_ERA
+// ----- APP-ERA
 // *
 Term reduce_app_era(Term app, Term era) {
   inc_itr();
@@ -182,7 +212,7 @@ Term reduce_app_era(Term app, Term era) {
 }
 
 // (λx(body) a)
-// ------------ APP_LAM
+// ------------ APP-LAM
 // x <- a
 // body
 Term reduce_app_lam(Term app, Term lam) {
@@ -196,8 +226,8 @@ Term reduce_app_lam(Term app, Term lam) {
 }
 
 // ({a b} c)
-// --------------- APP_SUP
-// & {x0 x1} = c
+// --------------- APP-SUP
+// &{x0 x1} = c
 // {(a x0) (b x1)}
 Term reduce_app_sup(Term app, Term sup) {
   inc_itr();
@@ -222,8 +252,16 @@ Term reduce_app_sup(Term app, Term sup) {
   return term_new(SUP, 0, su0);
 }
 
-// & {x y} = *
-// ----------- DUP_ERA
+// (#{x y z ...} a)
+// ---------------- APP-CTR
+// ⊥
+Term reduce_app_ctr(Term app, Term ctr) {
+  printf("invalid:app-ctr");
+  exit(0);
+}
+
+// &{x y} = *
+// ---------- DUP-ERA
 // x <- *
 // y <- *
 Term reduce_dup_era(Term dup, Term era) {
@@ -235,9 +273,9 @@ Term reduce_dup_era(Term dup, Term era) {
   return got(dup_loc + dup_num);
 }
 
-// & {r s} = λx(f)
-// --------------- DUP_LAM
-// & {f0 f1} = f
+// &{r s} = λx(f)
+// -------------- DUP-LAM
+// &{f0 f1} = f
 // r <- λx0(f0)
 // s <- λx1(f1)
 // x <- {x0 x1}
@@ -266,8 +304,8 @@ Term reduce_dup_lam(Term dup, Term lam) {
   return got(dup_loc + dup_num);
 }
 
-// & {x y} = {a b}
-// --------------- DUP_SUP
+// &{x y} = {a b}
+// -------------- DUP-SUP
 // x <- a
 // y <- b
 Term reduce_dup_sup(Term dup, Term sup) {
@@ -282,9 +320,105 @@ Term reduce_dup_sup(Term dup, Term sup) {
   return got(dup_loc + dup_num);
 }
 
-Term reduce_ref(Term ref) {
+// &{x y} = #{a b c ...}
+// --------------------- DUP-CTR
+// &{a0 a1} = a
+// &{b0 b1} = b
+// &{c0 c1} = c
+// ...
+// {#{a0 b0 c0 ...} #{a1 b1 c1 ...}}
+Term reduce_dup_ctr(Term dup, Term ctr) {
   inc_itr();
-  return HVM.book[term_loc(ref)]();
+  Loc dup_loc = term_loc(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Loc ctr_loc = term_loc(ctr);
+  Lab ctr_lab = term_lab(ctr);
+  u64 ctr_ari = u12v2_y(ctr_lab);
+  Loc ctr0    = alloc_node(ctr_ari);
+  Loc ctr1    = alloc_node(ctr_ari);
+  for (u64 i = 0; i < ctr_ari; i++) {
+    Loc du0 = alloc_node(3);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, term_new(SUB, 0, 0));
+    set(du0 + 2, got(ctr_loc + i));
+    set(ctr0 + i, term_new(DP0, 0, du0));
+    set(ctr1 + i, term_new(DP1, 0, du0));
+  }
+  Loc sup = alloc_node(2);
+  set(sup + 0, term_new(CTR, ctr_lab, ctr0));
+  set(sup + 1, term_new(CTR, ctr_lab, ctr1));
+  set(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
+  set(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
+  return got(dup_loc + dup_num);
+}
+
+// ~ * {K0 K1 K2 ...} 
+// ------------------ MAT-ERA
+// *
+Term reduce_mat_era(Term mat, Term era) {
+  inc_itr();
+  return era;
+}
+
+// ~ λx(x) {K0 K1 K2 ...}
+// ---------------------- MAT-LAM
+// ⊥
+Term reduce_mat_lam(Term mat, Term lam) {
+  printf("invalid:mat-lam");
+  exit(0);
+}
+
+// ~ {x y} {K0 K1 K2 ...}
+// ---------------------- MAT-SUP
+// &{k0a k0b} = K0
+// &{k1a k1b} = K1
+// &{k2a k2b} = K2
+// ...
+// { ~ x {K0a K1a K2a ...}
+//   ~ y {K0b K1b K2b ...} }
+Term reduce_mat_sup(Term mat, Term sup) {
+  inc_itr();
+  Loc mat_loc = term_loc(mat);
+  Loc sup_loc = term_loc(sup);
+  Term tm0    = got(sup_loc + 0);
+  Term tm1    = got(sup_loc + 1);
+  Lab mat_len = term_lab(mat);
+  Loc sup0    = alloc_node(2);
+  Loc mat0    = alloc_node(1 + mat_len);
+  Loc mat1    = alloc_node(1 + mat_len);
+  set(mat0 + 0, tm0);
+  set(mat1 + 0, tm1);
+  for (u64 i = 0; i < mat_len; i++) {
+    Loc du0 = alloc_node(3);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, term_new(SUB, 0, 0));
+    set(du0 + 2, got(mat_loc + 1 + i));
+    set(mat0 + 1 + i, term_new(DP0, 0, du0));
+    set(mat1 + 1 + i, term_new(DP1, 0, du0));
+  }
+  set(sup0 + 0, term_new(MAT, mat_len, mat0));
+  set(sup0 + 1, term_new(MAT, mat_len, mat1));
+  return term_new(SUP, 0, sup0);
+}
+
+// ~ #N{x y z ...} {K0 K1 K2 ...} 
+// ------------------------------ MAT-CTR
+// (((KN x) y) z ...)
+Term reduce_mat_ctr(Term mat, Term ctr) {
+  inc_itr();
+  Loc mat_loc = term_loc(mat);
+  Loc ctr_loc = term_loc(ctr);
+  Lab ctr_lab = term_lab(ctr);
+  u64 ctr_num = u12v2_x(ctr_lab);
+  u64 ctr_ari = u12v2_y(ctr_lab);
+  Term app = got(mat_loc + 1 + ctr_num);
+  for (u64 i = 0; i < ctr_ari; i++) {
+    Loc new_app = alloc_node(2);
+    set(new_app + 0, app);
+    set(new_app + 1, got(ctr_loc + i));
+    app = term_new(APP, 0, new_app);
+  }
+  return app;
 }
 
 Term reduce(Term term) {
@@ -292,7 +426,7 @@ Term reduce(Term term) {
   Loc   spos = 0;
   Term  next = term;
   while (1) {
-    //printf("next: "); print_term(next); printf("\n");
+    //printf("NEXT! "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
@@ -314,6 +448,11 @@ Term reduce(Term term) {
           next = sub;
           continue;
         }
+      }
+      case MAT: {
+        HVM.path[spos++] = next;
+        next = got(loc + 0);
+        continue;
       }
       case VAR: {
         Loc key = term_key(next);
@@ -343,6 +482,7 @@ Term reduce(Term term) {
                 case ERA: next = reduce_app_era(prev, next); continue;
                 case LAM: next = reduce_app_lam(prev, next); continue;
                 case SUP: next = reduce_app_sup(prev, next); continue;
+                case CTR: next = reduce_app_ctr(prev, next); continue;
                 default: break;
               }
               break;
@@ -353,9 +493,19 @@ Term reduce(Term term) {
                 case ERA: next = reduce_dup_era(prev, next); continue;
                 case LAM: next = reduce_dup_lam(prev, next); continue;
                 case SUP: next = reduce_dup_sup(prev, next); continue;
+                case CTR: next = reduce_dup_ctr(prev, next); continue;
                 default: break;
               }
               break;
+            }
+            case MAT: {
+              switch (tag) {
+                case ERA: next = reduce_mat_era(prev, next); exit(0);
+                case LAM: next = reduce_mat_lam(prev, next); exit(0);
+                case SUP: next = reduce_mat_sup(prev, next); exit(0);
+                case CTR: next = reduce_mat_ctr(prev, next); continue;
+                default: break;
+              }
             }
             default: break;
           }
@@ -375,6 +525,7 @@ Term reduce(Term term) {
         case APP: set(hloc + 0, next); break;
         case DP0: set(hloc + 2, next); break;
         case DP1: set(hloc + 2, next); break;
+        case MAT: set(hloc + 0, next); break;
       }
       return HVM.path[0];
     }

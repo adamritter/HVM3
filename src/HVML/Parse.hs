@@ -1,12 +1,16 @@
 -- //./Type.hs//
+-- //./Show.hs//
 
 module HVML.Parse where
 
+import Data.Word
+import HVML.Show
 import HVML.Type
 import Text.Parsec hiding (State)
 import Text.Parsec.String
 import qualified Data.Map.Strict as MS
-import Data.Word
+
+import Debug.Trace
 
 parseCore :: Parser Core
 parseCore = do
@@ -47,6 +51,24 @@ parseCore = do
       consume "@"
       nam <- parseName
       return $ Ref nam 0
+    '#' -> do
+      consume "#"
+      cid <- read <$> many1 digit
+      consume "{"
+      fds <- many $ do
+        closeWith "}"
+        parseCore
+      consume "}"
+      return $ Ctr cid fds
+    '~' -> do
+      consume "~"
+      val <- parseCore
+      consume "{"
+      css <- many $ do
+        closeWith "}"
+        parseCore
+      consume "}"
+      return $ Mat val css
     _ -> do
       name <- parseName
       return $ Var name
@@ -82,6 +104,11 @@ doParseBook code = case parse parseBook "" code of
 
 consume :: String -> Parser String
 consume str = spaces >> string str
+
+closeWith :: String -> Parser ()
+closeWith str = try $ do
+  spaces
+  notFollowedBy (string str)
 
 createBook :: [(String, Core)] -> Book
 createBook defs = 

@@ -94,7 +94,9 @@ cliRun filePath compiled showStats = do
   -- Normalize main
   init <- getCPUTime
   root <- doInjectCore book (Ref "main" $ nameToId book MS.! "main")
-  norm <- (if compiled then normalC else normal) book root >>= doExtractCore
+  -- norm <- doExtractCore root
+  done <- (if compiled then normalC else normal) book root
+  norm <- doExtractCore done
   putStrLn $ coreToString norm
 
   -- Show stats

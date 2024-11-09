@@ -1,4 +1,3 @@
--- //./Runtime.c//
 -- //./Type.hs//
 
 module HVML.Normal where
@@ -9,6 +8,9 @@ import HVML.Show
 import HVML.Type
 import qualified Data.Map.Strict as MS
 
+import Debug.Trace
+
+-- debug a b = trace a b
 debug a b = b
 
 reduce :: Book -> Term -> HVM Term
@@ -19,32 +21,56 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
   case tagT tag of
     APP -> do
       fun <- got (loc + 0)
-      arg <- got (loc + 1)
-      reduceApp book lab loc fun arg
+      fun <- reduce book fun
+      case tagT (termTag fun) of
+        ERA -> reduceAppEra term fun >>= reduce book
+        LAM -> reduceAppLam term fun >>= reduce book
+        SUP -> reduceAppSup term fun >>= reduce book
+        CTR -> reduceAppCtr term fun >>= reduce book
+        _   -> set (loc + 0) fun >> return term
     DP0 -> do
       let key = termKey term
       sub <- got key
       if termTag sub == _SUB_
         then do
-          dp0 <- got (loc + 0)
-          dp1 <- got (loc + 1)
           val <- got (loc + 2)
-          reduceDup book 0 lab loc dp0 dp1 val
-        else reduce book sub
+          val <- reduce book val
+          case tagT (termTag val) of
+            ERA -> reduceDupEra term val >>= reduce book
+            LAM -> reduceDupLam term val >>= reduce book
+            SUP -> reduceDupSup term val >>= reduce book
+            CTR -> reduceDupCtr term val >>= reduce book
+            _   -> set (loc + 2) val >> return term
+        else do
+          reduce book sub
     DP1 -> do
       let key = termKey term
       sub <- got key
       if termTag sub == _SUB_
         then do
-          dp0 <- got (loc + 0)
-          dp1 <- got (loc + 1)
           val <- got (loc + 2)
-          reduceDup book 1 lab loc dp0 dp1 val
-        else reduce book sub
+          val <- reduce book val
+          case tagT (termTag val) of
+            ERA -> reduceDupEra term val >>= reduce book
+            LAM -> reduceDupLam term val >>= reduce book
+            SUP -> reduceDupSup term val >>= reduce book
+            CTR -> reduceDupCtr term val >>= reduce book
+            _   -> set (loc + 2) val >> return term
+        else do
+          reduce book sub
+    MAT -> do
+      val <- got (loc + 0)
+      val <- reduce book val
+      case tagT (termTag val) of
+        ERA -> reduceMatEra term val >>= reduce book
+        LAM -> reduceMatLam term val >>= reduce book
+        SUP -> reduceMatSup term val >>= reduce book
+        CTR -> reduceMatCtr term val >>= reduce book
+        _   -> set (loc + 0) val >> return term
     VAR -> do
       sub <- got (loc + 0)
       if termTag sub == _SUB_
-        then return $ termNew (termTag term) lab loc
+        then return $ term
         else reduce book sub
     REF -> do
       let fid = termLoc term
@@ -55,103 +81,8 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         Nothing -> return term
     _ -> return term
 
-reduceApp :: Book -> Word64 -> Word64 -> Term -> Term -> HVM Term
-reduceApp book lab loc fun arg = do
-  fun <- reduce book fun
-  let funTag = termTag fun
-      funLab = termLab fun
-      funLoc = termLoc fun
-  case tagT funTag of
-    ERA -> debug "APP-ERA" $ do
-      incItr
-      return fun
-    LAM -> debug "APP-LAM" $ do
-      incItr
-      bod <- got (funLoc + 1)
-      set (funLoc + 0) arg
-      set (loc + 0) 0
-      set (loc + 1) 0
-      set (funLoc + 1) 0
-      reduce book bod
-    SUP -> debug "APP-SUP" $ do
-      incItr
-      tm0 <- got (funLoc + 0)
-      tm1 <- got (funLoc + 1)
-      du0 <- allocNode 3
-      su0 <- allocNode 2
-      ap0 <- allocNode 2
-      ap1 <- allocNode 2
-      set (du0 + 0) (termNew _SUB_ 0 0)
-      set (du0 + 1) (termNew _SUB_ 0 0)
-      set (du0 + 2) (termNew _ERA_ 0 7)
-      set (du0 + 2) arg
-      set (ap0 + 0) tm0
-      set (ap0 + 1) (termNew _DP0_ 0 du0)
-      set (ap1 + 0) tm1
-      set (ap1 + 1) (termNew _DP1_ 0 du0)
-      set (su0 + 0) (termNew _APP_ 0 ap0)
-      set (su0 + 1) (termNew _APP_ 0 ap1)
-      set (loc + 0) 0
-      set (loc + 1) 0
-      set (funLoc + 0) 0
-      set (funLoc + 1) 0
-      return $ termNew _SUP_ 0 su0
-    _ -> do
-      set (loc + 0) fun
-      return $ termNew _APP_ lab loc
-
-reduceDup :: Book -> Word64 -> Word64 -> Word64 -> Term -> Term -> Term -> HVM Term
-reduceDup book n lab loc dp0 dp1 val = do
-  val <- reduce book val
-  let valTag = termTag val
-      valLab = termLab val
-      valLoc = termLoc val
-  case tagT valTag of
-    ERA -> debug "DUP-ERA" $ do
-      incItr
-      set (loc + 0) val
-      set (loc + 1) val
-      set (loc + 2) 0
-      got (loc + n)
-    LAM -> debug "DUP-LAM" $ do
-      incItr
-      let vr0 = valLoc + 0
-      bod <- got (valLoc + 1)
-      du0 <- allocNode 3
-      lm0 <- allocNode 2
-      lm1 <- allocNode 2
-      su0 <- allocNode 2
-      set (du0 + 0) (termNew _SUB_ 0 0)
-      set (du0 + 1) (termNew _SUB_ 0 0)
-      set (du0 + 2) bod
-      set (lm0 + 0) (termNew _SUB_ 0 0)
-      set (lm0 + 1) (termNew _DP0_ 0 du0)
-      set (lm1 + 0) (termNew _SUB_ 0 0)
-      set (lm1 + 1) (termNew _DP1_ 0 du0)
-      set (su0 + 0) (termNew _VAR_ 0 lm0)
-      set (su0 + 1) (termNew _VAR_ 0 lm1)
-      set (loc + 0) (termNew _LAM_ 0 lm0)
-      set (loc + 1) (termNew _LAM_ 0 lm1)
-      set (vr0 + 0) (termNew _SUP_ 0 su0)
-      set (loc + 2) 0
-      set (valLoc + 1) 0
-      got (loc + n) >>= reduce book
-    SUP -> debug "DUP-SUP" $ do
-      incItr
-      tm0 <- got (valLoc + 0)
-      tm1 <- got (valLoc + 1)
-      set (loc + 0) tm0
-      set (loc + 1) tm1
-      set (loc + 2) 0
-      set (valLoc + 0) 0
-      set (valLoc + 1) 0
-      got (loc + n) >>= reduce book
-    _ -> do
-      set (loc + 2) val
-      return $ termNew (if n == 0 then _DP0_ else _DP1_) lab loc
-
 normalizer :: (Book -> Term -> HVM Term) -> Book -> Term -> HVM Term
-normalizer reducer book term = do
+normalizer reducer book term = debug ("NORM: " ++ termToString term) $ do
   wnf <- reducer book term
   let tag = termTag wnf
       lab = termLab wnf
@@ -188,6 +119,17 @@ normalizer reducer book term = do
       val <- normalizer reducer book val
       set (loc + 2) val
       return wnf
+    -- TODO: implement the normalizer rules for CTR and MAT
+    -- CTR -> do
+      -- args <- mapM (\i -> got (loc + i)) [0..termLab wnf - 1]
+      -- args <- mapM (normalizer reducer book) args
+      -- mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
+      -- return wnf
+    -- MAT -> do
+      -- args <- mapM (\x -> got (loc + i)) [0..termLab wnf]
+      -- args <- mapM (normalizer reducer book) args
+      -- mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
+      -- return wnf
     _ -> do
       return wnf
 
