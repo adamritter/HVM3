@@ -1,10 +1,5 @@
 -- Type.hs:
 -- //./Type.hs//
--- Compile.hs:
--- //./Compile.hs//
--- Runtime.c:
--- //./Runtime.c//
--- Main.hs:
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -43,10 +38,12 @@ main :: IO ()
 main = do
   args <- getArgs
   result <- case args of
-    ["run", file, "-s"] -> cliRun file True
-    ["run", file]       -> cliRun file False
-    ["help"]            -> printHelp
-    _                   -> printHelp
+    ["run", file, "-s"]   -> cliRun file False True
+    ["run", file]         -> cliRun file False False
+    ["run-c", file, "-s"] -> cliRun file True True
+    ["run-c", file]       -> cliRun file True False
+    ["help"]              -> printHelp
+    _                     -> printHelp
   case result of
     Left err -> do
       putStrLn err
@@ -57,8 +54,8 @@ main = do
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> IO (Either String ())
-cliRun filePath showStats = do
+cliRun :: FilePath -> Bool -> Bool -> IO (Either String ())
+cliRun filePath compiled showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -67,39 +64,38 @@ cliRun filePath showStats = do
   let book = doParseBook code
 
   -- Create the C file content
-  let funcs = map (\ (name, core) -> compile book name core) (MS.toList book)
+  let funcs = map (\ (fid, core) -> compile book fid core) (MS.toList (idToCore book))
   let bookC = unlines $ [runtime_c] ++ funcs
-  let fids  = genBookIds book
 
-  -- Write the C file
-  writeFile "./.hvm_book.c" bookC
-  
-  -- Compile to shared library
-  callCommand "gcc -O2 -fPIC -shared .hvm_book.c -o .hvm_book.so"
-  
-  -- Load the dynamic library
-  bookLib <- dlopen "./.hvm_book.so" [RTLD_NOW]
+  -- Compile to native
+  when compiled $ do
+    -- Write the C file
+    writeFile "./.hvm_book.c" bookC
+    
+    -- Compile to shared library
+    callCommand "gcc -O2 -fPIC -shared .hvm_book.c -o .hvm_book.so"
+    
+    -- Load the dynamic library
+    bookLib <- dlopen "./.hvm_book.so" [RTLD_NOW]
 
-  -- Remove both generated files
-  callCommand "rm .hvm_book.c .hvm_book.so"
+    -- Remove both generated files
+    callCommand "rm .hvm_book.c .hvm_book.so"
 
-  -- Set the book's HVM pointers
-  hvmGotState <- hvmGetState
-  hvmSetState <- dlsym bookLib "hvm_set_state"
-  callFFI hvmSetState retVoid [argPtr hvmGotState]
-  
-  -- For each function in the book, get its function pointer and register it
-  forM_ (MS.keys book) $ \ name -> do
-    funPtr <- dlsym bookLib ("F_" ++ name)
-    hvmDefine (fromIntegral (MS.findWithDefault 0 name fids)) funPtr
-    -- print ("defined " ++ name)
+    -- Link compiled state
+    hvmGotState <- hvmGetState
+    hvmSetState <- dlsym bookLib "hvm_set_state"
+    callFFI hvmSetState retVoid [argPtr hvmGotState]
+    
+    -- Register compiled functions
+    forM_ (MS.keys (idToCore book)) $ \ fid -> do
+      funPtr <- dlsym bookLib ("F_" ++ show fid)
+      hvmDefine fid funPtr
 
   -- Normalize main
   init <- getCPUTime
-  root <- doInjectCore fids (Ref "main")
-  norm <- normal root
-  core <- doExtractCore norm
-  putStrLn $ coreToString core
+  root <- doInjectCore book (Ref "main" $ nameToId book MS.! "main")
+  norm <- (if compiled then normalC else normal) book root >>= doExtractCore
+  putStrLn $ coreToString norm
 
   -- Show stats
   when showStats $ do

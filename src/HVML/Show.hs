@@ -15,6 +15,7 @@ coreToString (Lam vr0 bod)         = "λ" ++ vr0 ++ " " ++ coreToString bod
 coreToString (App fun arg)         = "(" ++ coreToString fun ++ " " ++ coreToString arg ++ ")"
 coreToString (Sup tm0 tm1)         = "{" ++ coreToString tm0 ++ " " ++ coreToString tm1 ++ "}"
 coreToString (Dup dp0 dp1 val bod) = "&{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
+coreToString (Ref nam fid)         = "@" ++ nam
 
 -- Runtime Stringification
 -- -----------------------

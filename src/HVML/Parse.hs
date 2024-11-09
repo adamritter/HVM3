@@ -6,6 +6,7 @@ import HVML.Type
 import Text.Parsec hiding (State)
 import Text.Parsec.String
 import qualified Data.Map.Strict as MS
+import Data.Word
 
 parseCore :: Parser Core
 parseCore = do
@@ -45,7 +46,7 @@ parseCore = do
     '@' -> do
       consume "@"
       nam <- parseName
-      return $ Ref nam
+      return $ Ref nam 0
     _ -> do
       name <- parseName
       return $ Var name
@@ -64,11 +65,10 @@ parseDef = do
   core <- parseCore
   return (name, core)
 
-parseBook :: Parser Book
+parseBook :: Parser [(String, Core)]
 parseBook = do
   spaces
-  defs <- many parseDef
-  return $ MS.fromList defs
+  many parseDef
 
 doParseCore :: String -> Core
 doParseCore code = case parse parseCore "" code of
@@ -77,8 +77,26 @@ doParseCore code = case parse parseCore "" code of
 
 doParseBook :: String -> Book
 doParseBook code = case parse parseBook "" code of
-  Right book -> book
-  Left _     -> MS.empty
+  Right defs -> createBook defs
+  Left _     -> Book MS.empty MS.empty MS.empty
 
 consume :: String -> Parser String
 consume str = spaces >> string str
+
+createBook :: [(String, Core)] -> Book
+createBook defs = 
+  let nameToId' = MS.fromList $ zip (map fst defs) [0..]
+      idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
+      decorDefs = map (\ (name, core) -> (nameToId' MS.! name, decorateFnIds nameToId' core)) defs
+      idToCore' = MS.fromList decorDefs
+  in Book idToCore' idToName' nameToId'
+
+decorateFnIds :: MS.Map String Word64 -> Core -> Core
+decorateFnIds fids term = case term of
+  Ref nam _   -> Ref nam (fids MS.! nam)
+  Lam x bod   -> Lam x (decorateFnIds fids bod)
+  App f x     -> App (decorateFnIds fids f) (decorateFnIds fids x)
+  Sup x y     -> Sup (decorateFnIds fids x) (decorateFnIds fids y)
+  Dup x y v b -> Dup x y (decorateFnIds fids v) (decorateFnIds fids b)
+  other       -> other
+

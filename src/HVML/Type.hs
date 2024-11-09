@@ -14,11 +14,24 @@ data Core
   | App Core Core
   | Sup Core Core
   | Dup String String Core Core
-  | Ref String
+  | Ref String Word64
   deriving (Show, Eq)
 
-type Book = MS.Map String Core
-type Fids = MS.Map String Word64
+-- NOTE: the Book type has been refactored from:
+-- type Book = MS.Map String Core
+-- To:
+
+type IdToCore = MS.Map Word64 Core
+type IdToName = MS.Map Word64 String
+type NameToId = MS.Map String Word64
+
+data Book = Book
+  { idToCore :: IdToCore
+  , idToName :: IdToName
+  , nameToId :: NameToId
+  } deriving (Show, Eq)
+
+-- Updating all files will be necessary to reflect this change.
 
 -- Runtime Types
 -- -------------
@@ -88,7 +101,7 @@ foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
 
 foreign import ccall unsafe "Runtime.c reduce"
-  reduce :: Term -> IO Term
+  reduceC :: Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()

@@ -61,7 +61,8 @@ extractCore term dups = case tagT (termTag term) of
           return (dups0, Dup dp0 dp1 val0 (Var dp1))
       else extractCore sub dups
   REF -> do
-    return (dups, Var "?")
+    let loc = termLoc term
+    return (dups, Ref "?" loc)
   _ -> return (dups, Era)
 
 doExtractCore :: Term -> HVM Core
