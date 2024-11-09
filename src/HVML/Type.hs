@@ -1,6 +1,8 @@
 module HVML.Type where
 
 import Data.Word
+import Data.Map.Strict as MS
+import Foreign.Ptr
 
 -- Core Types
 -- ----------
@@ -12,7 +14,11 @@ data Core
   | App Core Core
   | Sup Core Core
   | Dup String String Core Core
+  | Ref String
   deriving (Show, Eq)
+
+type Book = MS.Map String Core
+type Fids = MS.Map String Word64
 
 -- Runtime Types
 -- -------------
@@ -31,6 +37,7 @@ data TAG
   | LAM
   | SUP
   | SUB
+  | REF
   deriving (Eq, Show)
 
 type HVM = IO
@@ -83,6 +90,15 @@ foreign import ccall unsafe "Runtime.c inc_itr"
 foreign import ccall unsafe "Runtime.c reduce"
   reduce :: Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c hvm_define"
+  hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
+
+foreign import ccall unsafe "Runtime.c hvm_get_state"
+  hvmGetState :: IO (Ptr ())
+
+foreign import ccall unsafe "Runtime.c hvm_set_state"
+  hvmSetState :: Ptr () -> IO ()
+
 -- Constants
 -- ---------
 
@@ -95,9 +111,10 @@ tagT 0x04 = ERA
 tagT 0x05 = LAM
 tagT 0x06 = SUP
 tagT 0x07 = SUB
+tagT 0x08 = REF
 tagT tag  = error $ "unknown tag" ++ show tag
 
-_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_ :: Tag
+_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_, _REF_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
 _VAR_ = 0x02
@@ -106,3 +123,4 @@ _ERA_ = 0x04
 _LAM_ = 0x05
 _SUP_ = 0x06
 _SUB_ = 0x07
+_REF_ = 0x08

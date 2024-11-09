@@ -60,6 +60,8 @@ extractCore term dups = case tagT (termTag term) of
           (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
           return (dups0, Dup dp0 dp1 val0 (Var dp1))
       else extractCore sub dups
+  REF -> do
+    return (dups, Var "?")
   _ -> return (dups, Era)
 
 doExtractCore :: Term -> HVM Core

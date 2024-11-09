@@ -17,6 +17,7 @@ executable hvml
     import:           warnings
     main-is:          HVML/Main.hs
     other-modules:    HVML.Type
+                    , HVML.Compile
                     , HVML.Extract
                     , HVML.Inject
                     , HVML.Normal
@@ -28,29 +29,33 @@ executable hvml
                       unordered-containers ^>=0.2.19.1,
                       parsec ^>=3.1.17.0,
                       hashable ^>=1.5.0.0,
+                      process,
+                      libffi,
+                      unix,
+                      file-embed,
     hs-source-dirs:   src
     default-language: GHC2024
     c-sources:        src/HVML/Runtime.c
     extra-libraries:  c
     ghc-options:     -Wno-all
 
-executable hvms
-    import:           warnings
-    main-is:          HVMS/Main.hs
-    other-modules:    HVMS.Type
-                    , HVMS.Extract
-                    , HVMS.Inject
-                    , HVMS.Normal
-                    , HVMS.Parse
-                    , HVMS.Show
-    build-depends:    base ^>=4.20.0.0,
-                      mtl ^>=2.3.1,
-                      containers ^>=0.7,
-                      unordered-containers ^>=0.2.19.1,
-                      parsec ^>=3.1.17.0,
-                      hashable ^>=1.5.0.0,
-    hs-source-dirs:   src
-    default-language: GHC2024
-    c-sources:        src/HVMS/Runtime.c
-    extra-libraries:  c
-    ghc-options:     -Wno-all
+--executable hvms
+--    import:           warnings
+--    main-is:          HVMS/Main.hs
+--    other-modules:    HVMS.Type
+--                    , HVMS.Extract
+--                    , HVMS.Inject
+--                    , HVMS.Normal
+--                    , HVMS.Parse
+--                    , HVMS.Show
+--    build-depends:    base ^>=4.20.0.0,
+--                      mtl ^>=2.3.1,
+--                      containers ^>=0.7,
+--                      unordered-containers ^>=0.2.19.1,
+--                      parsec ^>=3.1.17.0,
+--                      hashable ^>=1.5.0.0,
+--    hs-source-dirs:   src
+--    default-language: GHC2024
+--    c-sources:        src/HVMS/Runtime.c
+--    extra-libraries:  c
+--    ghc-options:     -Wno-all

@@ -16,33 +16,26 @@ typedef _Atomic(Term) ATerm;
 // Runtime Types
 // -------------
 
-// Global state
-static Term*  PATH;
-static ATerm* HEAP;
-static u64    SIZE;
-static u64    ITRS;
+// Global State Type
+typedef struct {
+  Term*  path; // reduction path / stack
+  ATerm* heap; // global node buffer
+  u64*   size; // global node length
+  u64*   itrs; // interaction count
+  Term (*book[1024])(); // functions
+} State;
 
-#define MEM_SIZE (1024ULL * 1024ULL * 1024ULL * 1024ULL) // 1TB
-
-// Runtime Memory
-// --------------
-
-void hvm_init() {
-  PATH = malloc((1ULL << 32) * sizeof(Term));
-  HEAP = malloc((1ULL << 32) * sizeof(ATerm));
-  SIZE = 1;
-  ITRS = 0;
-}
-
-void hvm_free() {
-  free(PATH);
-  free(HEAP);
-}
+// Global State Value
+static State HVM = {
+  .path = NULL,
+  .heap = NULL,
+  .size = NULL,
+  .itrs = NULL,
+  .book = {NULL}
+};
 
 // Constants
 // ---------
-
-const  u64    TEST = 1234;
 
 #define DP0 0x00
 #define DP1 0x01
@@ -52,6 +45,7 @@ const  u64    TEST = 1234;
 #define LAM 0x05
 #define SUP 0x06
 #define SUB 0x07
+#define REF 0x08
 
 #define VOID 0x00000000000000
 
@@ -59,20 +53,21 @@ const  u64    TEST = 1234;
 // ----
 
 Loc get_len() {
-  return SIZE;
+  return *HVM.size;
 }
 
 Loc get_itr() {
-  return ITRS;
+  return *HVM.itrs;
 }
 
 void set_len(Loc value) {
-  SIZE = value;
+  *HVM.size = value;
 }
 
 void set_itr(Loc value) {
-  ITRS = value;
+  *HVM.itrs = value;
 }
+
 
 // Terms
 // ------
@@ -109,15 +104,15 @@ Loc term_key(Term term) {
 // -------
 
 Term swap(Loc loc, Term term) {
-  return atomic_exchange_explicit(&HEAP[loc], term, memory_order_relaxed);
+  return atomic_exchange_explicit(&HVM.heap[loc], term, memory_order_relaxed);
 }
 
 Term got(Loc loc) {
-  return atomic_load_explicit(&HEAP[loc], memory_order_relaxed);
+  return atomic_load_explicit(&HVM.heap[loc], memory_order_relaxed);
 }
 
 void set(Loc loc, Term term) {
-  atomic_store_explicit(&HEAP[loc], term, memory_order_relaxed);
+  atomic_store_explicit(&HVM.heap[loc], term, memory_order_relaxed);
 }
 
 Term take(Loc loc) {
@@ -128,14 +123,14 @@ Term take(Loc loc) {
 // ----------
 
 Loc alloc_node(Loc arity) {
-  u64 old = SIZE;
-  SIZE += arity;
+  u64 old = *HVM.size;
+  *HVM.size += arity;
   return old;
 }
 
 Loc inc_itr() {
-  u64 old = ITRS;
-  ITRS += 1;
+  u64 old = *HVM.itrs;
+  *HVM.itrs += 1;
   return old;
 }
 
@@ -152,6 +147,7 @@ void print_tag(Tag tag) {
     case ERA: printf("ERA"); break;
     case LAM: printf("LAM"); break;
     case SUP: printf("SUP"); break;
+    case REF: printf("REF"); break;
     default : printf("???"); break;
   }
 }
@@ -286,16 +282,23 @@ Term reduce_dup_sup(Term dup, Term sup) {
   return got(dup_loc + dup_num);
 }
 
+Term reduce_ref(Term ref) {
+  inc_itr();
+  return HVM.book[term_loc(ref)]();
+}
+
 Term reduce(Term term) {
+  //printf("reduce\n");
   Loc   spos = 0;
   Term  next = term;
   while (1) {
+    //printf("next: "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
     switch (tag) {
       case APP: {
-        PATH[spos++] = next;
+        HVM.path[spos++] = next;
         next = got(loc + 0);
         continue;
       }
@@ -304,7 +307,7 @@ Term reduce(Term term) {
         Loc key = term_key(next);
         Term sub = got(key);
         if (term_tag(sub) == SUB) {
-          PATH[spos++] = next;
+          HVM.path[spos++] = next;
           next = got(loc + 2);
           continue;
         } else {
@@ -322,11 +325,15 @@ Term reduce(Term term) {
           continue;
         }
       }
+      case REF: {
+        next = reduce_ref(next);
+        continue;
+      }
       default: {
         if (spos == 0) {
           break;
         } else {
-          Term prev = PATH[--spos];
+          Term prev = HVM.path[--spos];
           Tag ptag = term_tag(prev);
           Lab plab = term_lab(prev);
           Loc ploc = term_loc(prev);
@@ -357,28 +364,22 @@ Term reduce(Term term) {
       }
     }
     if (spos == 0) {
+      //printf("retr: "); print_term(next); printf("\n");
       return next;
     } else {
-      Term host = PATH[--spos];
-      Tag htag = term_tag(host);
-      Lab hlab = term_lab(host);
-      Loc hloc = term_loc(host);
+      Term host = HVM.path[--spos];
+      Tag  htag = term_tag(host);
+      Lab  hlab = term_lab(host);
+      Loc  hloc = term_loc(host);
       switch (htag) {
-        case APP: {
-          set(hloc + 0, next);
-          continue;
-        }
-        case DP0:
-        case DP1: {
-          set(hloc + 2, next);
-          continue;
-        }
-        default: {
-          return 0;
-        }
+        case APP: set(hloc + 0, next); break;
+        case DP0: set(hloc + 2, next); break;
+        case DP1: set(hloc + 2, next); break;
       }
+      return HVM.path[0];
     }
   }
+  printf("retr: ERR\n");
   return 0;
 }
 
@@ -436,6 +437,45 @@ Term reduce(Term term) {
   //}
 //}
 
+// Runtime Memory
+// --------------
+
+void hvm_init() {
+  // FIXME: use mmap instead
+  HVM.path = malloc((1ULL << 32) * sizeof(Term));
+  HVM.heap = malloc((1ULL << 32) * sizeof(ATerm));
+  HVM.size = malloc(sizeof(u64));
+  HVM.itrs = malloc(sizeof(u64));
+  *HVM.size = 1;
+  *HVM.itrs = 0;
+}
+
+void hvm_free() {
+  free(HVM.path);
+  free(HVM.heap);
+  free(HVM.size);
+  free(HVM.itrs);
+}
+
+// TODO: create an hvm_get and an hvm_set function that get/set the whole HVM struct
+State* hvm_get_state() {
+  return &HVM;
+}
+
+void hvm_set_state(State* hvm) {
+  HVM.path = hvm->path;
+  HVM.heap = hvm->heap;
+  HVM.size = hvm->size;
+  HVM.itrs = hvm->itrs;
+  for (int i = 0; i < 1024; i++) {
+    HVM.book[i] = hvm->book[i];
+  }
+}
+
+void hvm_define(u64 fid, Term (*func)()) {
+  HVM.book[fid] = func;
+}
+
 // Main
 // ----
 
@@ -461,3 +501,4 @@ Term reduce(Term term) {
   //hvm_free();
   //return 0;
 //}
+
