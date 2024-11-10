@@ -31,6 +31,7 @@ executable hvml
                       hashable ^>=1.5.0.0,
                       hs-highlight == 1.0.3,
                       ansi-terminal == 1.1.1,
+                      transformers == 0.6.1.1,
                       process,
                       libffi,
                       unix,
