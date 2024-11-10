@@ -572,6 +572,7 @@ Term reduce_opx_w32(Term opx, Term w32) {
   inc_itr();
   Lab opx_lab = term_lab(opx);
   Lab opx_loc = term_loc(opx);
+  set(opx_loc + 0, w32);
   return term_new(OPY, opx_lab, opx_loc);
 }
 

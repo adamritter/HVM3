@@ -5,4 +5,5 @@
 //@main  = (+ 10 ~7{ 0 1 2 λx x })
 //@main  = (* 100 123)
 //@main  = λt(t #5{(λx x 7)} λk k)
-@main = (λa λb(λt λf t &0{a b} &0{b a}) 1 2)
+//@main = (λa λb(λt λf t &0{a b} &0{b a}) 1 2)
+@main = (λx(+ x 14) 100)
