@@ -145,12 +145,15 @@ normalizer reducer book term = debug ("NORM: " ++ termToString term) $ do
       set (loc + 2) val
       return wnf
     CTR -> do
-      args <- mapM (\i -> got (loc + i)) [0..termLab wnf - 1]
+      let cid = u12v2X lab
+      let ari = u12v2Y lab
+      args <- mapM (\i -> got (loc + i)) (if ari == 0 then [] else [0 .. ari - 1])
       args <- mapM (normalizer reducer book) args
       mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
       return wnf
     MAT -> do
-      args <- mapM (\i -> got (loc + i)) [0..termLab wnf]
+      let ari = lab
+      args <- mapM (\i -> got (loc + i)) [0 .. ari]
       args <- mapM (normalizer reducer book) args
       mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
       return wnf

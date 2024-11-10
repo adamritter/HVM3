@@ -61,9 +61,12 @@ parseCore = do
         _ -> do
           consume "("
           fun <- parseCore
-          arg <- parseCore
-          consume ")"
-          return $ App fun arg
+          args <- many $ do
+            notFollowedBy (char ')')
+            arg <- parseCore
+            return arg
+          char ')'
+          return $ foldl App fun args
     '&' -> do
       consume "&"
       lab <- read <$> many1 digit
@@ -133,7 +136,7 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
-  return (name, core)
+  trace ("parsed " ++ coreToString core) $ return (name, core)
 
 parseBook :: Parser [(String, Core)]
 parseBook = do

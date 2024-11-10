@@ -1,74 +1,95 @@
 -- //./Type.hs//
--- //./Show.hs//
--- //./Inject.hs//
 
 module HVML.Extract where
 
 import Control.Monad (foldM)
+import Control.Monad.State
+import Data.Char (chr, ord)
 import HVML.Type
 import qualified Data.IntSet as IS
+import qualified Data.Map.Strict as MS
 
-extractCore :: Term -> IS.IntSet -> HVM (IS.IntSet, Core)
-extractCore term dups = case tagT (termTag term) of
-  ERA -> do
-    return (dups, Era)
+type ExtractM a = StateT (IS.IntSet, MS.Map Loc String) HVM a
+
+extractCore :: Term -> ExtractM Core
+extractCore term = case tagT (termTag term) of
+  ERA -> return Era
+  
   LAM -> do
     let loc = termLoc term
-    bod <- got (loc + 1)
-    let var = show (loc + 0)
-    (dups0, bod0) <- extractCore bod dups
-    return (dups0, Lam var bod0)
+    bod <- lift $ got (loc + 1)
+    name <- genName (loc + 0)
+    bod0 <- extractCore bod
+    return $ Lam name bod0
+    
   APP -> do
     let loc = termLoc term
-    fun <- got (loc + 0)
-    arg <- got (loc + 1)
-    (dups0, fun0) <- extractCore fun dups
-    (dups1, arg0) <- extractCore arg dups0
-    return (dups1, App fun0 arg0)
+    fun <- lift $ got (loc + 0)
+    arg <- lift $ got (loc + 1)
+    fun0 <- extractCore fun
+    arg0 <- extractCore arg
+    return $ App fun0 arg0
+    
   SUP -> do
     let loc = termLoc term
     let lab = termLab term
-    tm0 <- got (loc + 0)
-    tm1 <- got (loc + 1)
-    (dups0, tm00) <- extractCore tm0 dups
-    (dups1, tm10) <- extractCore tm1 dups0
-    return (dups1, Sup lab tm00 tm10)
+    tm0 <- lift $ got (loc + 0)
+    tm1 <- lift $ got (loc + 1)
+    tm00 <- extractCore tm0
+    tm10 <- extractCore tm1
+    return $ Sup lab tm00 tm10
+    
   VAR -> do
     let key = termKey term
-    sub <- got key
+    sub <- lift $ got key
     if termTag sub == _SUB_
-      then return (dups, Var (show key))
-      else extractCore sub dups
+    then do
+      name <- genName key
+      return $ Var name
+    else extractCore sub
+      
   DP0 -> do
     let loc = termLoc term
     let lab = termLab term
     let key = termKey term
-    sub <- got key
+    sub <- lift $ got key
     if termTag sub == _SUB_
-      then if IS.member (fromIntegral loc) dups
-        then return (dups, Var (show key))
-        else do
-          let dp0 = show (loc + 0)
-          let dp1 = show (loc + 1)
-          val <- got (loc + 2)
-          (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
-          return (dups0, Dup lab dp0 dp1 val0 (Var dp0))
-      else extractCore sub dups
+    then do
+      (dups, nameMap) <- get
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName key
+        return $ Var name
+      else do
+        dp0 <- genName (loc + 0)
+        dp1 <- genName (loc + 1)
+        val <- lift $ got (loc + 2)
+        put (IS.insert (fromIntegral loc) dups, nameMap)
+        val0 <- extractCore val
+        return $ Dup lab dp0 dp1 val0 (Var dp0)
+    else extractCore sub
+      
   DP1 -> do
     let loc = termLoc term
     let lab = termLab term
     let key = termKey term
-    sub <- got key
+    sub <- lift $ got key
     if termTag sub == _SUB_
-      then if IS.member (fromIntegral loc) dups
-        then return (dups, Var (show key))
-        else do
-          let dp0 = show (loc + 0)
-          let dp1 = show (loc + 1)
-          val <- got (loc + 2)
-          (dups0, val0) <- extractCore val (IS.insert (fromIntegral loc) dups)
-          return (dups0, Dup lab dp0 dp1 val0 (Var dp1))
-      else extractCore sub dups
+    then do
+      (dups, nameMap) <- get
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName key
+        return $ Var name
+      else do
+        dp0 <- genName (loc + 0)
+        dp1 <- genName (loc + 1)
+        val <- lift $ got (loc + 2)
+        put (IS.insert (fromIntegral loc) dups, nameMap)
+        val0 <- extractCore val
+        return $ Dup lab dp0 dp1 val0 (Var dp1)
+    else extractCore sub
+      
   CTR -> do
     let loc = termLoc term
     let lab = termLab term
@@ -76,49 +97,67 @@ extractCore term dups = case tagT (termTag term) of
     let ari = u12v2Y lab
     fds <- if ari == 0
       then return []
-      else mapM (\i -> got (loc + i)) [0..ari-1]
-    (dups0, fds) <- foldM (\ (dups,fds) fd -> do
-      (dups0, fd0) <- extractCore fd dups
-      return (dups0, fds ++ [fd0])) (dups,[]) fds
-    return (dups0, Ctr cid fds)
+      else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
+    fds0 <- mapM extractCore fds
+    return $ Ctr cid fds0
+    
   MAT -> do
     let loc = termLoc term
     let ari = termLab term
-    val <- got (loc + 0)
+    val <- lift $ got (loc + 0)
     css <- if ari == 0
       then return []
-      else mapM (\i -> got (loc + 1 + i)) [0..ari-1]
-    (dups0, val0) <- extractCore val dups
-    (dups1, css0) <- foldM (\ (dups,css) cs -> do
-      (dups0, cs0) <- extractCore cs dups
-      return (dups0, css ++ [cs0])) (dups0,[]) css
-    return (dups1, Mat val0 css0)
+      else lift $ mapM (\i -> got (loc + 1 + i)) [0..ari-1]
+    val0 <- extractCore val
+    css0 <- mapM extractCore css
+    return $ Mat val0 css0
+    
   W32 -> do
     let val = termLoc term
-    return (dups, U32 (fromIntegral val))
+    return $ U32 (fromIntegral val)
+    
   OPX -> do
     let loc = termLoc term
     let opr = toEnum (fromIntegral (termLab term))
-    nm0 <- got (loc + 0)
-    nm1 <- got (loc + 1)
-    (dups0, nm00) <- extractCore nm0 dups
-    (dups1, nm10) <- extractCore nm1 dups0
-    return (dups1, Op2 opr nm00 nm10)
+    nm0 <- lift $ got (loc + 0)
+    nm1 <- lift $ got (loc + 1)
+    nm00 <- extractCore nm0
+    nm10 <- extractCore nm1
+    return $ Op2 opr nm00 nm10
+    
   OPY -> do
     let loc = termLoc term
     let opr = toEnum (fromIntegral (termLab term))
-    nm0 <- got (loc + 0)
-    nm1 <- got (loc + 1)
-    (dups0, nm00) <- extractCore nm0 dups
-    (dups1, nm10) <- extractCore nm1 dups0
-    return (dups1, Op2 opr nm00 nm10)
+    nm0 <- lift $ got (loc + 0)
+    nm1 <- lift $ got (loc + 1)
+    nm00 <- extractCore nm0
+    nm10 <- extractCore nm1
+    return $ Op2 opr nm00 nm10
+    
   REF -> do
     let loc = termLoc term
-    return (dups, Ref "?" loc)
-  _ -> do
-    return (dups, Era)
+    return $ Ref "?" loc
+    
+  _ -> return Era
 
 doExtractCore :: Term -> HVM Core
-doExtractCore term = do
-  (_, core) <- extractCore term IS.empty
-  return core
+doExtractCore term = evalStateT (extractCore term) (IS.empty, MS.empty)
+
+genNam :: Loc -> ExtctCore :: Term -> IS.IntSet -> MS.Map Loc String -> HVM (IS.IntSet, MS.Map Loc String, Core)ractM String
+genName loc = do
+  (dups, nameMap) <- get
+  case MS.lookup loc nameMap of
+    Just name -> return name
+    Nothing -> do
+      let newName = genNameFromIndex (MS.size nameMap)
+      put (dups, MS.insert loc newName nameMap)
+      return newName
+
+genNameFromIndex :: Int -> String
+genNameFromIndex n = go (n + 1) "" where
+  go 0 acc = acc
+  go n acc = 
+    let (q, r) = quotRem (n - 1) 26
+    in if q == 0
+        then [chr (ord 'a' + r)] ++ acc
+        else go q (chr (ord 'a' + r) : acc)

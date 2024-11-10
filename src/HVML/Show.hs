@@ -11,9 +11,9 @@ import Numeric (showIntAtBase)
 -- --------------------
 
 coreToString :: Core -> String
-coreToString (Var nam)                 = "x" ++ nam
+coreToString (Var nam)                 = nam
 coreToString Era                       = "*"
-coreToString (Lam vr0 bod)             = "λx" ++ vr0 ++ " " ++ coreToString bod
+coreToString (Lam vr0 bod)             = "λ" ++ vr0 ++ " " ++ coreToString bod
 coreToString (App fun arg)             = "(" ++ coreToString fun ++ " " ++ coreToString arg ++ ")"
 coreToString (Sup lab tm0 tm1)         = "&" ++ show lab ++ "{" ++ coreToString tm0 ++ " " ++ coreToString tm1 ++ "}"
 coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
@@ -40,7 +40,6 @@ operToString OP_OR  = "|"
 operToString OP_XOR = "^"
 operToString OP_LSH = "<<"
 operToString OP_RSH = ">>"
-
 
 -- Runtime Stringification
 -- -----------------------
