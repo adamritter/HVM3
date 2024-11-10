@@ -73,7 +73,7 @@ compileCore book (App fun arg) host = do
   emit $ "  set(" ++ appName ++ " + 0, " ++ funT ++ ");"
   emit $ "  set(" ++ appName ++ " + 1, " ++ argT ++ ");"
   return $ "term_new(APP, 0, " ++ appName ++ ")"
-compileCore book (Sup tm0 tm1) host = do
+compileCore book (Sup lab tm0 tm1) host = do
   uid <- fresh
   let supName = "sup" ++ show uid
   emit $ "  Loc " ++ supName ++ " = alloc_node(2);"
@@ -81,15 +81,15 @@ compileCore book (Sup tm0 tm1) host = do
   tm1T <- compileCore book tm1 (supName ++ " + 1")
   emit $ "  set(" ++ supName ++ " + 0, " ++ tm0T ++ ");"
   emit $ "  set(" ++ supName ++ " + 1, " ++ tm1T ++ ");"
-  return $ "term_new(SUP, 0, " ++ supName ++ ")"
-compileCore book (Dup dp0 dp1 val bod) host = do
+  return $ "term_new(SUP, " ++ show lab ++ ", " ++ supName ++ ")"
+compileCore book (Dup lab dp0 dp1 val bod) host = do
   uid <- fresh
   let dupName = "dup" ++ show uid
   emit $ "  Loc " ++ dupName ++ " = alloc_node(3);"
   emit $ "  set(" ++ dupName ++ " + 0, term_new(SUB, 0, 0));"
   emit $ "  set(" ++ dupName ++ " + 1, term_new(SUB, 0, 0));"
-  bind dp0 $ "term_new(DP0, 0, " ++ dupName ++ " + 0)"
-  bind dp1 $ "term_new(DP1, 0, " ++ dupName ++ " + 0)"
+  bind dp0 $ "term_new(DP0, " ++ show lab ++ ", " ++ dupName ++ " + 0)"
+  bind dp1 $ "term_new(DP1, " ++ show lab ++ ", " ++ dupName ++ " + 0)"
   valT <- compileCore book val (dupName ++ " + 2")
   emit $ "  set(" ++ dupName ++ " + 2, " ++ valT ++ ");"
   bodT <- compileCore book bod host

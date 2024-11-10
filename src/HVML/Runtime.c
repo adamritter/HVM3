@@ -225,14 +225,15 @@ Term reduce_app_lam(Term app, Term lam) {
   return bod;
 }
 
-// ({a b} c)
-// --------------- APP-SUP
-// &{x0 x1} = c
-// {(a x0) (b x1)}
+// (&L{a b} c)
+// ----------------- APP-SUP
+// &L{x0 x1} = c
+// &L{(a x0) (b x1)}
 Term reduce_app_sup(Term app, Term sup) {
   inc_itr();
   Loc app_loc = term_loc(app);
   Loc sup_loc = term_loc(sup);
+  Lab sup_lab = term_lab(sup);
   Term arg    = got(app_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
@@ -244,12 +245,12 @@ Term reduce_app_sup(Term app, Term sup) {
   set(du0 + 1, term_new(SUB, 0, 0));
   set(du0 + 2, arg);
   set(ap0 + 0, tm0);
-  set(ap0 + 1, term_new(DP0, 0, du0));
+  set(ap0 + 1, term_new(DP0, sup_lab, du0));
   set(ap1 + 0, tm1);
-  set(ap1 + 1, term_new(DP1, 0, du0));
+  set(ap1 + 1, term_new(DP1, sup_lab, du0));
   set(su0 + 0, term_new(APP, 0, ap0));
   set(su0 + 1, term_new(APP, 0, ap1));
-  return term_new(SUP, 0, su0);
+  return term_new(SUP, sup_lab, su0);
 }
 
 // (#{x y z ...} a)
@@ -260,8 +261,8 @@ Term reduce_app_ctr(Term app, Term ctr) {
   exit(0);
 }
 
-// &{x y} = *
-// ---------- DUP-ERA
+// &L{x y} = *
+// ----------- DUP-ERA
 // x <- *
 // y <- *
 Term reduce_dup_era(Term dup, Term era) {
@@ -273,15 +274,16 @@ Term reduce_dup_era(Term dup, Term era) {
   return got(dup_loc + dup_num);
 }
 
-// &{r s} = λx(f)
-// -------------- DUP-LAM
-// &{f0 f1} = f
+// &L{r s} = λx(f)
+// --------------- DUP-LAM
+// &L{f0 f1} = f
 // r <- λx0(f0)
 // s <- λx1(f1)
-// x <- {x0 x1}
+// x <- &L{x0 x1}
 Term reduce_dup_lam(Term dup, Term lam) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
+  Lab dup_lab = term_lab(dup);
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc lam_loc = term_loc(lam);
   Term bod    = got(lam_loc + 1);
@@ -293,31 +295,61 @@ Term reduce_dup_lam(Term dup, Term lam) {
   set(du0 + 1, term_new(SUB, 0, 0));
   set(du0 + 2, bod);
   set(lm0 + 0, term_new(SUB, 0, 0));
-  set(lm0 + 1, term_new(DP0, 0, du0));
+  set(lm0 + 1, term_new(DP0, dup_lab, du0));
   set(lm1 + 0, term_new(SUB, 0, 0));
-  set(lm1 + 1, term_new(DP1, 0, du0));
+  set(lm1 + 1, term_new(DP1, dup_lab, du0));
   set(su0 + 0, term_new(VAR, 0, lm0));
   set(su0 + 1, term_new(VAR, 0, lm1));
   set(dup_loc + 0, term_new(LAM, 0, lm0));
   set(dup_loc + 1, term_new(LAM, 0, lm1));
-  set(lam_loc + 0, term_new(SUP, 0, su0));
+  set(lam_loc + 0, term_new(SUP, dup_lab, su0));
   return got(dup_loc + dup_num);
 }
 
-// &{x y} = {a b}
-// -------------- DUP-SUP
-// x <- a
-// y <- b
+// &L{x y} = &R{a b}
+// ----------------- DUP-SUP
+// if L == R:
+//   x <- a
+//   y <- b
+// else:
+//   x <- &R{a0 b0} 
+//   y <- &R{a1 b1}
+//   &L{a0 a1} = a
+//   &L{b0 b1} = b
 Term reduce_dup_sup(Term dup, Term sup) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
+  Lab dup_lab = term_lab(dup);
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Lab sup_lab = term_lab(sup);
   Loc sup_loc = term_loc(sup);
-  Term tm0    = got(sup_loc + 0);
-  Term tm1    = got(sup_loc + 1);
-  set(dup_loc + 0, tm0);
-  set(dup_loc + 1, tm1);
-  return got(dup_loc + dup_num);
+  if (dup_lab == sup_lab) {
+    Term tm0 = got(sup_loc + 0);
+    Term tm1 = got(sup_loc + 1);
+    set(dup_loc + 0, tm0);
+    set(dup_loc + 1, tm1);
+    return got(dup_loc + dup_num);
+  } else {
+    Loc du0 = alloc_node(3);
+    Loc du1 = alloc_node(3);
+    Loc su0 = alloc_node(2);
+    Loc su1 = alloc_node(2);
+    Term tm0 = got(sup_loc + 0);
+    Term tm1 = got(sup_loc + 1);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, term_new(SUB, 0, 0));
+    set(du0 + 2, tm0);
+    set(du1 + 0, term_new(SUB, 0, 0));
+    set(du1 + 1, term_new(SUB, 0, 0));
+    set(du1 + 2, tm1);
+    set(su0 + 0, term_new(DP0, dup_lab, du0));
+    set(su0 + 1, term_new(DP0, dup_lab, du1));
+    set(su1 + 0, term_new(DP1, dup_lab, du0));
+    set(su1 + 1, term_new(DP1, dup_lab, du1));
+    set(dup_loc + 0, term_new(SUP, sup_lab, su0));
+    set(dup_loc + 1, term_new(SUP, sup_lab, su1));
+    return got(dup_loc + dup_num);
+  }
 }
 
 // &{x y} = #{a b c ...}

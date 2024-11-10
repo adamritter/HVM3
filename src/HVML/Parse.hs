@@ -1,20 +1,27 @@
 -- //./Type.hs//
--- //./Show.hs//
 
 module HVML.Parse where
 
+import Data.List
+import Data.Maybe
 import Data.Word
+import Debug.Trace
 import HVML.Show
 import HVML.Type
+import Highlight (highlightError)
+import System.Console.ANSI
 import Text.Parsec hiding (State)
+import Text.Parsec.Error
+import Text.Parsec.Pos
 import Text.Parsec.String
 import qualified Data.Map.Strict as MS
 
-import Debug.Trace
+-- Core Parsers
+-- ------------
 
 parseCore :: Parser Core
 parseCore = do
-  spaces
+  skip
   head <- lookAhead anyChar
   case head of
     '*' -> do
@@ -31,14 +38,18 @@ parseCore = do
       arg <- parseCore
       consume ")"
       return $ App fun arg
-    '{' -> do
+    '&' -> do
+      consume "&"
+      lab <- read <$> many1 digit
       consume "{"
       tm0 <- parseCore
       tm1 <- parseCore
       consume "}"
-      return $ Sup tm0 tm1
-    '&' -> do
+      return $ Sup lab tm0 tm1
+    '!' -> do
+      consume "!"
       consume "&"
+      lab <- read <$> many1 digit
       consume "{"
       dp0 <- parseName
       dp1 <- parseName
@@ -46,7 +57,7 @@ parseCore = do
       consume "="
       val <- parseCore
       bod <- parseCore
-      return $ Dup dp0 dp1 val bod
+      return $ Dup lab dp0 dp1 val bod
     '@' -> do
       consume "@"
       nam <- parseName
@@ -74,33 +85,43 @@ parseCore = do
       return $ Var name
 
 parseName :: Parser String
-parseName = spaces >> many1 (alphaNum <|> char '_')
+parseName = skip >> many1 (alphaNum <|> char '_')
 
 parseDef :: Parser (String, Core)
 parseDef = do
   try $ do
-    spaces
+    skip
     consume "@"
   name <- parseName
-  spaces
+  skip
   consume "="
   core <- parseCore
   return (name, core)
 
 parseBook :: Parser [(String, Core)]
 parseBook = do
-  spaces
-  many parseDef
+  skip
+  defs <- many parseDef
+  skip
+  eof
+  return defs
 
-doParseCore :: String -> Core
+doParseCore :: String -> IO Core
 doParseCore code = case parse parseCore "" code of
-  Right core -> core
-  Left _     -> Era
+  Right core -> return $ core
+  Left  err  -> do
+    showParseError "" code err
+    return $ Ref "⊥" 0
 
-doParseBook :: String -> Book
+doParseBook :: String -> IO Book
 doParseBook code = case parse parseBook "" code of
-  Right defs -> createBook defs
-  Left _     -> Book MS.empty MS.empty MS.empty
+  Right defs -> return $ createBook defs
+  Left  err  -> do
+    showParseError "" code err
+    return $ Book MS.empty MS.empty MS.empty
+
+-- Helper Parsers
+-- --------------
 
 consume :: String -> Parser String
 consume str = spaces >> string str
@@ -109,6 +130,20 @@ closeWith :: String -> Parser ()
 closeWith str = try $ do
   spaces
   notFollowedBy (string str)
+
+skip :: Parser ()
+skip = skipMany (parseSpace <|> parseComment) where
+  parseSpace = (try $ do
+    space
+    return ()) <?> "space"
+  parseComment = (try $ do
+    string "//"
+    skipMany (noneOf "\n")
+    char '\n'
+    return ()) <?> "Comment"
+
+-- Adjusting
+-- ---------
 
 createBook :: [(String, Core)] -> Book
 createBook defs = 
@@ -120,10 +155,31 @@ createBook defs =
 
 decorateFnIds :: MS.Map String Word64 -> Core -> Core
 decorateFnIds fids term = case term of
-  Ref nam _   -> Ref nam (fids MS.! nam)
-  Lam x bod   -> Lam x (decorateFnIds fids bod)
-  App f x     -> App (decorateFnIds fids f) (decorateFnIds fids x)
-  Sup x y     -> Sup (decorateFnIds fids x) (decorateFnIds fids y)
-  Dup x y v b -> Dup x y (decorateFnIds fids v) (decorateFnIds fids b)
-  other       -> other
+  Ref nam _     -> Ref nam (fids MS.! nam)
+  Lam x bod     -> Lam x (decorateFnIds fids bod)
+  App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
+  Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)
+  Dup l x y v b -> Dup l x y (decorateFnIds fids v) (decorateFnIds fids b)
+  other         -> other
+
+-- Errors
+-- ------
+
+-- Error handling
+extractExpectedTokens :: ParseError -> String
+extractExpectedTokens err =
+    let expectedMsgs = [msg | Expect msg <- errorMessages err, msg /= "space", msg /= "Comment"]
+    in intercalate " | " expectedMsgs
+
+showParseError :: String -> String -> ParseError -> IO ()
+showParseError filename input err = do
+  let pos = errorPos err
+  let lin = sourceLine pos
+  let col = sourceColumn pos
+  let errorMsg = extractExpectedTokens err
+  putStrLn $ setSGRCode [SetConsoleIntensity BoldIntensity] ++ "\nPARSE_ERROR" ++ setSGRCode [Reset]
+  putStrLn $ "- expected: " ++ errorMsg
+  putStrLn $ "- detected:"
+  putStrLn $ highlightError (lin, col) (lin, col + 1) input
+  putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
 

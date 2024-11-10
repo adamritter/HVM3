@@ -23,8 +23,8 @@ import qualified Data.Map.Strict as MS
 import HVML.Compile
 import HVML.Extract
 import HVML.Inject
-import HVML.Normal
 import HVML.Parse
+import HVML.Reduce
 import HVML.Show
 import HVML.Type
 
@@ -61,7 +61,7 @@ cliRun filePath compiled showStats = do
 
   -- TASK: instead of parsing a core term out of the file, lets parse a Book.
   code <- readFile filePath
-  let book = doParseBook code
+  book <- doParseBook code
 
   -- Create the C file content
   let funcs = map (\ (fid, core) -> compile book fid core) (MS.toList (idToCore book))
@@ -90,6 +90,11 @@ cliRun filePath compiled showStats = do
     forM_ (MS.keys (idToCore book)) $ \ fid -> do
       funPtr <- dlsym bookLib ("F_" ++ show fid)
       hvmDefine fid funPtr
+
+  -- Abort when main isn't present
+  when (not $ MS.member "main" (nameToId book)) $ do
+    putStrLn "Error: 'main' not found."
+    exitWith (ExitFailure 1)
 
   -- Normalize main
   init <- getCPUTime

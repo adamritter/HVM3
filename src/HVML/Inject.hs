@@ -26,16 +26,16 @@ injectCore book (App fun arg) loc vars = do
   vars1 <- injectCore book arg (app + 1) vars0
   set loc (termNew _APP_ 0 app)
   return vars1
-injectCore book (Sup tm0 tm1) loc vars = do
+injectCore book (Sup lab tm0 tm1) loc vars = do
   sup   <- allocNode 2
   vars0 <- injectCore book tm0 (sup + 0) vars
   vars1 <- injectCore book tm1 (sup + 1) vars0
-  set loc (termNew _SUP_ 0 sup)
+  set loc (termNew _SUP_ lab sup)
   return vars1
-injectCore book (Dup dp0 dp1 val bod) loc vars = do
+injectCore book (Dup lab dp0 dp1 val bod) loc vars = do
   dup   <- allocNode 3
-  vars0 <- injectBind dp0 (termNew _DP0_ 0 dup) vars
-  vars1 <- injectBind dp1 (termNew _DP1_ 0 dup) vars0
+  vars0 <- injectBind dp0 (termNew _DP0_ lab dup) vars
+  vars1 <- injectBind dp1 (termNew _DP1_ lab dup) vars0
   vars2 <- injectCore book val (dup + 2) vars1
   injectCore book bod loc vars2
 injectCore book (Ref nam fid) loc vars = do

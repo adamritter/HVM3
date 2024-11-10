@@ -1,4 +1,6 @@
 @true  = λt λf t
 @false = λt λf f
 @not   = λb ((b @false) @true)
-@main  = ~ #0{ #7{} #8{} } { λa λb #0{a b} }
+@main  =
+  ! &1{ x y } = &0{ #12{} #24{} }
+  &0{ y x }

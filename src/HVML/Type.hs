@@ -9,13 +9,15 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
+-- REFACTOR NOTE: we just added a Word64 field to Sup/Dup. it is called 'lab'.
+
 data Core
   = Var String
   | Era
   | Lam String Core
   | App Core Core
-  | Sup Core Core
-  | Dup String String Core Core
+  | Sup Word64 Core Core
+  | Dup Word64 String String Core Core
   | Ref String Word64
   | Ctr Word64 [Core]
   | Mat Core [Core]

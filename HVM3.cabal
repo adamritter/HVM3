@@ -20,7 +20,7 @@ executable hvml
                     , HVML.Compile
                     , HVML.Extract
                     , HVML.Inject
-                    , HVML.Normal
+                    , HVML.Reduce
                     , HVML.Parse
                     , HVML.Show
     build-depends:    base ^>=4.20.0.0,
@@ -29,6 +29,8 @@ executable hvml
                       unordered-containers ^>=0.2.19.1,
                       parsec ^>=3.1.17.0,
                       hashable ^>=1.5.0.0,
+                      hs-highlight == 1.0.3,
+                      ansi-terminal == 1.1.1,
                       process,
                       libffi,
                       unix,
