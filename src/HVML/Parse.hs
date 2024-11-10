@@ -136,7 +136,8 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
-  trace ("parsed " ++ coreToString core) $ return (name, core)
+  -- trace ("parsed " ++ coreToString core) $
+  return (name, core)
 
 parseBook :: Parser [(String, Core)]
 parseBook = do

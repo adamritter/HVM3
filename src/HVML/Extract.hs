@@ -13,7 +13,8 @@ type ExtractM a = StateT (IS.IntSet, MS.Map Loc String) HVM a
 
 extractCore :: Term -> ExtractM Core
 extractCore term = case tagT (termTag term) of
-  ERA -> return Era
+  ERA -> do
+    return Era
   
   LAM -> do
     let loc = termLoc term
@@ -143,11 +144,12 @@ extractCore term = case tagT (termTag term) of
 doExtractCore :: Term -> HVM Core
 doExtractCore term = evalStateT (extractCore term) (IS.empty, MS.empty)
 
-genNam :: Loc -> ExtctCore :: Term -> IS.IntSet -> MS.Map Loc String -> HVM (IS.IntSet, MS.Map Loc String, Core)ractM String
+genName :: Loc -> ExtractM String
 genName loc = do
   (dups, nameMap) <- get
   case MS.lookup loc nameMap of
-    Just name -> return name
+    Just name -> do
+      return name
     Nothing -> do
       let newName = genNameFromIndex (MS.size nameMap)
       put (dups, MS.insert loc newName nameMap)
@@ -155,9 +157,6 @@ genName loc = do
 
 genNameFromIndex :: Int -> String
 genNameFromIndex n = go (n + 1) "" where
-  go 0 acc = acc
-  go n acc = 
-    let (q, r) = quotRem (n - 1) 26
-    in if q == 0
-        then [chr (ord 'a' + r)] ++ acc
-        else go q (chr (ord 'a' + r) : acc)
+  go n ac | n == 0    = ac
+          | otherwise = go q (chr (ord 'a' + r) : ac)
+          where (q,r) = quotRem (n - 1) 26
