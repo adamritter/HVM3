@@ -227,7 +227,7 @@ tagT 0x0A = MAT
 tagT 0x0B = W32
 tagT 0x0C = OPX
 tagT 0x0D = OPY
-tagT tag  = error $ "unknown tag" ++ show tag
+tagT tag  = error $ "unknown tag: " ++ show tag
 
 _DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_, _REF_, _CTR_, _MAT_, _W32_, _OPX_, _OPY_ :: Tag
 _DP0_ = 0x00

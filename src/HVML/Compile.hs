@@ -15,7 +15,7 @@ import qualified Data.Map.Strict as MS
 data CompileState = CompileState
   { next :: Word64
   , args :: MS.Map String String  -- var_name => binder_host
-  , vars :: [(String, String)]     -- [(var_name, var_host)]
+  , vars :: [(String, String)]    -- [(var_name, var_host)]
   , code :: [String]
   }
 
