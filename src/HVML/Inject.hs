@@ -54,6 +54,15 @@ injectCore book (Mat val css) loc vars = do
     injectCore book bod (mat + 1 + ix) vs) vars0 (zip [0..] css)
   set loc (termNew _MAT_ (fromIntegral (length css)) mat)
   return vars1
+injectCore book (U32 val) loc vars = do
+  set loc (termNew _W32_ 0 (fromIntegral val))
+  return vars
+injectCore book (Op2 opr nm0 nm1) loc vars = do
+  opx   <- allocNode 2
+  vars0 <- injectCore book nm0 (opx + 0) vars
+  vars1 <- injectCore book nm1 (opx + 1) vars0
+  set loc (termNew _OPX_ (fromIntegral $ fromEnum opr) opx)
+  return vars1
 injectCore _ (Var uid) loc vars = do
   let namHash = hash uid
   case IM.lookup namHash vars of

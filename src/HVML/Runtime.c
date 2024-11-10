@@ -1,6 +1,3 @@
-//./Type.hs//
-//./Inject.hs//
-
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -12,6 +9,7 @@ typedef uint8_t  Tag;
 typedef uint32_t Lab;
 typedef uint32_t Loc;
 typedef uint64_t Term;
+typedef uint32_t u32;
 typedef uint64_t u64;
 
 typedef _Atomic(Term) ATerm;
@@ -51,6 +49,26 @@ static State HVM = {
 #define REF 0x08
 #define CTR 0x09
 #define MAT 0x0A
+#define W32 0x0B
+#define OPX 0x0C
+#define OPY 0x0D
+
+#define OP_ADD 0x00
+#define OP_SUB 0x01
+#define OP_MUL 0x02
+#define OP_DIV 0x03
+#define OP_MOD 0x04
+#define OP_EQ  0x05
+#define OP_NE  0x06
+#define OP_LT  0x07
+#define OP_GT  0x08
+#define OP_LTE 0x09
+#define OP_GTE 0x0A
+#define OP_AND 0x0B
+#define OP_OR  0x0C
+#define OP_XOR 0x0D
+#define OP_LSH 0x0E
+#define OP_RSH 0x0F
 
 #define VOID 0x00000000000000
 
@@ -227,7 +245,7 @@ Term reduce_app_lam(Term app, Term lam) {
 
 // (&L{a b} c)
 // ----------------- APP-SUP
-// &L{x0 x1} = c
+// ! &L{x0 x1} = c
 // &L{(a x0) (b x1)}
 Term reduce_app_sup(Term app, Term sup) {
   inc_itr();
@@ -261,8 +279,16 @@ Term reduce_app_ctr(Term app, Term ctr) {
   exit(0);
 }
 
-// &L{x y} = *
-// ----------- DUP-ERA
+// (123 a)
+// ------- APP-W32
+// ⊥
+Term reduce_app_w32(Term app, Term w32) {
+  printf("invalid:app-w32");
+  exit(0);
+}
+
+// ! &L{x y} = *
+// ------------- DUP-ERA
 // x <- *
 // y <- *
 Term reduce_dup_era(Term dup, Term era) {
@@ -274,9 +300,9 @@ Term reduce_dup_era(Term dup, Term era) {
   return got(dup_loc + dup_num);
 }
 
-// &L{r s} = λx(f)
-// --------------- DUP-LAM
-// &L{f0 f1} = f
+// ! &L{r s} = λx(f)
+// ----------------- DUP-LAM
+// ! &L{f0 f1} = f
 // r <- λx0(f0)
 // s <- λx1(f1)
 // x <- &L{x0 x1}
@@ -306,16 +332,16 @@ Term reduce_dup_lam(Term dup, Term lam) {
   return got(dup_loc + dup_num);
 }
 
-// &L{x y} = &R{a b}
-// ----------------- DUP-SUP
+// ! &L{x y} = &R{a b}
+// ------------------- DUP-SUP
 // if L == R:
 //   x <- a
 //   y <- b
 // else:
 //   x <- &R{a0 b0} 
 //   y <- &R{a1 b1}
-//   &L{a0 a1} = a
-//   &L{b0 b1} = b
+//   ! &L{a0 a1} = a
+//   ! &L{b0 b1} = b
 Term reduce_dup_sup(Term dup, Term sup) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
@@ -352,11 +378,11 @@ Term reduce_dup_sup(Term dup, Term sup) {
   }
 }
 
-// &{x y} = #{a b c ...}
-// --------------------- DUP-CTR
-// &{a0 a1} = a
-// &{b0 b1} = b
-// &{c0 c1} = c
+// ! &{x y} = #{a b c ...}
+// ----------------------- DUP-CTR
+// ! &{a0 a1} = a
+// ! &{b0 b1} = b
+// ! &{c0 c1} = c
 // ...
 // {#{a0 b0 c0 ...} #{a1 b1 c1 ...}}
 Term reduce_dup_ctr(Term dup, Term ctr) {
@@ -384,6 +410,19 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   return got(dup_loc + dup_num);
 }
 
+// ! &L{x y} = 123
+// --------------- DUP-W32
+// x <- 123
+// y <- 123
+Term reduce_dup_w32(Term dup, Term w32) {
+  inc_itr();
+  Loc dup_loc = term_loc(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  set(dup_loc + 0, w32);
+  set(dup_loc + 1, w32);
+  return got(dup_loc + dup_num);
+}
+
 // ~ * {K0 K1 K2 ...} 
 // ------------------ MAT-ERA
 // *
@@ -402,9 +441,9 @@ Term reduce_mat_lam(Term mat, Term lam) {
 
 // ~ {x y} {K0 K1 K2 ...}
 // ---------------------- MAT-SUP
-// &{k0a k0b} = K0
-// &{k1a k1b} = K1
-// &{k2a k2b} = K2
+// ! &{k0a k0b} = K0
+// ! &{k1a k1b} = K1
+// ! &{k2a k2b} = K2
 // ...
 // { ~ x {K0a K1a K2a ...}
 //   ~ y {K0b K1b K2b ...} }
@@ -453,6 +492,167 @@ Term reduce_mat_ctr(Term mat, Term ctr) {
   return app;
 }
 
+// ~ num {K0 K1 K2 ... KN}
+// ----------------------- MAT-W32
+// if n < N: Kn
+// else    : KN(num-N)
+Term reduce_mat_w32(Term mat, Term w32) {
+  inc_itr();
+  Loc mat_loc = term_loc(mat);
+  Lab mat_len = term_lab(mat);
+  u64 w32_val = term_loc(w32);
+  if (w32_val < mat_len - 1) {
+    return got(mat_loc + 1 + w32_val);
+  } else {
+    Loc app = alloc_node(2);
+    set(app + 0, got(mat_loc + mat_len));
+    set(app + 1, term_new(W32, 0, w32_val - (mat_len - 1)));
+    return term_new(APP, 0, app);
+  }
+}
+
+// TODO: now, let's implement the missing OPX interactions.
+
+// <op(* b)
+// --------- OPX-ERA
+// *
+Term reduce_opx_era(Term opx, Term era) {
+  inc_itr();
+  return era;
+}
+
+// <op(λx(B) y)
+// ------------- OPX-LAM
+// ⊥
+Term reduce_opx_lam(Term opx, Term lam) {
+  printf("invalid:opx-lam");
+  exit(0);
+}
+
+// <op(&L{x0 x1} y)
+// ------------------------- OPX-SUP
+// ! &L{y0 y1} = y
+// &L{<op(x0 y0) <op(x1 y1)}
+Term reduce_opx_sup(Term opx, Term sup) {
+  inc_itr();
+  Loc opx_loc = term_loc(opx);
+  Loc sup_loc = term_loc(sup);
+  Lab sup_lab = term_lab(sup);
+  Term nmy    = got(opx_loc + 1);
+  Term tm0    = got(sup_loc + 0);
+  Term tm1    = got(sup_loc + 1);
+  Loc du0     = alloc_node(3);
+  Loc op0     = alloc_node(2);
+  Loc op1     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, term_new(SUB, 0, 0));
+  set(du0 + 2, nmy);
+  set(op0 + 0, tm0);
+  set(op0 + 1, term_new(DP0, 0, du0));
+  set(op1 + 0, tm1);
+  set(op1 + 1, term_new(DP1, 0, du0));
+  set(su0 + 0, term_new(OPX, term_lab(opx), op0));
+  set(su0 + 1, term_new(OPX, term_lab(opx), op1));
+  return term_new(SUP, sup_lab, su0);
+}
+
+// <op(#{x0 x1 x2...} y)
+// ---------------------- OPX-CTR
+// ⊥
+Term reduce_opx_ctr(Term opx, Term ctr) {
+  printf("invalid:opx-ctr");
+  exit(0);
+}
+
+// <op(x0 x1)
+// ----------- OPX-W32
+// <op(x0 x1)
+Term reduce_opx_w32(Term opx, Term w32) {
+  inc_itr();
+  Lab opx_lab = term_lab(opx);
+  Lab opx_loc = term_loc(opx);
+  return term_new(OPY, opx_lab, opx_loc);
+}
+
+// >op(a *)
+// --------- OPY-ERA
+// *
+Term reduce_opy_era(Term opy, Term era) {
+  inc_itr();
+  return era;
+}
+
+// >op(a λx(B))
+// ------------- OPY-LAM
+// *
+Term reduce_opy_lam(Term opy, Term era) {
+  printf("invalid:opy-lam");
+  exit(0);
+}
+
+// >op(a &L{x y})
+// ------------------------- OPY-SUP
+// &L{>op(a x) >op(a y)}
+Term reduce_opy_sup(Term opy, Term sup) {
+  inc_itr();
+  Loc opy_loc = term_loc(opy);
+  Loc sup_loc = term_loc(sup);
+  Lab sup_lab = term_lab(sup);
+  Term nmx    = got(opy_loc + 0);
+  Term tm0    = got(sup_loc + 0);
+  Term tm1    = got(sup_loc + 1);
+  Loc op0     = alloc_node(2);
+  Loc op1     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  set(op0 + 0, nmx);
+  set(op0 + 1, tm0);
+  set(op1 + 0, nmx);
+  set(op1 + 1, tm1);
+  set(su0 + 0, term_new(OPY, term_lab(opy), op0));
+  set(su0 + 1, term_new(OPY, term_lab(opy), op1));
+  return term_new(SUP, sup_lab, su0);
+}
+
+// >op(#{x y z ...} b)
+// ---------------------- OPY-CTR
+// ⊥
+Term reduce_opy_ctr(Term opy, Term ctr) {
+  printf("invalid:opy-ctr");
+  exit(0);
+}
+
+// >op(x y)
+// --------- OPY-W32
+// x op y
+Term reduce_opy_w32(Term opy, Term w32) {
+  inc_itr();
+  Loc opy_loc = term_loc(opy);
+  u32 x = term_loc(got(opy_loc + 0));
+  u32 y = term_loc(w32);
+  u32 result;
+  switch (term_lab(opy)) {
+    case OP_ADD: result = x + y; break;
+    case OP_SUB: result = x - y; break;
+    case OP_MUL: result = x * y; break;
+    case OP_DIV: result = x / y; break;
+    case OP_MOD: result = x % y; break;
+    case OP_EQ:  result = x == y; break;
+    case OP_NE:  result = x != y; break;
+    case OP_LT:  result = x < y; break;
+    case OP_GT:  result = x > y; break;
+    case OP_LTE: result = x <= y; break;
+    case OP_GTE: result = x >= y; break;
+    case OP_AND: result = x & y; break;
+    case OP_OR:  result = x | y; break;
+    case OP_XOR: result = x ^ y; break;
+    case OP_LSH: result = x << y; break;
+    case OP_RSH: result = x >> y; break;
+    default: result = 0;
+  }
+  return term_new(W32, 0, result);
+}
+
 Term reduce(Term term) {
   //printf("reduce\n");
   Loc   spos = 0;
@@ -486,6 +686,16 @@ Term reduce(Term term) {
         next = got(loc + 0);
         continue;
       }
+      case OPX: {
+        HVM.path[spos++] = next;
+        next = got(loc + 0);
+        continue;
+      }
+      case OPY: {
+        HVM.path[spos++] = next;
+        next = got(loc + 1);
+        continue;
+      }
       case VAR: {
         Loc key = term_key(next);
         Term sub = got(key);
@@ -505,9 +715,9 @@ Term reduce(Term term) {
           break;
         } else {
           Term prev = HVM.path[--spos];
-          Tag ptag = term_tag(prev);
-          Lab plab = term_lab(prev);
-          Loc ploc = term_loc(prev);
+          Tag  ptag = term_tag(prev);
+          Lab  plab = term_lab(prev);
+          Loc  ploc = term_loc(prev);
           switch (ptag) {
             case APP: {
               switch (tag) {
@@ -515,6 +725,7 @@ Term reduce(Term term) {
                 case LAM: next = reduce_app_lam(prev, next); continue;
                 case SUP: next = reduce_app_sup(prev, next); continue;
                 case CTR: next = reduce_app_ctr(prev, next); continue;
+                case W32: next = reduce_app_w32(prev, next); continue;
                 default: break;
               }
               break;
@@ -526,16 +737,38 @@ Term reduce(Term term) {
                 case LAM: next = reduce_dup_lam(prev, next); continue;
                 case SUP: next = reduce_dup_sup(prev, next); continue;
                 case CTR: next = reduce_dup_ctr(prev, next); continue;
+                case W32: next = reduce_dup_w32(prev, next); continue;
                 default: break;
               }
               break;
             }
             case MAT: {
               switch (tag) {
-                case ERA: next = reduce_mat_era(prev, next); exit(0);
-                case LAM: next = reduce_mat_lam(prev, next); exit(0);
-                case SUP: next = reduce_mat_sup(prev, next); exit(0);
+                case ERA: next = reduce_mat_era(prev, next); continue;
+                case LAM: next = reduce_mat_lam(prev, next); continue;
+                case SUP: next = reduce_mat_sup(prev, next); continue;
                 case CTR: next = reduce_mat_ctr(prev, next); continue;
+                case W32: next = reduce_mat_w32(prev, next); continue;
+                default: break;
+              }
+            }
+            case OPX: {
+              switch (tag) {
+                case ERA: next = reduce_opx_era(prev, next); continue;
+                case LAM: next = reduce_opx_lam(prev, next); continue;
+                case SUP: next = reduce_opx_sup(prev, next); continue;
+                case CTR: next = reduce_opx_ctr(prev, next); continue;
+                case W32: next = reduce_opx_w32(prev, next); continue;
+                default: break;
+              }
+            }
+            case OPY: {
+              switch (tag) {
+                case ERA: next = reduce_opy_era(prev, next); continue;
+                case LAM: next = reduce_opy_lam(prev, next); continue;
+                case SUP: next = reduce_opy_sup(prev, next); continue;
+                case CTR: next = reduce_opy_ctr(prev, next); continue;
+                case W32: next = reduce_opy_w32(prev, next); continue;
                 default: break;
               }
             }
@@ -566,60 +799,6 @@ Term reduce(Term term) {
   return 0;
 }
 
-//Term normal(Term term) {
-  //Term wnf = reduce(term);
-  //Tag tag = term_tag(wnf);
-  //Lab lab = term_lab(wnf);
-  //Loc loc = term_loc(wnf);
-  //switch (tag) {
-    //case APP: {
-      //Term fun;
-      //Term arg;
-      //fun = got(loc + 0);
-      //fun = normal(fun);
-      //arg = got(loc + 1);
-      //arg = normal(arg);
-      //set(loc + 0, fun);
-      //set(loc + 1, arg);
-      //return wnf;
-    //}
-    //case LAM: {
-      //Term bod;
-      //bod = got(loc + 1);
-      //bod = normal(bod);
-      //set(loc + 1, bod);
-      //return wnf;
-    //}
-    //case SUP: {
-      //Term tm0;
-      //Term tm1;
-      //tm0 = got(loc + 0);
-      //tm0 = normal(tm0);
-      //tm1 = got(loc + 1);
-      //tm1 = normal(tm1);
-      //set(loc + 0, tm0);
-      //set(loc + 1, tm1);
-      //return wnf;
-    //}
-    //case DP0: {
-      //Term val;
-      //val = got(loc + 2);
-      //val = normal(val);
-      //set(loc + 2, val);
-      //return wnf;
-    //}
-    //case DP1: {
-      //Term val;
-      //val = got(loc + 2);
-      //val = normal(val);
-      //set(loc + 2, val);
-      //return wnf;
-    //}
-    //default:
-      //return wnf;
-  //}
-//}
-
 // Runtime Memory
 // --------------
 
@@ -640,7 +819,6 @@ void hvm_free() {
   free(HVM.itrs);
 }
 
-// TODO: create an hvm_get and an hvm_set function that get/set the whole HVM struct
 State* hvm_get_state() {
   return &HVM;
 }

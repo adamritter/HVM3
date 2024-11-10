@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Show.hs//
 
 module HVML.Parse where
 
@@ -33,11 +34,36 @@ parseCore = do
       bod <- parseCore
       return $ Lam vr0 bod
     '(' -> do
-      consume "("
-      fun <- parseCore
-      arg <- parseCore
-      consume ")"
-      return $ App fun arg
+      next <- lookAhead (anyChar >> anyChar)
+      case next of
+        '+' -> parseOper OP_ADD
+        '-' -> parseOper OP_SUB
+        '*' -> parseOper OP_MUL
+        '/' -> parseOper OP_DIV
+        '%' -> parseOper OP_MOD
+        '=' -> parseOper OP_EQ
+        '!' -> parseOper OP_NE
+        '&' -> parseOper OP_AND
+        '|' -> parseOper OP_OR
+        '^' -> parseOper OP_XOR
+        '<' -> do
+          next <- lookAhead (anyChar >> anyChar >> anyChar)
+          case next of
+            '<' -> parseOper OP_LSH
+            '=' -> parseOper OP_LTE
+            _   -> parseOper OP_LT
+        '>' -> do
+          next <- lookAhead (anyChar >> anyChar >> anyChar)
+          case next of
+            '>' -> parseOper OP_RSH
+            '=' -> parseOper OP_GTE
+            _   -> parseOper OP_GT
+        _ -> do
+          consume "("
+          fun <- parseCore
+          arg <- parseCore
+          consume ")"
+          return $ App fun arg
     '&' -> do
       consume "&"
       lab <- read <$> many1 digit
@@ -82,7 +108,18 @@ parseCore = do
       return $ Mat val css
     _ -> do
       name <- parseName
-      return $ Var name
+      case reads name of
+        [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
+        _           -> return $ Var name
+
+parseOper :: Oper -> Parser Core
+parseOper op = do
+  consume "("
+  consume (operToString op)
+  nm0 <- parseCore
+  nm1 <- parseCore
+  consume ")"
+  return $ Op2 op nm0 nm1
 
 parseName :: Parser String
 parseName = skip >> many1 (alphaNum <|> char '_')
@@ -182,4 +219,3 @@ showParseError filename input err = do
   putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
   putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
-

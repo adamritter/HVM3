@@ -1,6 +1,6 @@
 @true  = λt λf t
 @false = λt λf f
 @not   = λb ((b @false) @true)
-@main  =
-  ! &1{ x y } = &0{ #12{} #24{} }
-  &0{ y x }
+@dups  = ! &1{ x y } = &0{ #12{} #24{} } &0{ y x }
+@main  = (+ 10 ~7{ 0 1 2 λx x })
+@main  = (* 100 123)

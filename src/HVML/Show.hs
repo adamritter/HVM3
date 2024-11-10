@@ -20,6 +20,27 @@ coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " 
 coreToString (Ref nam fid)             = "@" ++ nam
 coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map coreToString fds) ++ "}"
 coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map coreToString css) ++ "}"
+coreToString (U32 val)                 = show val
+coreToString (Op2 opr nm0 nm1)         = "(" ++  operToString opr ++ coreToString nm0 ++ " " ++ coreToString nm1 ++ ")"
+
+operToString :: Oper -> String
+operToString OP_ADD = "+"
+operToString OP_SUB = "-"
+operToString OP_MUL = "*"
+operToString OP_DIV = "/"
+operToString OP_MOD = "%"
+operToString OP_EQ  = "=="
+operToString OP_NE  = "!="
+operToString OP_LT  = "<"
+operToString OP_GT  = ">"
+operToString OP_LTE = "<="
+operToString OP_GTE = ">="
+operToString OP_AND = "&"
+operToString OP_OR  = "|"
+operToString OP_XOR = "^"
+operToString OP_LSH = "<<"
+operToString OP_RSH = ">>"
+
 
 -- Runtime Stringification
 -- -----------------------

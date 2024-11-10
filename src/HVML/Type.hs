@@ -2,14 +2,17 @@
 
 module HVML.Type where
 
-import Data.Word
 import Data.Map.Strict as MS
+import Data.Word
 import Foreign.Ptr
 
 -- Core Types
 -- ----------
 
--- REFACTOR NOTE: we just added a Word64 field to Sup/Dup. it is called 'lab'.
+-- NOTE TO AI: we're now adding the uint32 type, including:
+-- - U32: uint32 value, like '42'
+-- - OPX: uint32 binary operation, like 'add', 'mul', etc.
+-- Your goal is to add the uint32 funcionality to each file.
 
 data Core
   = Var String
@@ -21,7 +24,16 @@ data Core
   | Ref String Word64
   | Ctr Word64 [Core]
   | Mat Core [Core]
+  | U32 Word32
+  | Op2 Oper Core Core
   deriving (Show, Eq)
+
+data Oper
+  = OP_ADD | OP_SUB | OP_MUL | OP_DIV
+  | OP_MOD | OP_EQ  | OP_NE  | OP_LT
+  | OP_GT  | OP_LTE | OP_GTE | OP_AND
+  | OP_OR  | OP_XOR | OP_LSH | OP_RSH
+  deriving (Show, Eq, Enum)
 
 data Book = Book
   { idToCore :: MS.Map Word64 Core
@@ -49,6 +61,9 @@ data TAG
   | REF
   | CTR
   | MAT
+  | W32
+  | OPX
+  | OPY
   deriving (Eq, Show)
 
 type HVM = IO
@@ -113,6 +128,9 @@ foreign import ccall unsafe "Runtime.c reduce_app_sup"
 foreign import ccall unsafe "Runtime.c reduce_app_ctr"
   reduceAppCtr :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_app_w32"
+  reduceAppW32 :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_dup_era"
   reduceDupEra :: Term -> Term -> IO Term
 
@@ -125,6 +143,9 @@ foreign import ccall unsafe "Runtime.c reduce_dup_sup"
 foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
   reduceDupCtr :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_dup_w32"
+  reduceDupW32 :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_mat_era"
   reduceMatEra :: Term -> Term -> IO Term
 
@@ -136,6 +157,39 @@ foreign import ccall unsafe "Runtime.c reduce_mat_sup"
 
 foreign import ccall unsafe "Runtime.c reduce_mat_ctr"
   reduceMatCtr :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_mat_w32"
+  reduceMatW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opx_era"
+  reduceOpxEra :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opx_lam"
+  reduceOpxLam :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opx_sup"
+  reduceOpxSup :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opx_ctr"
+  reduceOpxCtr :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opx_w32"
+  reduceOpxW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_era"
+  reduceOpyEra :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_lam"
+  reduceOpyLam :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_sup"
+  reduceOpySup :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_ctr"
+  reduceOpyCtr :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_w32"
+  reduceOpyW32 :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
@@ -170,9 +224,12 @@ tagT 0x07 = SUB
 tagT 0x08 = REF
 tagT 0x09 = CTR
 tagT 0x0A = MAT
+tagT 0x0B = W32
+tagT 0x0C = OPX
+tagT 0x0D = OPY
 tagT tag  = error $ "unknown tag" ++ show tag
 
-_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_, _REF_, _CTR_, _MAT_ :: Tag
+_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_, _REF_, _CTR_, _MAT_, _W32_, _OPX_, _OPY_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
 _VAR_ = 0x02
@@ -184,3 +241,6 @@ _SUB_ = 0x07
 _REF_ = 0x08
 _CTR_ = 0x09
 _MAT_ = 0x0A
+_W32_ = 0x0B
+_OPX_ = 0x0C
+_OPY_ = 0x0D

@@ -93,6 +93,25 @@ extractCore term dups = case tagT (termTag term) of
       (dups0, cs0) <- extractCore cs dups
       return (dups0, css ++ [cs0])) (dups0,[]) css
     return (dups1, Mat val0 css0)
+  W32 -> do
+    let val = termLoc term
+    return (dups, U32 (fromIntegral val))
+  OPX -> do
+    let loc = termLoc term
+    let opr = toEnum (fromIntegral (termLab term))
+    nm0 <- got (loc + 0)
+    nm1 <- got (loc + 1)
+    (dups0, nm00) <- extractCore nm0 dups
+    (dups1, nm10) <- extractCore nm1 dups0
+    return (dups1, Op2 opr nm00 nm10)
+  OPY -> do
+    let loc = termLoc term
+    let opr = toEnum (fromIntegral (termLab term))
+    nm0 <- got (loc + 0)
+    nm1 <- got (loc + 1)
+    (dups0, nm00) <- extractCore nm0 dups
+    (dups1, nm10) <- extractCore nm1 dups0
+    return (dups1, Op2 opr nm00 nm10)
   REF -> do
     let loc = termLoc term
     return (dups, Ref "?" loc)

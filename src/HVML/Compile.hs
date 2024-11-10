@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Compile where
 
@@ -94,5 +95,34 @@ compileCore book (Dup lab dp0 dp1 val bod) host = do
   emit $ "  set(" ++ dupName ++ " + 2, " ++ valT ++ ");"
   bodT <- compileCore book bod host
   return bodT
+compileCore book (Ctr cid fds) host = do
+  uid <- fresh
+  let ctrName = "ctr" ++ show uid
+  let arity = length fds
+  emit $ "  Loc " ++ ctrName ++ " = alloc_node(" ++ show arity ++ ");"
+  fdsT <- mapM (\ (i,fd) -> compileCore book fd (ctrName ++ " + " ++ show i)) (zip [0..] fds)
+  sequence_ [emit $ "  set(" ++ ctrName ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
+  return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrName ++ ")"
+compileCore book (Mat val css) host = do
+  uid <- fresh
+  let matName = "mat" ++ show uid
+  let arity = length css
+  emit $ "  Loc " ++ matName ++ " = alloc_node(" ++ show (1 + arity) ++ ");"
+  valT <- compileCore book val (matName ++ " + 0")
+  emit $ "  set(" ++ matName ++ " + 0, " ++ valT ++ ");"
+  cssT <- mapM (\ (i,cs) -> compileCore book cs (matName ++ " + " ++ show (i+1))) (zip [0..] css)
+  sequence_ [emit $ "  set(" ++ matName ++ " + " ++ show (i+1) ++ ", " ++ csT ++ ");" | (i,csT) <- zip [0..] cssT]
+  return $ "term_new(MAT, " ++ show arity ++ ", " ++ matName ++ ")"
+compileCore book (U32 val) _ =
+  return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
+compileCore book (Op2 opr nm0 nm1) host = do
+  uid <- fresh
+  let opxName = "opx" ++ show uid
+  emit $ "  Loc " ++ opxName ++ " = alloc_node(2);"
+  nm0T <- compileCore book nm0 (opxName ++ " + 0")
+  nm1T <- compileCore book nm1 (opxName ++ " + 1")
+  emit $ "  set(" ++ opxName ++ " + 0, " ++ nm0T ++ ");"
+  emit $ "  set(" ++ opxName ++ " + 1, " ++ nm1T ++ ");"
+  return $ "term_new(OPX, " ++ show (fromEnum opr) ++ ", " ++ opxName ++ ")"
 compileCore book (Ref nam fid) _ =
   return $ "term_new(REF, 0, " ++ show fid ++ ")"
