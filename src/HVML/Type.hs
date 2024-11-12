@@ -16,12 +16,12 @@ import Foreign.Ptr
 
 data Core
   = Var String
+  | Ref String Word64
   | Era
   | Lam String Core
   | App Core Core
   | Sup Word64 Core Core
   | Dup Word64 String String Core Core
-  | Ref String Word64
   | Ctr Word64 [Core]
   | Mat Core [Core]
   | U32 Word32
@@ -88,6 +88,9 @@ foreign import ccall unsafe "Runtime.c got"
 
 foreign import ccall unsafe "Runtime.c take"
   take :: Word64 -> IO Term
+
+foreign import ccall unsafe "Runtime.c swap"
+  swap :: Word64 -> IO Term
 
 foreign import ccall unsafe "Runtime.c term_new"
   termNew :: Tag -> Lab -> Loc -> Term

@@ -17,7 +17,7 @@ coreToString (Lam vr0 bod)             = "λ" ++ vr0 ++ " " ++ coreToString bod
 coreToString (App fun arg)             = "(" ++ coreToString fun ++ " " ++ coreToString arg ++ ")"
 coreToString (Sup lab tm0 tm1)         = "&" ++ show lab ++ "{" ++ coreToString tm0 ++ " " ++ coreToString tm1 ++ "}"
 coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
-coreToString (Ref nam fid)             = "@" ++ nam
+coreToString (Ref nam fid)             = "@" ++ nam ++ "^" ++ show fid
 coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map coreToString fds) ++ "}"
 coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map coreToString css) ++ "}"
 coreToString (U32 val)                 = show val

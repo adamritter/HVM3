@@ -1,6 +1,3 @@
--- //./Type.hs//
--- //./Show.hs//
-
 module HVML.Parse where
 
 import Data.List
@@ -20,7 +17,13 @@ import qualified Data.Map.Strict as MS
 -- Core Parsers
 -- ------------
 
-parseCore :: Parser Core
+data ParserState = ParserState {
+  constructorAliases :: MS.Map String Word64
+}
+
+type ParserM = Parsec String ParserState
+
+parseCore :: ParserM Core
 parseCore = do
   skip
   head <- lookAhead anyChar
@@ -62,7 +65,7 @@ parseCore = do
           consume "("
           fun <- parseCore
           args <- many $ do
-            notFollowedBy (char ')')
+            closeWith ")"
             arg <- parseCore
             return arg
           char ')'
@@ -91,31 +94,61 @@ parseCore = do
       consume "@"
       nam <- parseName
       return $ Ref nam 0
-    '#' -> do
-      consume "#"
-      cid <- read <$> many1 digit
-      consume "{"
-      fds <- many $ do
-        closeWith "}"
-        parseCore
-      consume "}"
-      return $ Ctr cid fds
-    '~' -> do
-      consume "~"
-      val <- parseCore
-      consume "{"
-      css <- many $ do
-        closeWith "}"
-        parseCore
-      consume "}"
-      return $ Mat val css
+    '#' -> parseCtr
+    '~' -> parseMat
     _ -> do
       name <- parseName
       case reads name of
         [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
         _           -> return $ Var name
 
-parseOper :: Oper -> Parser Core
+parseCtr :: ParserM Core
+parseCtr = do
+  consume "#"
+  nam <- parseName
+  cid <- if length nam == 0
+    then return 0
+    else do
+      ali <- constructorAliases <$> getState
+      case MS.lookup nam ali of
+        Just id -> return id
+        Nothing -> case reads nam of
+          [(num, "")] -> return (fromIntegral (num :: Integer))
+          otherwise   -> fail $ "Unknown constructor: " ++ nam
+  fds <- option [] $ do
+    try $ consume "{"
+    fds <- many $ do
+      closeWith "}"
+      parseCore
+    consume "}"
+    return fds
+  return $ Ctr cid fds
+
+parseMat :: ParserM Core
+parseMat = do
+  consume "~"
+  val <- parseCore
+  consume "{"
+  css <- many $ do
+    closeWith "}"
+    consume "#"
+    name <- parseName
+    ali <- constructorAliases <$> getState
+    cid <- case MS.lookup name ali of
+      Just id -> return id
+      Nothing -> case reads name of
+        [(num, "")] -> return (fromIntegral (num :: Integer))
+        _ -> if name == "_"
+          then return 0xFFFFFFF
+          else fail $ "Unknown constructor: " ++ name
+    consume ":"
+    cas <- parseCore
+    return (cid, cas)
+  consume "}"
+  let sortedCss = map snd $ sortOn fst css
+  return $ Mat val sortedCss
+
+parseOper :: Oper -> ParserM Core
 parseOper op = do
   consume "("
   consume (operToString op)
@@ -124,10 +157,10 @@ parseOper op = do
   consume ")"
   return $ Op2 op nm0 nm1
 
-parseName :: Parser String
-parseName = skip >> many1 (alphaNum <|> char '_')
+parseName :: ParserM String
+parseName = skip >> many (alphaNum <|> char '_')
 
-parseDef :: Parser (String, Core)
+parseDef :: ParserM (String, Core)
 parseDef = do
   try $ do
     skip
@@ -136,26 +169,55 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
-  -- trace ("parsed " ++ coreToString core) $
   return (name, core)
 
-parseBook :: Parser [(String, Core)]
+parseADT :: ParserM ()
+parseADT = do
+  try $ do
+    skip
+    consume "data"
+  name <- parseName
+  skip
+  consume "{"
+  constructors <- many parseADTCtr
+  consume "}"
+  let aliases = zip (map fst constructors) [0..]
+  modifyState (\s -> s { constructorAliases = MS.union (MS.fromList aliases) (constructorAliases s) })
+
+parseADTCtr :: ParserM (String, [String])
+parseADTCtr = do
+  skip
+  consume "#"
+  name <- parseName
+  fields <- option [] $ do
+    try $ consume "{"
+    fds <- many $ do
+      closeWith "}"
+      parseName
+    skip
+    consume "}"
+    return fds
+  skip
+  return (name, fields)
+
+parseBook :: ParserM [(String, Core)]
 parseBook = do
   skip
+  many parseADT
   defs <- many parseDef
   skip
   eof
   return defs
 
 doParseCore :: String -> IO Core
-doParseCore code = case parse parseCore "" code of
+doParseCore code = case runParser parseCore (ParserState MS.empty) "" code of
   Right core -> return $ core
   Left  err  -> do
     showParseError "" code err
     return $ Ref "⊥" 0
 
 doParseBook :: String -> IO Book
-doParseBook code = case parse parseBook "" code of
+doParseBook code = case runParser parseBook (ParserState MS.empty) "" code of
   Right defs -> return $ createBook defs
   Left  err  -> do
     showParseError "" code err
@@ -164,15 +226,15 @@ doParseBook code = case parse parseBook "" code of
 -- Helper Parsers
 -- --------------
 
-consume :: String -> Parser String
+consume :: String -> ParserM String
 consume str = spaces >> string str
 
-closeWith :: String -> Parser ()
+closeWith :: String -> ParserM ()
 closeWith str = try $ do
   spaces
   notFollowedBy (string str)
 
-skip :: Parser ()
+skip :: ParserM ()
 skip = skipMany (parseSpace <|> parseComment) where
   parseSpace = (try $ do
     space
@@ -196,12 +258,17 @@ createBook defs =
 
 decorateFnIds :: MS.Map String Word64 -> Core -> Core
 decorateFnIds fids term = case term of
+  Var nam       -> Var nam
   Ref nam _     -> Ref nam (fids MS.! nam)
   Lam x bod     -> Lam x (decorateFnIds fids bod)
   App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
   Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)
   Dup l x y v b -> Dup l x y (decorateFnIds fids v) (decorateFnIds fids b)
-  other         -> other
+  Ctr cid fds   -> Ctr cid (map (decorateFnIds fids) fds)
+  Mat x cs      -> Mat (decorateFnIds fids x) (map (decorateFnIds fids) cs)
+  Op2 op x y    -> Op2 op (decorateFnIds fids x) (decorateFnIds fids y)
+  U32 n         -> U32 n
+  Era           -> Era
 
 -- Errors
 -- ------
