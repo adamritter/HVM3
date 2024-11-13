@@ -1,15 +1,18 @@
 data List { #Nil #Cons{ head tail } }
 
-@sum = λxs λr ~xs{
+@sum(xs r) = ~xs{
   #Nil: r
-  #Cons: λhead λtail (@sum tail (+ head r))
+  #Cons: λhead λtail @sum(tail (+ head r))
 }
 
-@range = λn λxs ~n{
+@range(n xs) = ~n{
   #0: xs
   #_: λpred
     ! &0{n0 n1} = pred
-    (@range n0 #Cons{ n1 xs })
+    @range(n0 #Cons{n1 xs})
 }
 
-@main = (@sum (@range 50000000 #Nil) 0)
+@main = @sum(@range(50_000_000 #Nil) 0)
+
+// 50000005
+//160000018

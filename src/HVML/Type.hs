@@ -1,5 +1,3 @@
--- //./Runtime.c//
-
 module HVML.Type where
 
 import Data.Map.Strict as MS
@@ -222,31 +220,32 @@ tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
 tagT 0x02 = VAR
-tagT 0x03 = APP
-tagT 0x04 = ERA
-tagT 0x05 = LAM
-tagT 0x06 = SUP
-tagT 0x07 = SUB
-tagT 0x08 = REF
-tagT 0x09 = CTR
-tagT 0x0A = MAT
-tagT 0x0B = W32
-tagT 0x0C = OPX
-tagT 0x0D = OPY
+tagT 0x03 = SUB
+tagT 0x04 = REF
+tagT 0x05 = APP
+tagT 0x06 = MAT
+tagT 0x07 = OPX
+tagT 0x08 = OPY
+tagT 0x09 = ERA
+tagT 0x0A = LAM
+tagT 0x0B = SUP
+tagT 0x0C = CTR
+tagT 0x0D = W32
 tagT tag  = error $ "unknown tag: " ++ show tag
 
-_DP0_, _DP1_, _VAR_, _APP_, _ERA_, _LAM_, _SUP_, _SUB_, _REF_, _CTR_, _MAT_, _W32_, _OPX_, _OPY_ :: Tag
+_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
 _VAR_ = 0x02
-_APP_ = 0x03
-_ERA_ = 0x04
-_LAM_ = 0x05
-_SUP_ = 0x06
-_SUB_ = 0x07
-_REF_ = 0x08
-_CTR_ = 0x09
-_MAT_ = 0x0A
-_W32_ = 0x0B
-_OPX_ = 0x0C
-_OPY_ = 0x0D
+_SUB_ = 0x03
+_REF_ = 0x04
+_APP_ = 0x05
+_MAT_ = 0x06
+_OPX_ = 0x07
+_OPY_ = 0x08
+_ERA_ = 0x09
+_LAM_ = 0x0A
+_SUP_ = 0x0B
+_CTR_ = 0x0C
+_W32_ = 0x0D
+

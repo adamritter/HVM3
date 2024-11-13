@@ -1,5 +1,4 @@
 -- //./Type.hs//
--- //./Show.hs//
 
 module HVML.Parse where
 
@@ -43,7 +42,7 @@ parseCore = do
     '(' -> do
       next <- lookAhead (anyChar >> anyChar)
       case next of
-        '@' -> parseRef
+        -- '@' -> parseRef
         '+' -> parseOper OP_ADD
         '-' -> parseOper OP_SUB
         '*' -> parseOper OP_MUL
@@ -71,10 +70,10 @@ parseCore = do
           fun <- parseCore
           args <- many $ do
             closeWith ")"
-            arg <- parseCore
-            return arg
+            parseCore
           char ')'
           return $ foldl App fun args
+    '@' -> parseRef
     '&' -> do
       consume "&"
       lab <- read <$> many1 digit
@@ -99,18 +98,21 @@ parseCore = do
     '~' -> parseMat
     _ -> do
       name <- parseName
-      case reads name of
+      case reads (filter (/= '_') name) of
         [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
         _           -> return $ Var name
 
 parseRef :: ParserM Core
 parseRef = do
-  consume "(@"
+  consume "@"
   name <- parseName
-  args <- many $ do
-    closeWith ")"
-    parseCore
-  consume ")"
+  args <- option [] $ do
+    try $ string "("
+    args <- many $ do
+      closeWith ")"
+      parseCore
+    consume ")"
+    return args
   return $ Ref name 0 args
 
 parseCtr :: ParserM Core
@@ -178,20 +180,40 @@ parseName = skip >> many (alphaNum <|> char '_')
 parseName1 :: ParserM String
 parseName1 = skip >> many1 (alphaNum <|> char '_')
 
+-- parseDef :: ParserM (String, ([String], Core))
+-- parseDef = do
+  -- try $ do
+    -- skip
+    -- consume "@"
+  -- name <- parseName
+  -- args <- many $ do
+    -- closeWith "="
+    -- name <- parseName1
+    -- return name
+  -- skip
+  -- consume "="
+  -- core <- parseCore
+  -- trace ("PARSED: " ++ name ++ " " ++ show args ++ " = " ++ coreToString core) $ return ()
+  -- return (name, (args, core))
+
+-- TODO: update the syntax of definitions, from '@foo x y z = body' to '@foo(x,y,z) = body'. update the trace too
 parseDef :: ParserM (String, ([String], Core))
 parseDef = do
   try $ do
     skip
     consume "@"
   name <- parseName
-  args <- many $ do
-    closeWith "="
-    name <- parseName1
-    return name
+  args <- option [] $ do
+    try $ string "("
+    args <- many $ do
+      closeWith ")"
+      parseName
+    consume ")"
+    return args
   skip
   consume "="
   core <- parseCore
-  trace ("PARSED: " ++ name ++ " " ++ show args ++ " = " ++ coreToString core) $ return ()
+  -- trace ("PARSED: " ++ name ++ "(" ++ intercalate "," args ++ ") = " ++ coreToString core) $ return ()
   return (name, (args, core))
 
 parseADT :: ParserM ()

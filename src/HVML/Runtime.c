@@ -21,7 +21,6 @@ typedef _Atomic(Term) ATerm;
 typedef struct {
   Term*  sbuf; // reduction stack buffer
   u64*   spos; // reduction stack position
-  u64*   sbeg; // reduction stack begin
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
@@ -32,7 +31,6 @@ typedef struct {
 static State HVM = {
   .sbuf = NULL,
   .spos = NULL,
-  .sbeg = NULL,
   .heap = NULL,
   .size = NULL,
   .itrs = NULL,
@@ -45,17 +43,17 @@ static State HVM = {
 #define DP0 0x00
 #define DP1 0x01
 #define VAR 0x02
-#define APP 0x03
-#define ERA 0x04
-#define LAM 0x05
-#define SUP 0x06
-#define SUB 0x07
-#define REF 0x08
-#define CTR 0x09
-#define MAT 0x0A
-#define W32 0x0B
-#define OPX 0x0C
-#define OPY 0x0D
+#define SUB 0x03
+#define REF 0x04
+#define APP 0x05
+#define MAT 0x06
+#define OPX 0x07
+#define OPY 0x08
+#define ERA 0x09
+#define LAM 0x0A
+#define SUP 0x0B
+#define CTR 0x0C
+#define W32 0x0D
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -664,9 +662,10 @@ Term reduce_opy_w32(Term opy, Term w32) {
 
 Term reduce(Term term) {
   //printf("reduce\n");
+  if (term_tag(term) >= ERA) return term;
   Term next = term;
-  u64  back = *HVM.sbeg;
-  *HVM.sbeg = *HVM.spos;
+  u64  stop = *HVM.spos;
+  u64* spos = HVM.spos;
   while (1) {
     //printf("NEXT! "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
@@ -674,7 +673,7 @@ Term reduce(Term term) {
     Loc loc = term_loc(next);
     switch (tag) {
       case APP: {
-        HVM.sbuf[(*HVM.spos)++] = next;
+        HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
@@ -683,7 +682,7 @@ Term reduce(Term term) {
         Loc key = term_key(next);
         Term sub = got(key);
         if (term_tag(sub) == SUB) {
-          HVM.sbuf[(*HVM.spos)++] = next;
+          HVM.sbuf[(*spos)++] = next;
           next = got(loc + 2);
           continue;
         } else {
@@ -692,17 +691,17 @@ Term reduce(Term term) {
         }
       }
       case MAT: {
-        HVM.sbuf[(*HVM.spos)++] = next;
+        HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
       case OPX: {
-        HVM.sbuf[(*HVM.spos)++] = next;
+        HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
       case OPY: {
-        HVM.sbuf[(*HVM.spos)++] = next;
+        HVM.sbuf[(*spos)++] = next;
         next = got(loc + 1);
         continue;
       }
@@ -721,10 +720,10 @@ Term reduce(Term term) {
         continue;
       }
       default: {
-        if ((*HVM.spos) == (*HVM.sbeg)) {
+        if ((*spos) == stop) {
           break;
         } else {
-          Term prev = HVM.sbuf[--(*HVM.spos)];
+          Term prev = HVM.sbuf[--(*spos)];
           Tag  ptag = term_tag(prev);
           Lab  plab = term_lab(prev);
           Loc  ploc = term_loc(prev);
@@ -788,9 +787,8 @@ Term reduce(Term term) {
         }
       }
     }
-    if ((*HVM.spos) == (*HVM.sbeg)) {
+    if ((*HVM.spos) == stop) {
       //printf("retr: "); print_term(next); printf("\n");
-      *HVM.sbeg = back;
       return next;
     } else {
       Term host = HVM.sbuf[--(*HVM.spos)];
@@ -803,7 +801,6 @@ Term reduce(Term term) {
         case DP1: set(hloc + 2, next); break;
         case MAT: set(hloc + 0, next); break;
       }
-      *HVM.sbeg = back;
       return HVM.sbuf[0];
     }
   }
@@ -880,8 +877,6 @@ void hvm_init() {
   HVM.sbuf  = malloc((1ULL << 32) * sizeof(Term));
   HVM.spos  = malloc(sizeof(u64));
   *HVM.spos = 0;
-  HVM.sbeg  = malloc(sizeof(u64));
-  *HVM.sbeg = 0;
   HVM.heap  = malloc((1ULL << 32) * sizeof(ATerm));
   HVM.size  = malloc(sizeof(u64));
   HVM.itrs  = malloc(sizeof(u64));
@@ -892,7 +887,6 @@ void hvm_init() {
 void hvm_free() {
   free(HVM.sbuf);
   free(HVM.spos);
-  free(HVM.sbeg);
   free(HVM.heap);
   free(HVM.size);
   free(HVM.itrs);
@@ -905,7 +899,6 @@ State* hvm_get_state() {
 void hvm_set_state(State* hvm) {
   HVM.sbuf = hvm->sbuf;
   HVM.spos = hvm->spos;
-  HVM.sbeg = hvm->sbeg;
   HVM.heap = hvm->heap;
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;

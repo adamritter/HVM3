@@ -275,7 +275,6 @@ compileFastBody book fid term ctx itr = do
   compileFastSave book fid term ctx itr
   emit $ "return " ++ body ++ ";"
 
-
 -- compileFastBody book fid term ctx itr = do
   -- let (callFid, callArgs) = getCall term
   -- -- trace (coreToString term ++ " ||| " ++ show (length callArgs) ++ " " ++ show (length ctx) ++ " " ++ show callFid ++ " " ++ show fid) $ do
