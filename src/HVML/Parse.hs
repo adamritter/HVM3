@@ -1,3 +1,5 @@
+-- //./Type.hs//
+
 module HVML.Parse where
 
 import Data.List
@@ -17,9 +19,10 @@ import qualified Data.Map.Strict as MS
 -- Core Parsers
 -- ------------
 
-data ParserState = ParserState {
-  constructorAliases :: MS.Map String Word64
-}
+data ParserState = ParserState
+  { parsedCtrToAri :: MS.Map String Int
+  , parsedCtrToCid :: MS.Map String Word64
+  }
 
 type ParserM = Parsec String ParserState
 
@@ -109,8 +112,8 @@ parseCtr = do
   cid <- if length nam == 0
     then return 0
     else do
-      ali <- constructorAliases <$> getState
-      case MS.lookup nam ali of
+      cids <- parsedCtrToCid <$> getState
+      case MS.lookup nam cids of
         Just id -> return id
         Nothing -> case reads nam of
           [(num, "")] -> return (fromIntegral (num :: Integer))
@@ -133,17 +136,21 @@ parseMat = do
     closeWith "}"
     consume "#"
     name <- parseName
-    ali <- constructorAliases <$> getState
-    cid <- case MS.lookup name ali of
+    cids <- parsedCtrToCid <$> getState
+    aris <- parsedCtrToAri <$> getState
+    ari  <- case MS.lookup name aris of
+      Just ari -> return ari
+      Nothing  -> return (-1)
+    cid  <- case MS.lookup name cids of
       Just id -> return id
       Nothing -> case reads name of
         [(num, "")] -> return (fromIntegral (num :: Integer))
         _ -> if name == "_"
-          then return 0xFFFFFFF
+          then return 0xFFFFFFFF
           else fail $ "Unknown constructor: " ++ name
     consume ":"
     cas <- parseCore
-    return (cid, cas)
+    return (cid, (ari, cas))
   consume "}"
   let sortedCss = map snd $ sortOn fst css
   return $ Mat val sortedCss
@@ -181,8 +188,10 @@ parseADT = do
   consume "{"
   constructors <- many parseADTCtr
   consume "}"
-  let aliases = zip (map fst constructors) [0..]
-  modifyState (\s -> s { constructorAliases = MS.union (MS.fromList aliases) (constructorAliases s) })
+  let ctrCids = zip (map fst constructors) [0..]
+  let ctrAris = zip (map fst constructors) (map (fromIntegral . length . snd) constructors)
+  modifyState (\s -> s { parsedCtrToCid = MS.union (MS.fromList ctrCids) (parsedCtrToCid s),
+                         parsedCtrToAri = MS.union (MS.fromList ctrAris) (parsedCtrToAri s) })
 
 parseADTCtr :: ParserM (String, [String])
 parseADTCtr = do
@@ -210,18 +219,26 @@ parseBook = do
   return defs
 
 doParseCore :: String -> IO Core
-doParseCore code = case runParser parseCore (ParserState MS.empty) "" code of
+doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty) "" code of
   Right core -> return $ core
   Left  err  -> do
     showParseError "" code err
     return $ Ref "⊥" 0
 
 doParseBook :: String -> IO Book
-doParseBook code = case runParser parseBook (ParserState MS.empty) "" code of
-  Right defs -> return $ createBook defs
-  Left  err  -> do
+doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty) "" code of
+  Right (defs, st) -> do
+    return $ createBook defs (parsedCtrToCid st) (parsedCtrToAri st)
+  Left err -> do
     showParseError "" code err
-    return $ Book MS.empty MS.empty MS.empty
+    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty
+  where
+    parseBookWithState :: ParserM ([(String, Core)], ParserState)
+    parseBookWithState = do
+      defs <- parseBook
+      st   <- getState
+      return (defs, st)
+
 
 -- Helper Parsers
 -- --------------
@@ -248,13 +265,13 @@ skip = skipMany (parseSpace <|> parseComment) where
 -- Adjusting
 -- ---------
 
-createBook :: [(String, Core)] -> Book
-createBook defs = 
+createBook :: [(String, Core)] -> MS.Map String Word64 -> MS.Map String Int -> Book
+createBook defs ctrToCid ctrToAri =
   let nameToId' = MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
       decorDefs = map (\ (name, core) -> (nameToId' MS.! name, decorateFnIds nameToId' core)) defs
       idToCore' = MS.fromList decorDefs
-  in Book idToCore' idToName' nameToId'
+  in Book idToCore' idToName' nameToId' ctrToAri ctrToCid
 
 decorateFnIds :: MS.Map String Word64 -> Core -> Core
 decorateFnIds fids term = case term of
@@ -265,7 +282,7 @@ decorateFnIds fids term = case term of
   Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)
   Dup l x y v b -> Dup l x y (decorateFnIds fids v) (decorateFnIds fids b)
   Ctr cid fds   -> Ctr cid (map (decorateFnIds fids) fds)
-  Mat x cs      -> Mat (decorateFnIds fids x) (map (decorateFnIds fids) cs)
+  Mat x css     -> Mat (decorateFnIds fids x) (map (\ (ar,cs) -> (ar, decorateFnIds fids cs)) css)
   Op2 op x y    -> Op2 op (decorateFnIds fids x) (decorateFnIds fids y)
   U32 n         -> U32 n
   Era           -> Era

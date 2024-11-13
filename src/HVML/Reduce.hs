@@ -101,6 +101,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
       let fid = termLoc term
       case MS.lookup fid (idToCore book) of
         Just core -> do
+          incItr
           core <- doInjectCore book core
           reduce book core
         Nothing -> return term

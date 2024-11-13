@@ -64,7 +64,7 @@ injectCore book (Ctr cid fds) loc = do
 injectCore book (Mat val css) loc = do
   mat <- lift $ allocNode (1 + fromIntegral (length css))
   injectCore book val (mat + 0)
-  sequence_ [injectCore book bod (mat + 1 + ix) | (ix,bod) <- zip [0..] css]
+  sequence_ [injectCore book (snd bod) (mat + 1 + ix) | (ix,bod) <- zip [0..] css]
   lift $ set loc (termNew _MAT_ (fromIntegral (length css)) mat)
 
 injectCore book (U32 val) loc = do

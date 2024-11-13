@@ -1,5 +1,5 @@
 @main =
-  ((@P24 @not) @true)
+  ((@P16 @not) @true)
 
 @true =
   λt λf t

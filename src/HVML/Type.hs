@@ -23,7 +23,7 @@ data Core
   | Sup Word64 Core Core
   | Dup Word64 String String Core Core
   | Ctr Word64 [Core]
-  | Mat Core [Core]
+  | Mat Core [(Int,Core)]
   | U32 Word32
   | Op2 Oper Core Core
   deriving (Show, Eq)
@@ -39,6 +39,8 @@ data Book = Book
   { idToCore :: MS.Map Word64 Core
   , idToName :: MS.Map Word64 String
   , nameToId :: MS.Map String Word64
+  , ctrToAri :: MS.Map String Int
+  , ctrToCid :: MS.Map String Word64
   } deriving (Show, Eq)
 
 -- Runtime Types

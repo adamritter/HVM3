@@ -19,7 +19,7 @@ coreToString (Sup lab tm0 tm1)         = "&" ++ show lab ++ "{" ++ coreToString 
 coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
 coreToString (Ref nam fid)             = "@" ++ nam ++ "^" ++ show fid
 coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map coreToString fds) ++ "}"
-coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map coreToString css) ++ "}"
+coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map (\ (ar,cs) -> coreToString cs) css) ++ "}"
 coreToString (U32 val)                 = show val
 coreToString (Op2 opr nm0 nm1)         = "(" ++  operToString opr ++ coreToString nm0 ++ " " ++ coreToString nm1 ++ ")"
 

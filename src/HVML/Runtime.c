@@ -19,7 +19,9 @@ typedef _Atomic(Term) ATerm;
 
 // Global State Type
 typedef struct {
-  Term*  path; // reduction path / stack
+  Term*  sbuf; // reduction stack buffer
+  u64*   spos; // reduction stack position
+  u64*   sbeg; // reduction stack begin
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
@@ -28,7 +30,9 @@ typedef struct {
 
 // Global State Value
 static State HVM = {
-  .path = NULL,
+  .sbuf = NULL,
+  .spos = NULL,
+  .sbeg = NULL,
   .heap = NULL,
   .size = NULL,
   .itrs = NULL,
@@ -79,7 +83,7 @@ Loc get_len() {
   return *HVM.size;
 }
 
-Loc get_itr() {
+u64 get_itr() {
   return *HVM.itrs;
 }
 
@@ -188,6 +192,9 @@ void print_tag(Tag tag) {
     case REF: printf("REF"); break;
     case CTR: printf("CTR"); break;
     case MAT: printf("MAT"); break;
+    case W32: printf("W32"); break;
+    case OPX: printf("OPX"); break;
+    case OPY: printf("OPY"); break;
     default : printf("???"); break;
   }
 }
@@ -217,6 +224,7 @@ void print_heap() {
 // --------- REF
 // book[foo]
 Term reduce_ref(Term ref) {
+  //printf("call %d %p\n", term_loc(ref), HVM.book[term_loc(ref)]);
   inc_itr();
   return HVM.book[term_loc(ref)]();
 }
@@ -656,8 +664,9 @@ Term reduce_opy_w32(Term opy, Term w32) {
 
 Term reduce(Term term) {
   //printf("reduce\n");
-  Loc   spos = 0;
-  Term  next = term;
+  Term next = term;
+  u64  back = *HVM.sbeg;
+  *HVM.sbeg = *HVM.spos;
   while (1) {
     //printf("NEXT! "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
@@ -665,7 +674,7 @@ Term reduce(Term term) {
     Loc loc = term_loc(next);
     switch (tag) {
       case APP: {
-        HVM.path[spos++] = next;
+        HVM.sbuf[(*HVM.spos)++] = next;
         next = got(loc + 0);
         continue;
       }
@@ -674,7 +683,7 @@ Term reduce(Term term) {
         Loc key = term_key(next);
         Term sub = got(key);
         if (term_tag(sub) == SUB) {
-          HVM.path[spos++] = next;
+          HVM.sbuf[(*HVM.spos)++] = next;
           next = got(loc + 2);
           continue;
         } else {
@@ -683,17 +692,17 @@ Term reduce(Term term) {
         }
       }
       case MAT: {
-        HVM.path[spos++] = next;
+        HVM.sbuf[(*HVM.spos)++] = next;
         next = got(loc + 0);
         continue;
       }
       case OPX: {
-        HVM.path[spos++] = next;
+        HVM.sbuf[(*HVM.spos)++] = next;
         next = got(loc + 0);
         continue;
       }
       case OPY: {
-        HVM.path[spos++] = next;
+        HVM.sbuf[(*HVM.spos)++] = next;
         next = got(loc + 1);
         continue;
       }
@@ -712,10 +721,10 @@ Term reduce(Term term) {
         continue;
       }
       default: {
-        if (spos == 0) {
+        if ((*HVM.spos) == (*HVM.sbeg)) {
           break;
         } else {
-          Term prev = HVM.path[--spos];
+          Term prev = HVM.sbuf[--(*HVM.spos)];
           Tag  ptag = term_tag(prev);
           Lab  plab = term_lab(prev);
           Loc  ploc = term_loc(prev);
@@ -779,11 +788,12 @@ Term reduce(Term term) {
         }
       }
     }
-    if (spos == 0) {
+    if ((*HVM.spos) == (*HVM.sbeg)) {
       //printf("retr: "); print_term(next); printf("\n");
+      *HVM.sbeg = back;
       return next;
     } else {
-      Term host = HVM.path[--spos];
+      Term host = HVM.sbuf[--(*HVM.spos)];
       Tag  htag = term_tag(host);
       Lab  hlab = term_lab(host);
       Loc  hloc = term_loc(host);
@@ -793,11 +803,73 @@ Term reduce(Term term) {
         case DP1: set(hloc + 2, next); break;
         case MAT: set(hloc + 0, next); break;
       }
-      return HVM.path[0];
+      *HVM.sbeg = back;
+      return HVM.sbuf[0];
     }
   }
   printf("retr: ERR\n");
   return 0;
+}
+
+Term normal(Term term) {
+  Term wnf = reduce(term);
+  Tag tag = term_tag(wnf);
+  Lab lab = term_lab(wnf);
+  Loc loc = term_loc(wnf);
+  switch (tag) {
+    case APP: {
+      Term fun = got(loc + 0);
+      Term arg = got(loc + 1);
+      fun = normal(fun);
+      arg = normal(arg);
+      set(loc + 0, fun);
+      set(loc + 1, arg);
+      return wnf;
+    }
+    case LAM: {
+      Term bod = got(loc + 1);
+      bod = normal(bod);
+      set(loc + 1, bod);
+      return wnf;
+    }
+    case SUP: {
+      Term tm0 = got(loc + 0);
+      Term tm1 = got(loc + 1);
+      tm0 = normal(tm0);
+      tm1 = normal(tm1);
+      set(loc + 0, tm0);
+      set(loc + 1, tm1);
+      return wnf;
+    }
+    case DP0:
+    case DP1: {
+      Term val = got(loc + 2);
+      val = normal(val);
+      set(loc + 2, val);
+      return wnf;
+    }
+    case CTR: {
+      u64 cid = u12v2_x(lab);
+      u64 ari = u12v2_y(lab);
+      for (u64 i = 0; i < ari; i++) {
+        Term arg = got(loc + i);
+        arg = normal(arg);
+        set(loc + i, arg);
+      }
+      return wnf;
+    }
+    case MAT: {
+      u64 ari = lab;
+      for (u64 i = 0; i <= ari; i++) {
+        Term arg = got(loc + i);
+        arg = normal(arg);
+        set(loc + i, arg);
+      }
+      return wnf;
+    }
+    default:
+      return wnf;
+  }
 }
 
 // Runtime Memory
@@ -805,16 +877,22 @@ Term reduce(Term term) {
 
 void hvm_init() {
   // FIXME: use mmap instead
-  HVM.path = malloc((1ULL << 32) * sizeof(Term));
-  HVM.heap = malloc((1ULL << 32) * sizeof(ATerm));
-  HVM.size = malloc(sizeof(u64));
-  HVM.itrs = malloc(sizeof(u64));
+  HVM.sbuf  = malloc((1ULL << 32) * sizeof(Term));
+  HVM.spos  = malloc(sizeof(u64));
+  *HVM.spos = 0;
+  HVM.sbeg  = malloc(sizeof(u64));
+  *HVM.sbeg = 0;
+  HVM.heap  = malloc((1ULL << 32) * sizeof(ATerm));
+  HVM.size  = malloc(sizeof(u64));
+  HVM.itrs  = malloc(sizeof(u64));
   *HVM.size = 1;
   *HVM.itrs = 0;
 }
 
 void hvm_free() {
-  free(HVM.path);
+  free(HVM.sbuf);
+  free(HVM.spos);
+  free(HVM.sbeg);
   free(HVM.heap);
   free(HVM.size);
   free(HVM.itrs);
@@ -825,7 +903,9 @@ State* hvm_get_state() {
 }
 
 void hvm_set_state(State* hvm) {
-  HVM.path = hvm->path;
+  HVM.sbuf = hvm->sbuf;
+  HVM.spos = hvm->spos;
+  HVM.sbeg = hvm->sbeg;
   HVM.heap = hvm->heap;
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;
@@ -835,32 +915,6 @@ void hvm_set_state(State* hvm) {
 }
 
 void hvm_define(u64 fid, Term (*func)()) {
+  //printf("defined %llu %p\n", fid, func);
   HVM.book[fid] = func;
 }
-
-// Main
-// ----
-
-//#include "book.c"
-
-//int main() {
-  //hvm_init();
-  //inject_P24();
-
-  //clock_t start = clock();
-
-  //// Normalize and get interaction count
-  //Term root = got(0);
-  //normal(root);
-  //clock_t end = clock();
-
-  //printf("Itrs: %u\n", get_itr());
-  //double time_spent = (double)(end - start) / CLOCKS_PER_SEC * 1000;
-  //printf("Size: %u nodes\n", get_len());
-  //printf("Time: %.2f seconds\n", time_spent / 1000.0);
-  //printf("MIPS: %.2f\n", (get_itr() / 1000000.0) / (time_spent / 1000.0));
-
-  //hvm_free();
-  //return 0;
-//}
-

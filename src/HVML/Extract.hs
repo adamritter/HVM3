@@ -5,6 +5,7 @@ module HVML.Extract where
 import Control.Monad (foldM)
 import Control.Monad.State
 import Data.Char (chr, ord)
+import Data.Word
 import HVML.Type
 import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as MS
@@ -104,14 +105,15 @@ extractCore term = case tagT (termTag term) of
     
   MAT -> do
     let loc = termLoc term
-    let ari = termLab term
+    let len = termLab term
     val <- lift $ got (loc + 0)
-    css <- if ari == 0
+    css <- if len == 0
       then return []
-      else lift $ mapM (\i -> got (loc + 1 + i)) [0..ari-1]
+      else lift $ mapM (\i -> got (loc + 1 + i)) [0..len-1]
     val0 <- extractCore val
     css0 <- mapM extractCore css
-    return $ Mat val0 css0
+    css1 <- mapM (\ cs -> return (0, cs)) css0 -- NOTE: arity hint is lost on extraction
+    return $ Mat val0 css1
     
   W32 -> do
     let val = termLoc term

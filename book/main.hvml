@@ -12,20 +12,5 @@
 //@mul2 = λn (n λp(@succ (@succ (@mul2 p))) @zero)
 //@main = (@mul2 (@succ (@succ (@succ @zero))))
 
-//@main = #0{(+ 3 4)}
+@main = (+ 3 4)
 
-data List { #Nil #Cons{ head tail } }
-
-@range = λn λxs ~n{
-  #0: xs
-  #_: λpred
-    ! &0{n0 n1} = pred
-    (@range n0 #Cons{ n1 xs })
-}
-
-@sum = λxs ~xs{
-  #Nil: 0
-  #Cons: λhead λtail (+ head (@sum tail))
-}
-
-@main = (@sum (@range 10000000 #Nil))

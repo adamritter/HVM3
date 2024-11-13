@@ -1,0 +1,15 @@
+data List { #Nil #Cons{ head tail } }
+
+@sum = λxs λr ~xs{
+  #Nil: r
+  #Cons: λhead λtail (@sum tail (+ head r))
+}
+
+@range = λn λxs ~n{
+  #0: xs
+  #_: λpred
+    ! &0{n0 n1} = pred
+    (@range n0 #Cons{ n1 xs })
+}
+
+@main = (@sum (@range 50000000 #Nil) 0)

@@ -18,6 +18,7 @@ import System.IO
 import System.IO (readFile)
 import System.Posix.DynamicLinker
 import System.Process (callCommand)
+import Text.Printf
 import qualified Data.Map.Strict as MS
 
 import HVML.Compile
@@ -64,32 +65,32 @@ cliRun filePath compiled showStats = do
   book <- doParseBook code
 
   -- Create the C file content
-  let funcs = map (\ (fid, core) -> compile book fid core) (MS.toList (idToCore book))
-  let bookC = unlines $ [runtime_c] ++ funcs
+  let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (idToCore book))
+  let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
 
   -- Compile to native
   when compiled $ do
     -- Write the C file
-    writeFile "./.hvm_book.c" bookC
+    writeFile "./.main.c" mainC
     
     -- Compile to shared library
-    callCommand "gcc -O2 -fPIC -shared .hvm_book.c -o .hvm_book.so"
+    callCommand "gcc -O2 -fPIC -shared .main.c -o .main.so"
     
     -- Load the dynamic library
-    bookLib <- dlopen "./.hvm_book.so" [RTLD_NOW]
+    bookLib <- dlopen "./.main.so" [RTLD_NOW]
 
     -- Remove both generated files
-    callCommand "rm .hvm_book.c .hvm_book.so"
+    callCommand "rm .main.so"
+    
+    -- Register compiled functions
+    forM_ (MS.keys (idToCore book)) $ \ fid -> do
+      funPtr <- dlsym bookLib (idToName book MS.! fid ++ "_f")
+      hvmDefine fid funPtr
 
     -- Link compiled state
     hvmGotState <- hvmGetState
     hvmSetState <- dlsym bookLib "hvm_set_state"
     callFFI hvmSetState retVoid [argPtr hvmGotState]
-    
-    -- Register compiled functions
-    forM_ (MS.keys (idToCore book)) $ \ fid -> do
-      funPtr <- dlsym bookLib ("F_" ++ show fid)
-      hvmDefine fid funPtr
 
   -- Abort when main isn't present
   when (not $ MS.member "main" (nameToId book)) $ do
@@ -108,20 +109,41 @@ cliRun filePath compiled showStats = do
 
   -- Show stats
   when showStats $ do
-    end <- getCPUTime
-    itr <- getItr
-    len <- getLen
-    let diff = fromIntegral (end - init) / (10^9) :: Double
-    let mips = (fromIntegral itr / 1000000.0) / (diff / 1000.0)
-    putStrLn $ "ITRS: " ++ show itr
-    putStrLn $ "TIME: " ++ show diff ++ "ms"
-    putStrLn $ "SIZE: " ++ show len
-    putStrLn $ "MIPS: " ++ show mips
+    end  <- getCPUTime
+    itrs <- getItr
+    size <- getLen
+    let time = fromIntegral (end - init) / (10^12) :: Double
+    let mips = (fromIntegral itrs / 1000000.0) / time
+    printf "WORK: %llu interactions\n" itrs
+    printf "TIME: %.3f seconds\n" time
+    printf "SIZE: %llu nodes\n" size
+    printf "PERF: %.3f MIPS\n" mips
     return ()
 
   -- Finalize
   hvmFree
   return $ Right ()
+
+genMain :: Book -> String
+genMain book =
+  let mainId = MS.findWithDefault 0 "main" (nameToId book)
+      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ idToName book MS.! fid ++ "_f);" | fid <- MS.keys (idToCore book)]
+  in unlines
+    [ "int main() {"
+    , "  hvm_init();"
+    , registerFuncs
+    , "  clock_t start = clock();"
+    , "  Term root = term_new(REF, 0, " ++ show mainId ++ ");"
+    , "  normal(root);"
+    , "  double time = (double)(clock() - start) / CLOCKS_PER_SEC * 1000;"
+    , "  printf(\"WORK: %llu interactions\\n\", get_itr());"
+    , "  printf(\"TIME: %.3fs seconds\\n\", time / 1000.0);"
+    , "  printf(\"SIZE: %u nodes\\n\", get_len());"
+    , "  printf(\"PERF: %.3f MIPS\\n\", (get_itr() / 1000000.0) / (time / 1000.0));"
+    , "  hvm_free();"
+    , "  return 0;"
+    , "}"
+    ]
 
 printHelp :: IO (Either String ())
 printHelp = do

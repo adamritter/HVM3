@@ -1,0 +1,6 @@
+@count = λn λk ~n{
+  #0: k
+  #_: λpred (@count pred (+ k 1))
+}
+
+@main = (@count 200000000 0)
