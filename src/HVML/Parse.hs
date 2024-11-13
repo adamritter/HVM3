@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Show.hs//
 
 module HVML.Parse where
 
@@ -42,6 +43,7 @@ parseCore = do
     '(' -> do
       next <- lookAhead (anyChar >> anyChar)
       case next of
+        '@' -> parseRef
         '+' -> parseOper OP_ADD
         '-' -> parseOper OP_SUB
         '*' -> parseOper OP_MUL
@@ -93,10 +95,6 @@ parseCore = do
       val <- parseCore
       bod <- parseCore
       return $ Dup lab dp0 dp1 val bod
-    '@' -> do
-      consume "@"
-      nam <- parseName
-      return $ Ref nam 0
     '#' -> parseCtr
     '~' -> parseMat
     _ -> do
@@ -104,6 +102,16 @@ parseCore = do
       case reads name of
         [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
         _           -> return $ Var name
+
+parseRef :: ParserM Core
+parseRef = do
+  consume "(@"
+  name <- parseName
+  args <- many $ do
+    closeWith ")"
+    parseCore
+  consume ")"
+  return $ Ref name 0 args
 
 parseCtr :: ParserM Core
 parseCtr = do
@@ -167,16 +175,24 @@ parseOper op = do
 parseName :: ParserM String
 parseName = skip >> many (alphaNum <|> char '_')
 
-parseDef :: ParserM (String, Core)
+parseName1 :: ParserM String
+parseName1 = skip >> many1 (alphaNum <|> char '_')
+
+parseDef :: ParserM (String, ([String], Core))
 parseDef = do
   try $ do
     skip
     consume "@"
   name <- parseName
+  args <- many $ do
+    closeWith "="
+    name <- parseName1
+    return name
   skip
   consume "="
   core <- parseCore
-  return (name, core)
+  trace ("PARSED: " ++ name ++ " " ++ show args ++ " = " ++ coreToString core) $ return ()
+  return (name, (args, core))
 
 parseADT :: ParserM ()
 parseADT = do
@@ -209,7 +225,7 @@ parseADTCtr = do
   skip
   return (name, fields)
 
-parseBook :: ParserM [(String, Core)]
+parseBook :: ParserM [(String, ([String], Core))]
 parseBook = do
   skip
   many parseADT
@@ -223,7 +239,7 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty) "" c
   Right core -> return $ core
   Left  err  -> do
     showParseError "" code err
-    return $ Ref "⊥" 0
+    return $ Ref "⊥" 0 []
 
 doParseBook :: String -> IO Book
 doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty) "" code of
@@ -233,7 +249,7 @@ doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.em
     showParseError "" code err
     return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty
   where
-    parseBookWithState :: ParserM ([(String, Core)], ParserState)
+    parseBookWithState :: ParserM ([(String, ([String], Core))], ParserState)
     parseBookWithState = do
       defs <- parseBook
       st   <- getState
@@ -265,18 +281,17 @@ skip = skipMany (parseSpace <|> parseComment) where
 -- Adjusting
 -- ---------
 
-createBook :: [(String, Core)] -> MS.Map String Word64 -> MS.Map String Int -> Book
+createBook :: [(String, ([String], Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
 createBook defs ctrToCid ctrToAri =
   let nameToId' = MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      decorDefs = map (\ (name, core) -> (nameToId' MS.! name, decorateFnIds nameToId' core)) defs
-      idToCore' = MS.fromList decorDefs
-  in Book idToCore' idToName' nameToId' ctrToAri ctrToCid
+      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (nameToId' MS.! name, (args, decorateFnIds nameToId' core))) defs
+  in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid
 
 decorateFnIds :: MS.Map String Word64 -> Core -> Core
 decorateFnIds fids term = case term of
   Var nam       -> Var nam
-  Ref nam _     -> Ref nam (fids MS.! nam)
+  Ref nam _ arg -> Ref nam (fids MS.! nam) (map (decorateFnIds fids) arg)
   Lam x bod     -> Lam x (decorateFnIds fids bod)
   App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
   Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)

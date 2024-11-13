@@ -3,8 +3,10 @@
 module HVML.Inject where
 
 import Control.Monad (foldM)
+import Control.Monad (forM_)
 import Control.Monad.State
 import Data.Word
+import HVML.Show
 import HVML.Type
 import qualified Data.Map.Strict as Map
 
@@ -52,8 +54,12 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
   injectCore book val (dup + 2)
   injectCore book bod loc
 
-injectCore book (Ref nam fid) loc = do
-  lift $ set loc (termNew _REF_ 0 fid)
+injectCore book (Ref nam fid arg) loc = do
+  -- lift $ set loc (termNew _REF_ 0 fid)
+  let arity = length arg
+  ref <- lift $ allocNode (fromIntegral arity)
+  sequence_ [injectCore book x (ref + i) | (i,x) <- zip [0..] arg]
+  lift $ set loc (termNew _REF_ (u12v2New fid (fromIntegral arity)) ref)
 
 injectCore book (Ctr cid fds) loc = do
   let arity = length fds
@@ -80,13 +86,12 @@ injectCore _ (Var nam) loc = do
   modify $ \s -> s { vars = (nam, loc) : vars s }
   lift $ set loc 0 -- placeholder
 
-doInjectCore :: Book -> Core -> HVM Term
-doInjectCore book core = do
-  (_, state) <- runStateT (injectCore book core 0) emptyState
-  -- Set all variables after the structure is built
-  mapM_ (setVar (args state)) (vars state)
-  got 0
-  where
-    setVar args (name, loc) = case Map.lookup name args of
+doInjectCore :: Book -> Core -> [(String, Term)] -> HVM Term
+doInjectCore book core initialArgs = do
+  (_, state) <- runStateT (injectCore book core 0) (emptyState { args = Map.fromList initialArgs })
+  forM_ (vars state) $ \(name, loc) -> 
+
+    case Map.lookup name (args state) of
       Just term -> set loc term
       Nothing   -> error $ "Unbound variable: " ++ name
+  got 0

@@ -19,3 +19,4 @@ cabal.sandbox.config
 .sys.txt
 .out.hvm
 tmp/
+.main*

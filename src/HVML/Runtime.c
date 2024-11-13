@@ -25,7 +25,7 @@ typedef struct {
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
-  Term (*book[1024])(); // functions
+  Term (*book[1024])(Term); // functions
 } State;
 
 // Global State Value
@@ -226,7 +226,7 @@ void print_heap() {
 Term reduce_ref(Term ref) {
   //printf("call %d %p\n", term_loc(ref), HVM.book[term_loc(ref)]);
   inc_itr();
-  return HVM.book[term_loc(ref)]();
+  return HVM.book[u12v2_x(term_lab(ref))](ref);
 }
 
 // (* a)
@@ -717,7 +717,7 @@ Term reduce(Term term) {
         }
       }
       case REF: {
-        next = reduce_ref(next);
+        next = reduce_ref(next); // TODO
         continue;
       }
       default: {

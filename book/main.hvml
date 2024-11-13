@@ -12,5 +12,7 @@
 //@mul2 = λn (n λp(@succ (@succ (@mul2 p))) @zero)
 //@main = (@mul2 (@succ (@succ (@succ @zero))))
 
-@main = (+ 3 4)
+@foo x y = #0{y x}
+
+@main = (@foo 5 8)
 

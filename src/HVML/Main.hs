@@ -65,7 +65,7 @@ cliRun filePath compiled showStats = do
   book <- doParseBook code
 
   -- Create the C file content
-  let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (idToCore book))
+  let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (idToFunc book))
   let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
 
   -- Compile to native
@@ -83,7 +83,7 @@ cliRun filePath compiled showStats = do
     callCommand "rm .main.so"
     
     -- Register compiled functions
-    forM_ (MS.keys (idToCore book)) $ \ fid -> do
+    forM_ (MS.keys (idToFunc book)) $ \ fid -> do
       funPtr <- dlsym bookLib (idToName book MS.! fid ++ "_f")
       hvmDefine fid funPtr
 
@@ -100,7 +100,7 @@ cliRun filePath compiled showStats = do
   -- Normalize main
   init <- getCPUTime
 
-  root <- doInjectCore book (Ref "main" $ nameToId book MS.! "main")
+  root <- doInjectCore book (Ref "main" (nameToId book MS.! "main") []) []
   -- norm <- doExtractCore root
   done <- (if compiled then normalC else normal) book root
   -- done <- reduce book root
@@ -126,14 +126,14 @@ cliRun filePath compiled showStats = do
 
 genMain :: Book -> String
 genMain book =
-  let mainId = MS.findWithDefault 0 "main" (nameToId book)
-      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ idToName book MS.! fid ++ "_f);" | fid <- MS.keys (idToCore book)]
+  let mainFid = nameToId book MS.! "main"
+      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ idToName book MS.! fid ++ "_f);" | fid <- MS.keys (idToFunc book)]
   in unlines
     [ "int main() {"
     , "  hvm_init();"
     , registerFuncs
     , "  clock_t start = clock();"
-    , "  Term root = term_new(REF, 0, " ++ show mainId ++ ");"
+    , "  Term root = term_new(REF, u12v2_new("++show mainFid++",0), 0);"
     , "  normal(root);"
     , "  double time = (double)(clock() - start) / CLOCKS_PER_SEC * 1000;"
     , "  printf(\"WORK: %llu interactions\\n\", get_itr());"

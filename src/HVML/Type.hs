@@ -9,14 +9,13 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
--- NOTE TO AI: we're now adding the uint32 type, including:
--- - U32: uint32 value, like '42'
--- - OPX: uint32 binary operation, like 'add', 'mul', etc.
--- Your goal is to add the uint32 funcionality to each file.
+-- NOTE TO AI: we're refactoring REF. Now, instead of nullary (like '@foo'), it
+-- will hold a list of arguments (like '(@foo A B C ...)'). As such, it is
+-- compiled similarly to constructors, and must allocate a space for each arg.
 
 data Core
   = Var String
-  | Ref String Word64
+  | Ref String Word64 [Core]
   | Era
   | Lam String Core
   | App Core Core
@@ -35,8 +34,10 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
+type Func = ([String], Core)
+
 data Book = Book
-  { idToCore :: MS.Map Word64 Core
+  { idToFunc :: MS.Map Word64 Func
   , idToName :: MS.Map Word64 String
   , nameToId :: MS.Map String Word64
   , ctrToAri :: MS.Map String Int

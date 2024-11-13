@@ -139,7 +139,14 @@ extractCore term = case tagT (termTag term) of
     
   REF -> do
     let loc = termLoc term
-    return $ Ref "?" loc
+    let lab = termLab term
+    let fid = u12v2X lab
+    let ari = u12v2Y lab
+    arg <- if ari == 0
+      then return []
+      else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
+    arg <- mapM extractCore arg
+    return $ Ref "?" fid arg
     
   _ -> return Era
 

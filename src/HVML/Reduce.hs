@@ -1,12 +1,13 @@
 -- //./Type.hs//
--- //./Runtime.c//
 
 module HVML.Reduce where
 
+import Control.Monad (when)
 import Data.Word
 import HVML.Inject
 import HVML.Show
 import HVML.Type
+import System.Exit
 import qualified Data.Map.Strict as MS
 
 import Debug.Trace
@@ -98,14 +99,22 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         then return $ term
         else reduce book sub
     REF -> do
-      let fid = termLoc term
-      case MS.lookup fid (idToCore book) of
-        Just core -> do
+      let fid = u12v2X lab
+      let ari = u12v2Y lab
+      case MS.lookup fid (idToFunc book) of
+        Just (nams, core) -> do
           incItr
-          core <- doInjectCore book core
+          when (length nams /= fromIntegral ari) $ do
+            putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ idToName book MS.! fid ++ "'."
+            exitFailure
+          args <- if ari == 0
+            then return []
+            else mapM (\i -> got (loc + i)) [0 .. ari - 1]
+          core <- doInjectCore book core $ zip nams args
           reduce book core
         Nothing -> return term
-    _ -> return term
+    otherwise -> do
+      return term
 
 normalizer :: (Book -> Term -> HVM Term) -> Book -> Term -> HVM Term
 normalizer reducer book term = debug ("NORM: " ++ termToString term) $ do

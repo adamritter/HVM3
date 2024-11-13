@@ -18,7 +18,7 @@ import Debug.Trace
 data CompileState = CompileState
   { next :: Word64
   , tabs :: Int
-  , args :: MS.Map String String  -- var_name => binder_host
+  , bins :: MS.Map String String  -- var_name => binder_host
   , vars :: [(String, String)]    -- [(var_name, var_host)]
   , code :: [String]
   }
@@ -35,11 +35,12 @@ compile book fid =
     else unlines [ full , fast ]
 
 -- Compiles a function using either Fast-Mode or Full-Mode
-compileWith :: (Book -> Word64 -> Core -> Compile ()) -> Book -> Word64 -> String
+compileWith :: (Book -> Word64 -> Core -> [String] -> Compile ()) -> Book -> Word64 -> String
 compileWith cmp book fid = 
-  let core   = idToCore book MS.! fid in
+  let args   = fst (idToFunc book MS.! fid) in
+  let core   = snd (idToFunc book MS.! fid) in
   let state  = CompileState 0 0 MS.empty [] [] in
-  let result = runState (cmp book fid core) state in
+  let result = runState (cmp book fid core args) state in
   unlines $ reverse $ code (snd result)
 
 emit :: String -> Compile ()
@@ -52,7 +53,7 @@ tabDec :: Compile ()
 tabDec = modify $ \st -> st { tabs = tabs st - 1 }
 
 bind :: String -> String -> Compile ()
-bind var host = modify $ \st -> st { args = MS.insert var host (args st) }
+bind var host = modify $ \st -> st { bins = MS.insert var host (bins st) }
 
 fresh :: Compile Word64
 fresh = do
@@ -63,14 +64,16 @@ fresh = do
 -- Full Compiler
 -- -------------
 
-compileFull :: Book -> Word64 -> Core -> Compile ()
-compileFull book fid core = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_t() {"
+compileFull :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileFull book fid core args = do
+  emit $ "Term " ++ idToName book MS.! fid ++ "_t(Term ref) {"
   tabInc
+  forM_ (zip [0..] args) $ \(i, arg) -> do
+    bind arg $ "got(term_loc(ref) + " ++ show i ++ ")"
   result <- compileFullCore book fid core "root"
   st <- get
   forM_ (vars st) $ \ (var,host) -> do
-    let varTerm = MS.findWithDefault "" var (args st)
+    let varTerm = MS.findWithDefault "" var (bins st)
     emit $ "set(" ++ host ++ ", " ++ varTerm ++ ");"
   emit $ "return " ++ result ++ ";"
   tabDec
@@ -78,8 +81,8 @@ compileFull book fid core = do
 
 compileFullVar :: String -> String -> Compile String
 compileFullVar var host = do
-  args <- gets args
-  case MS.lookup var args of
+  bins <- gets bins
+  case MS.lookup var bins of
     Just entry -> do
       return entry
     Nothing -> do
@@ -159,39 +162,36 @@ compileFullCore book fid (Op2 opr nu0 nu1) host = do
   emit $ "set(" ++ opxNam ++ " + 0, " ++ nu0T ++ ");"
   emit $ "set(" ++ opxNam ++ " + 1, " ++ nu1T ++ ");"
   return $ "term_new(OPX, " ++ show (fromEnum opr) ++ ", " ++ opxNam ++ ")"
-compileFullCore book _ (Ref nam fid) _ =
-  return $ "term_new(REF, 0, " ++ show fid ++ ")"
+compileFullCore book fid (Ref rNam rFid rArg) host = do
+  uid <- fresh
+  let refName = "ref" ++ show uid
+  let arity = length rArg
+  emit $ "Loc " ++ refName ++ " = alloc_node(" ++ show arity ++ ");"
+  argsT <- mapM (\ (i,arg) -> compileFullCore book fid arg (refName ++ " + " ++ show i)) (zip [0..] rArg)
+  sequence_ [emit $ "set(" ++ refName ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
+  return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refName ++ ")"
 
 -- Fast Compiler
 -- -------------
 
 -- Compiles a function using Fast-Mode
-compileFast :: Book -> Word64 -> Core -> Compile ()
-compileFast book fid core = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_f() {"
+compileFast :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileFast book fid core args = do
+  emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
   tabInc
-  -- emit "u64 spos = *HVM.spos;"
   emit "u64 itrs = 0;"
-  compileFastArgs book fid core []
+  args <- forM (zip [0..] args) $ \ (i, arg) -> do
+    argUid <- fresh
+    argNam <- return $ "arg" ++ show argUid
+    emit $ "Term " ++ argNam ++ " = got(term_loc(ref) + " ++ show i ++ ");"
+    bind arg argNam
+    return argNam
+  compileFastArgs book fid core args
   tabDec
   emit "}"
 
 -- Compiles a fast function's argument list
 compileFastArgs :: Book -> Word64 -> Core -> [String] -> Compile ()
-compileFastArgs book fid (Lam var bod) ctx = do
-  varUid <- fresh
-  appUid <- fresh
-  argUid <- fresh
-  varNam <- return $ "var" ++ show varUid
-  appNam <- return $ "app" ++ show appUid
-  argNam <- return $ "arg" ++ show argUid
-  emit $ "if (*HVM.spos - *HVM.sbeg < 1 || term_tag(HVM.sbuf[*HVM.spos-1]) != APP) {"
-  emit $ "  return " ++ idToName book MS.! fid ++ "_t();"
-  emit $ "}"
-  emit $ "Term " ++ appNam ++ " = HVM.sbuf[--(*HVM.spos)];"
-  emit $ "Term " ++ argNam ++ " = got(term_loc(" ++ appNam ++ ") + 1);"
-  bind var $ argNam
-  compileFastArgs book fid bod (ctx ++ [argNam])
 compileFastArgs book fid body ctx = do
   emit $ "while (1) {"
   tabInc
@@ -263,26 +263,39 @@ compileFastBody book fid term@(Mat val css) ctx itr = do
     tabDec
     emit $ "}"
   compileFastUndo book fid term ctx itr
+compileFastBody book fid term@(Ref fNam fFid fArg) ctx itr | fFid == fid = do
+  forM_ (zip fArg ctx) $ \ (arg, ctxVar) -> do
+    argT <- compileFastCore book fid arg
+    emit $ "" ++ ctxVar ++ " = " ++ argT ++ ";"
+  emit $ "itrs += " ++ show (itr + 1) ++ ";"
+  emit $ "continue;"
 compileFastBody book fid term ctx itr = do
-  let (callFid, callArgs) = getCall term
-  -- trace (coreToString term ++ " ||| " ++ show (length callArgs) ++ " " ++ show (length ctx) ++ " " ++ show callFid ++ " " ++ show fid) $ do
-  if length callArgs == length ctx && callFid == fid then do
-    forM_ (zip callArgs ctx) $ \ (arg, ctxVar) -> do
-      argT <- compileFastCore book fid arg
-      emit $ "" ++ ctxVar ++ " = " ++ argT ++ ";"
-    emit $ "itrs += " ++ show (length ctx + itr + 1) ++ ";"
-    emit $ "continue;"
-  else do
-    emit $ "itrs += " ++ show (length ctx + itr) ++ ";"
-    body <- compileFastCore book fid term
-    compileFastSave book fid term ctx itr
-    emit $ "return " ++ body ++ ";"
-  where
-    getCall :: Core -> (Word64, [Core])
-    getCall = go [] where
-      go ctx (App f x) = go (x:ctx) f
-      go ctx (Ref _ i) = (i, ctx)
-      go ctx term      = (0xFFFFFFFF, ctx)
+  emit $ "itrs += " ++ show (itr) ++ ";"
+  body <- compileFastCore book fid term
+  compileFastSave book fid term ctx itr
+  emit $ "return " ++ body ++ ";"
+
+
+-- compileFastBody book fid term ctx itr = do
+  -- let (callFid, callArgs) = getCall term
+  -- -- trace (coreToString term ++ " ||| " ++ show (length callArgs) ++ " " ++ show (length ctx) ++ " " ++ show callFid ++ " " ++ show fid) $ do
+  -- if length callArgs == length ctx && callFid == fid then do
+    -- forM_ (zip callArgs ctx) $ \ (arg, ctxVar) -> do
+      -- argT <- compileFastCore book fid arg
+      -- emit $ "" ++ ctxVar ++ " = " ++ argT ++ ";"
+    -- emit $ "itrs += " ++ show (length ctx + itr + 1) ++ ";"
+    -- emit $ "continue;"
+  -- else do
+    -- emit $ "itrs += " ++ show (length ctx + itr) ++ ";"
+    -- body <- compileFastCore book fid term
+    -- compileFastSave book fid term ctx itr
+    -- emit $ "return " ++ body ++ ";"
+  -- where
+    -- getCall :: Core -> (Word64, [Core])
+    -- getCall = go [] where
+      -- go ctx (App f x) = go (x:ctx) f
+      -- go ctx (Ref _ i) = (i, ctx)
+      -- go ctx term      = (0xFFFFFFFF, ctx)
 
 -- ...
 compileFastApps :: Book -> Word64 -> Core -> [String] -> [String] -> Int -> Compile ()
@@ -297,10 +310,9 @@ compileFastApps book fid term args ctx itr =
 -- Falls back from fast mode to full mode
 compileFastUndo :: Book -> Word64 -> Core -> [String] -> Int -> Compile ()
 compileFastUndo book fid term ctx itr = do
-  emit $ "*HVM.spos += " ++ show (length ctx) ++ ";"
   forM_ (zip [0..] ctx) $ \ (i, arg) -> do
-    emit $ "set(term_loc(HVM.sbuf[*HVM.spos-1-"++show i++"]) + 1, " ++ arg ++ ");"
-  emit $ "return " ++ idToName book MS.! fid ++ "_t();"
+    emit $ "set(term_loc(ref) + "++show i++", " ++ arg ++ ");"
+  emit $ "return " ++ idToName book MS.! fid ++ "_t(ref);"
 
 -- Completes a fast mode call
 compileFastSave :: Book -> Word64 -> Core -> [String] -> Int -> Compile ()
@@ -416,22 +428,28 @@ compileFastCore book fid (Op2 opr nu0 nu1) = do
   emit $ "  " ++ retNam ++ " = term_new(OPX, " ++ show (fromEnum opr) ++ ", " ++ opxNam ++ ");"
   emit $ "}"
   return $ retNam
-compileFastCore book _ (Ref nam fid) =
-  return $ "term_new(REF, 0, " ++ show fid ++ ")"
+compileFastCore book fid (Ref rNam rFid rArg) = do
+  uid <- fresh
+  let refName = "ref" ++ show uid
+  let arity = length rArg
+  emit $ "Loc " ++ refName ++ " = alloc_node(" ++ show arity ++ ");"
+  argsT <- mapM (\ (i,arg) -> compileFastCore book fid arg) (zip [0..] rArg)
+  sequence_ [emit $ "set(" ++ refName ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
+  return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refName ++ ")"
 
 -- Compiles a variable in fast mode
 compileFastVar :: String -> Compile String
 compileFastVar var = do
-  args <- gets args
-  case MS.lookup var args of
+  bins <- gets bins
+  case MS.lookup var bins of
     Just entry -> do
       return entry
     Nothing -> do
       return "<ERR>"
 
 -- Compiles a function using Fast-Mode
-compileSlow :: Book -> Word64 -> Core -> Compile ()
-compileSlow book fid core = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_f() {"
-  emit $ "  return " ++ idToName book MS.! fid ++ "_t();"
+compileSlow :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileSlow book fid core args = do
+  emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
+  emit $ "  return " ++ idToName book MS.! fid ++ "_t(ref);"
   emit $ "}"
