@@ -13,38 +13,7 @@
 //@foo(x y) = #0{y x}
 //@main = @foo(@foo(5 8) @foo(1 2))
 
-data Bits {
-  #O{pred}
-  #I{pred}
-  #E{}
-}
 
-//(Repeat 0 f x) = x
-//(Repeat n f x) = (f (Repeat (- n 1) f x))
-//(Square 0 f x) = x
-//(Square n f x) = (Square (/ n 2) λk(f (f k)) (Repeat (% n 2) f x))
-
-@rep(n f x) = ~ n {
-  #0: x
-  #_: λnp !&0{f0 f1}=f (f0 @rep(np f1 x))
-}
-
-@rap(n f x) = ~ n {
-  #0: x
-  #_: λnp !&0{np0 np1}=(+ np 1) !&0{fA f0}=f !&0{f1 f2}=fA @rap((/ np0 2) λk(f0 (f1 k)) @rep((% np1 2) f2 x))
-}
-
-
-@o(x) = λo λi λe (o x)
-@i(x) = λo λi λe (i x)
-@e    = λo λi λe e
-
-@bits(xs) = (xs
-  λp0 #O{@bits(p0)}
-  λp1 #I{@bits(p1)}
-  #E)
-
-@inc(x) = λo λi λe (x i λop(o @inc(op)) e)
-
-@main = @bits(@rap(1000 λx@inc(x) @o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@e))))))))))))))))))
-//@main = @rap(10000 λx(+ x 1) 0)
+@main =
+  ! .x = (+ 7 8)
+  70

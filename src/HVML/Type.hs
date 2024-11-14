@@ -4,6 +4,10 @@ import Data.Map.Strict as MS
 import Data.Word
 import Foreign.Ptr
 
+-- IMPORTANT - NOTE TO AI:
+-- We're now adding the 'Let' constructor to HVM.
+-- All files must be updated to include it. 
+
 -- Core Types
 -- ----------
 
@@ -19,7 +23,14 @@ data Core
   | Mat Core [(Int,Core)]
   | U32 Word32
   | Op2 Oper Core Core
+  | Let Mode String Core Core
   deriving (Show, Eq)
+
+data Mode
+  = LAZY
+  | STRI
+  | PARA
+  deriving (Show, Eq, Enum)
 
 data Oper
   = OP_ADD | OP_SUB | OP_MUL | OP_DIV
@@ -56,6 +67,7 @@ data TAG
   | SUP
   | SUB
   | REF
+  | LET
   | CTR
   | MAT
   | W32
@@ -115,6 +127,9 @@ foreign import ccall unsafe "Runtime.c inc_itr"
 
 foreign import ccall unsafe "Runtime.c reduce"
   reduceC :: Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_let"
+  reduceLet :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_app_era"
   reduceAppEra :: Term -> Term -> IO Term
@@ -218,29 +233,37 @@ tagT 0x01 = DP1
 tagT 0x02 = VAR
 tagT 0x03 = SUB
 tagT 0x04 = REF
-tagT 0x05 = APP
-tagT 0x06 = MAT
-tagT 0x07 = OPX
-tagT 0x08 = OPY
-tagT 0x09 = ERA
-tagT 0x0A = LAM
-tagT 0x0B = SUP
-tagT 0x0C = CTR
-tagT 0x0D = W32
+tagT 0x05 = LET
+tagT 0x06 = APP
+tagT 0x07 = MAT
+tagT 0x08 = OPX
+tagT 0x09 = OPY
+tagT 0x0A = ERA
+tagT 0x0B = LAM
+tagT 0x0C = SUP
+tagT 0x0D = CTR
+tagT 0x0E = W32
 tagT tag  = error $ "unknown tag: " ++ show tag
 
-_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
+_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
 _VAR_ = 0x02
 _SUB_ = 0x03
 _REF_ = 0x04
-_APP_ = 0x05
-_MAT_ = 0x06
-_OPX_ = 0x07
-_OPY_ = 0x08
-_ERA_ = 0x09
-_LAM_ = 0x0A
-_SUP_ = 0x0B
-_CTR_ = 0x0C
-_W32_ = 0x0D
+_LET_ = 0x05
+_APP_ = 0x06
+_MAT_ = 0x07
+_OPX_ = 0x08
+_OPY_ = 0x09
+_ERA_ = 0x0A
+_LAM_ = 0x0B
+_SUP_ = 0x0C
+_CTR_ = 0x0D
+_W32_ = 0x0E
+
+modeT :: Lab -> Mode
+modeT 0x00 = LAZY
+modeT 0x01 = STRI
+modeT 0x02 = PARA
+modeT mode = error $ "unknown mode: " ++ show mode

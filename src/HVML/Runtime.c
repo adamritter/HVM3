@@ -45,15 +45,16 @@ static State HVM = {
 #define VAR 0x02
 #define SUB 0x03
 #define REF 0x04
-#define APP 0x05
-#define MAT 0x06
-#define OPX 0x07
-#define OPY 0x08
-#define ERA 0x09
-#define LAM 0x0A
-#define SUP 0x0B
-#define CTR 0x0C
-#define W32 0x0D
+#define LET 0x05
+#define APP 0x06
+#define MAT 0x07
+#define OPX 0x08
+#define OPY 0x09
+#define ERA 0x0A
+#define LAM 0x0B
+#define SUP 0x0C
+#define CTR 0x0D
+#define W32 0x0E
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -71,6 +72,10 @@ static State HVM = {
 #define OP_XOR 0x0D
 #define OP_LSH 0x0E
 #define OP_RSH 0x0F
+
+#define LAZY 0x0
+#define STRI 0x1
+#define PARA 0x2
 
 #define VOID 0x00000000000000
 
@@ -187,6 +192,7 @@ void print_tag(Tag tag) {
     case LAM: printf("LAM"); break;
     case SUP: printf("SUP"); break;
     case REF: printf("REF"); break;
+    case LET: printf("LET"); break;
     case CTR: printf("CTR"); break;
     case MAT: printf("MAT"); break;
     case W32: printf("W32"); break;
@@ -224,6 +230,19 @@ Term reduce_ref(Term ref) {
   //printf("call %d %p\n", term_loc(ref), HVM.book[term_loc(ref)]);
   inc_itr();
   return HVM.book[u12v2_x(term_lab(ref))](ref);
+}
+
+// ! x = val
+// bod
+// --------- LET
+// x <- val
+// bod
+Term reduce_let(Term let, Term val) {
+  inc_itr();
+  Loc let_loc = term_loc(let);
+  Term bod    = got(let_loc + 2);
+  set(let_loc + 0, val);
+  return bod;
 }
 
 // (* a)
@@ -671,6 +690,23 @@ Term reduce(Term term) {
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
     switch (tag) {
+      case LET: {
+        switch (lab) {
+          case LAZY: {
+            next = reduce_let(next, got(loc + 1));
+            continue;
+          }
+          case STRI: {
+            HVM.sbuf[(*spos)++] = next;
+            next = got(loc + 1);
+            continue;
+          }
+          case PARA: {
+            printf("TODO\n");
+            continue;
+          }
+        }
+      }
       case APP: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
@@ -727,6 +763,10 @@ Term reduce(Term term) {
           Lab  plab = term_lab(prev);
           Loc  ploc = term_loc(prev);
           switch (ptag) {
+            case LET: {
+              next = reduce_let(prev, next);
+              continue;
+            }
             case APP: {
               switch (tag) {
                 case ERA: next = reduce_app_era(prev, next); continue;

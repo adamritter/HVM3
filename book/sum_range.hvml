@@ -16,3 +16,7 @@ data List { #Nil #Cons{ head tail } }
 //TIME: 0.352 seconds
 //SIZE: 200000005 nodes
 //PERF: 1421.492 MIPS
+
+
+
+//seq x = y; bod

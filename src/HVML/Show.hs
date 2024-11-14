@@ -23,6 +23,7 @@ coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map 
 coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map (\ (ar,cs) -> coreToString cs) css) ++ "}"
 coreToString (U32 val)                 = show val
 coreToString (Op2 opr nm0 nm1)         = "(" ++  operToString opr ++ coreToString nm0 ++ " " ++ coreToString nm1 ++ ")"
+coreToString (Let mod nam val bod)     = "! " ++ modeToString mod ++ nam ++ " = " ++ coreToString val ++ " " ++ coreToString bod
 
 operToString :: Oper -> String
 operToString OP_ADD = "+"
@@ -41,6 +42,10 @@ operToString OP_OR  = "|"
 operToString OP_XOR = "^"
 operToString OP_LSH = "<<"
 operToString OP_RSH = ">>"
+
+modeToString LAZY = ""
+modeToString STRI = "."
+modeToString PARA = "^"
 
 -- Runtime Stringification
 -- -----------------------

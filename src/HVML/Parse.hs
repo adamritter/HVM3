@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Show.hs//
 
 module HVML.Parse where
 
@@ -82,18 +83,65 @@ parseCore = do
       tm1 <- parseCore
       consume "}"
       return $ Sup lab tm0 tm1
+    -- '!' -> do
+      -- consume "!"
+      -- consume "&"
+      -- lab <- read <$> many1 digit
+      -- consume "{"
+      -- dp0 <- parseName
+      -- dp1 <- parseName
+      -- consume "}"
+      -- consume "="
+      -- val <- parseCore
+      -- bod <- parseCore
+      -- return $ Dup lab dp0 dp1 val bod
+    -- TODO: implement the 'let' parser.
+    -- it will be implemented in the same parser as Dup, as follows:
+    -- if we parse "!" then "&", that's a dup
+    -- if we parse "!" then ".", that's a strict let
+    -- if we parse "!" then "^", that's a parallel let
+    -- otherwise, that's a lazy let.
+    -- create a case-of for the next character, just like we did in other parsers
     '!' -> do
       consume "!"
-      consume "&"
-      lab <- read <$> many1 digit
-      consume "{"
-      dp0 <- parseName
-      dp1 <- parseName
-      consume "}"
-      consume "="
-      val <- parseCore
-      bod <- parseCore
-      return $ Dup lab dp0 dp1 val bod
+      skip
+      next <- lookAhead anyChar
+      case next of
+        '&' -> do
+          -- parsing 'dup'
+          consume "&"
+          lab <- read <$> many1 digit
+          consume "{"
+          dp0 <- parseName
+          dp1 <- parseName
+          consume "}"
+          consume "="
+          val <- parseCore
+          bod <- parseCore
+          return $ Dup lab dp0 dp1 val bod
+        '!' -> do
+          -- parsing strict 'let'
+          consume "!"
+          nam <- parseName
+          consume "="
+          val <- parseCore
+          bod <- parseCore
+          return $ Let STRI nam val bod
+        '^' -> do
+          -- parsing parallel 'let'
+          consume "^"
+          nam <- parseName
+          consume "="
+          val <- parseCore
+          bod <- parseCore
+          return $ Let PARA nam val bod
+        _ -> do
+          -- parsing lazy 'let'
+          nam <- parseName
+          consume "="
+          val <- parseCore
+          bod <- parseCore
+          return $ Let LAZY nam val bod
     '#' -> parseCtr
     '~' -> parseMat
     _ -> do
@@ -314,6 +362,7 @@ decorateFnIds :: MS.Map String Word64 -> Core -> Core
 decorateFnIds fids term = case term of
   Var nam       -> Var nam
   Ref nam _ arg -> Ref nam (fids MS.! nam) (map (decorateFnIds fids) arg)
+  Let m x v b   -> Let m x (decorateFnIds fids v) (decorateFnIds fids b)
   Lam x bod     -> Lam x (decorateFnIds fids bod)
   App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
   Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)

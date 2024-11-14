@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Compile where
 
@@ -94,6 +95,16 @@ compileFullCore book fid Era _ =
   return $ "term_new(ERA, 0, 0)"
 compileFullCore book fid (Var name) host = do
   compileFullVar name host
+compileFullCore book fid (Let mode var val bod) host = do
+  letNam <- fresh "let"
+  emit $ "Loc " ++ letNam ++ " = alloc_node(3);"
+  emit $ "set(" ++ letNam ++ " + 0, term_new(SUB, 0, 0));"
+  valT <- compileFullCore book fid val (letNam ++ " + 1")
+  emit $ "set(" ++ letNam ++ " + 1, " ++ valT ++ ");"
+  bind var $ "term_new(VAR, 0, " ++ letNam ++ " + 0)"
+  bodT <- compileFullCore book fid bod (letNam ++ " + 2")
+  emit $ "set(" ++ letNam ++ " + 2, " ++ bodT ++ ");"
+  return $ "term_new(LET, " ++ show (fromEnum mode) ++ ", " ++ letNam ++ ")"
 compileFullCore book fid (Lam var bod) host = do
   lamNam <- fresh "lam"
   emit $ "Loc " ++ lamNam ++ " = alloc_node(2);"
@@ -288,6 +299,20 @@ compileFastSave book fid term ctx itr = do
 compileFastCore :: Book -> Word64 -> Core -> Compile String
 compileFastCore book fid Era = 
   return $ "term_new(ERA, 0, 0)"
+compileFastCore book fid (Let mode var val bod) = do
+  valT <- compileFastCore book fid val
+  case mode of
+    LAZY -> do
+      bind var valT
+    STRI -> do
+      valNam <- fresh "val"
+      emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
+      bind var valNam
+    PARA -> do -- TODO: implement parallel evaluation
+      valNam <- fresh "val"
+      emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
+      bind var valNam
+  compileFastCore book fid bod
 compileFastCore book fid (Var name) = do
   compileFastVar name
 compileFastCore book fid (Lam var bod) = do

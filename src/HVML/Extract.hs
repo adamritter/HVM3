@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Extract where
 
@@ -16,6 +17,16 @@ extractCore :: Term -> ExtractM Core
 extractCore term = case tagT (termTag term) of
   ERA -> do
     return Era
+
+  LET -> do
+    let loc = termLoc term
+    let mode = modeT (termLab term)
+    val <- lift $ got (loc + 1)
+    bod <- lift $ got (loc + 2)
+    name <- genName (loc + 0)
+    val0 <- extractCore val
+    bod0 <- extractCore bod
+    return $ Let mode name val0 bod0
   
   LAM -> do
     let loc = termLoc term

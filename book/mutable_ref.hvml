@@ -1,7 +1,9 @@
-@mut(ref fn) = (λnew(0) (fn (ref new)))
+@mut(ref fn) = !!new=(fn (ref new)) 0
+
 @main = #0{@mut(λret(0) λx(+ x 2)) ret}
 
-// This requires a `seq` operator:
+// The '!! x = val' notation represents a seq operator.
+// It reduces 'val' to whnf and assigns the result to 'x'.
 
 //#0{(λref λfn (λnew(0) (fn (ref new))) λret(0) λx(+ x 2)) ret}
 //-------------------------------------------------------------
@@ -11,7 +13,7 @@
 //-------------------------------------------
 //new = (λx(+ x 2) (λret(0) new))
 //#0{0 ret}
-//-------------------------------- \/ won't evaluate further
+//--------------------------------
 //ret = new
 //new = (λx(+ x 2) 0)
 //#0{0 ret}

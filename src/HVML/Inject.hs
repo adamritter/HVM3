@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Show.hs//
 
 module HVML.Inject where
 
@@ -23,6 +24,14 @@ emptyState = InjectState Map.empty []
 injectCore :: Book -> Core -> Loc -> InjectM ()
 injectCore _ Era loc = do
   lift $ set loc (termNew _ERA_ 0 0)
+
+injectCore book (Let mode nam val bod) loc = do
+  lit <- lift $ allocNode 3
+  lift $ set (lit + 0) (termNew _SUB_ 0 0)
+  injectCore book val (lit + 1)
+  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (lit + 0)) (args s) }
+  injectCore book bod (lit + 2)
+  lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mode) lit)
 
 injectCore book (Lam vr0 bod) loc = do
   lam <- lift $ allocNode 2

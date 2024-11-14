@@ -21,6 +21,19 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
       lab = termLab term
       loc = termLoc term
   case tagT tag of
+    LET -> do
+      case modeT lab of
+        LAZY -> do
+          val <- got (loc + 1)
+          bod <- reduceLet term val
+          reduce book bod
+        STRI -> do
+          val <- got (loc + 1)
+          val <- reduce book val
+          bod <- reduceLet term val
+          reduce book bod
+        PARA -> do
+          error "TODO"
     APP -> do
       fun <- got (loc + 0)
       fun <- reduce book fun
