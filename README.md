@@ -7,16 +7,15 @@ limitations. It aims to be the long-term runtime for
 
 - **HVML**: lazy mode. Pointers represent positive-to-negative ports in
   polarized nets, which coincides with the [Interaction
-  Calculus](https://GitHub.com/VictorTaelin/Interaction-Calculus). Strength:
-  efficient lazy evaluation. Drawbacks: 1. wnf may return a pending variable; 2.
-  garbage collection is necessary; 3. parallelism is less pervasive. It is
-  based on [HVM1](https://github.com/HigherOrderCO/hvm1).
+  Calculus](https://GitHub.com/VictorTaelin/Interaction-Calculus). Strengths:
+  efficient lazy evaluation, β-optimality. Drawbacks: 1. `whnf()` may return a
+  pending variable; 2.garbage collection is needed; 3. parallelism is less
+  pervasive. It is based on [HVM1](https://github.com/HigherOrderCO/hvm1).
 
-- **HVMS**: strict mode. Pointers represent parent to child nodes (aux-to-main
-  ports), resulting in a tree-like memory format. Strength: efficient massively
-  parallel evaluation and no garbage-collection. Drawbacks: not laziness and no
-  optimal evaluation. It is based on
-  [HVM2](https://github.com/HigherOrderCO/hvm).
+- **HVMS**: strict mode. Pointers represent aux-to-main ports, resulting in a
+  tree-like memory format. Strengths: efficient massively parallel evaluation and
+  no garbage-collection. Drawbacks: not laziness and no optimal evaluation. It
+  is based on [HVM2](https://github.com/HigherOrderCO/hvm).
 
 HVM3 is a work-in-progress. Its features are being actively implemented.
 
