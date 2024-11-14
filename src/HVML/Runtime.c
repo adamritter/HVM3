@@ -93,7 +93,6 @@ void set_itr(Loc value) {
   *HVM.itrs = value;
 }
 
-
 // Terms
 // ------
 

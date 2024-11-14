@@ -112,7 +112,7 @@ extractCore term = case tagT (termTag term) of
       else lift $ mapM (\i -> got (loc + 1 + i)) [0..len-1]
     val0 <- extractCore val
     css0 <- mapM extractCore css
-    css1 <- mapM (\ cs -> return (0, cs)) css0 -- NOTE: arity hint is lost on extraction
+    css1 <- mapM (\ cs -> return (0, cs)) css0 -- NOTE: case arity lost on extraction
     return $ Mat val0 css1
     
   W32 -> do

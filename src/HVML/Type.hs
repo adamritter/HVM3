@@ -7,10 +7,6 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
--- NOTE TO AI: we're refactoring REF. Now, instead of nullary (like '@foo'), it
--- will hold a list of arguments (like '(@foo A B C ...)'). As such, it is
--- compiled similarly to constructors, and must allocate a space for each arg.
-
 data Core
   = Var String
   | Ref String Word64 [Core]
@@ -248,4 +244,3 @@ _LAM_ = 0x0A
 _SUP_ = 0x0B
 _CTR_ = 0x0C
 _W32_ = 0x0D
-

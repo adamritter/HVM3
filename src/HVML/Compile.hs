@@ -275,27 +275,6 @@ compileFastBody book fid term ctx itr = do
   compileFastSave book fid term ctx itr
   emit $ "return " ++ body ++ ";"
 
--- compileFastBody book fid term ctx itr = do
-  -- let (callFid, callArgs) = getCall term
-  -- -- trace (coreToString term ++ " ||| " ++ show (length callArgs) ++ " " ++ show (length ctx) ++ " " ++ show callFid ++ " " ++ show fid) $ do
-  -- if length callArgs == length ctx && callFid == fid then do
-    -- forM_ (zip callArgs ctx) $ \ (arg, ctxVar) -> do
-      -- argT <- compileFastCore book fid arg
-      -- emit $ "" ++ ctxVar ++ " = " ++ argT ++ ";"
-    -- emit $ "itrs += " ++ show (length ctx + itr + 1) ++ ";"
-    -- emit $ "continue;"
-  -- else do
-    -- emit $ "itrs += " ++ show (length ctx + itr) ++ ";"
-    -- body <- compileFastCore book fid term
-    -- compileFastSave book fid term ctx itr
-    -- emit $ "return " ++ body ++ ";"
-  -- where
-    -- getCall :: Core -> (Word64, [Core])
-    -- getCall = go [] where
-      -- go ctx (App f x) = go (x:ctx) f
-      -- go ctx (Ref _ i) = (i, ctx)
-      -- go ctx term      = (0xFFFFFFFF, ctx)
-
 -- ...
 compileFastApps :: Book -> Word64 -> Core -> [String] -> [String] -> Int -> Compile ()
 compileFastApps book fid (Lam pvar pbod) (arg : args) ctx itr = do
@@ -419,7 +398,24 @@ compileFastCore book fid (Op2 opr nu0 nu1) = do
   emit $ "Term " ++ retNam ++ ";"
   emit $ "if (term_tag(" ++ nu0Nam ++ ") == W32 && term_tag(" ++ nu1Nam ++ ") == W32) {"
   emit $ "  itrs += 2;"
-  emit $ "  " ++ retNam ++ " = term_new(W32, 0, term_loc(" ++ nu0Nam ++ ") + term_loc(" ++ nu1Nam ++ "));"
+  let oprStr = case opr of
+        OP_ADD -> "+"
+        OP_SUB -> "-"
+        OP_MUL -> "*"
+        OP_DIV -> "/"
+        OP_MOD -> "%"
+        OP_EQ  -> "=="
+        OP_NE  -> "!="
+        OP_LT  -> "<"
+        OP_GT  -> ">"
+        OP_LTE -> "<="
+        OP_GTE -> ">="
+        OP_AND -> "&"
+        OP_OR  -> "|"
+        OP_XOR -> "^"
+        OP_LSH -> "<<"
+        OP_RSH -> ">>"
+  emit $ "  " ++ retNam ++ " = term_new(W32, 0, term_loc(" ++ nu0Nam ++ ") " ++ oprStr ++ " term_loc(" ++ nu1Nam ++ "));"
   emit $ "} else {"
   emit $ "  Loc " ++ opxNam ++ " = alloc_node(2);"
   emit $ "  set(" ++ opxNam ++ " + 0, " ++ nu0Nam ++ ");"
