@@ -23,6 +23,10 @@ data Bits {
     @sqr((/ p0 2) λk(f0 (f1 k)) @rep((% p1 2) f2 x))
 }
 
+// Bit (Scoot)
+@b0 = λb0 λb1 b0
+@b1 = λb0 λb1 b1
+
 // Bits (Scott)
 @o(x) = λo λi λe (o x)
 @i(x) = λo λi λe (i x)
@@ -38,10 +42,31 @@ data Bits {
 }
 
 // Converts a Bits to an U32
+@bits(xs) = (xs
+  λp0 #O{@bits(p0)}
+  λp1 #I{@bits(p1)}
+  #E)
+
+// Converts a Bits to an U32
 @bits_to_u32(xs) = (xs
   λp0 (+ (* 2 @bits_to_u32(p0)) 0)
   λp1 (+ (* 2 @bits_to_u32(p1)) 1)
   0)
 
+@add = λa λb λo λi λe (a
+  λap0 (b λbp0 (o (@add ap0 bp0)) λbp1 (i      (@add ap0 bp1))  e)
+  λap1 (b λbp2 (i (@add ap1 bp2)) λbp3 (o @inc((@add ap1 bp3))) e)
+  (b o i e))
+
+//@A = @i(@i(@o(@o(@o(@i(@o(@i(@o(@o(@i(@e)))))))))))
+//@A = @o(@i(@o(@o(@i(@o(@i(@i(@o(@o(@i(@e)))))))))))
+@A = @i(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@e)))))))))))
+@B = @zero(64)
+//@main = @bits(@sqr(1000 λx@inc(x) @B))
+//@main = @bits(@sqr(10000 λx(@adc @A x @b0) @B))
+//@main = @bits((@adc @A @B @b0))
+@main = @bits_to_u32(@sqr(10000 (@add @A) @B))
+//@main = @bits_to_u32(@sqr(100 λx(@adc @A x @b0) @B))
+
 // Applies 'inc' N times to zero
-@main = @bits_to_u32(@sqr(1234567 λx@inc(x) @zero(32)))
+//@main = @bits_to_u32(@sqr(1234567 λx@inc(x) @zero(32)))

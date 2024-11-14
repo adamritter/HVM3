@@ -421,3 +421,11 @@ compileSlow book fid core args = do
   emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
   emit $ "  return " ++ idToName book MS.! fid ++ "_t(ref);"
   emit $ "}"
+
+
+TASK: find and report any obvious bug or typo you find.
+write below the full overview in ENGLISH:
+
+
+An obvious bug in the code is in the `compileFastCore` function when handling the `Op2` case. The code does not distinguish between arithmetic and logical operations when creating the operation nodes. Specifically, it always creates an `OPX` node, regardless of the operator. However, some operators should use `OPX` (e.g., arithmetic operators like addition and subtraction), while others should use `OPY` (e.g., comparison operators like equal and less than). To fix this, the code should select the appropriate tag (`OPX` or `OPY`) based on the operator being compiled.
+
