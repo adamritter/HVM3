@@ -1,7 +1,6 @@
 dist-newstyle/
 *.o
 *.hi
-*.hvm1
 main
 Main1
 cabal-dev/

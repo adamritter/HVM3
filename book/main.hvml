@@ -1,17 +1,50 @@
-//@true  = λt λf t
+//@true = λt λf t
 //@false = λt λf f
-//@not   = λb ((b @false) @true)
-//@dups  = ! &1{ x y } = &0{ #12{} #24{} } &0{ y x }
-//@main  = (+ 10 ~7{ 0 1 2 λx x })
-//@main  = (* 100 123)
-//@main  = λt(t #5{(λx x 7)} λk k)
+//@not = λb ((b @false) @true)
+//@dups = ! &1{ x y } = &0{ #12{} #24{} } &0{ y x }
+//@main = (+ 10 ~7{ 0 1 2 λx x })
+//@main = (* 100 123)
+//@main = λt(t #5{(λx x 7)} λk k)
 //@main = (λa λb(λt λf t &0{a b} &0{b a}) 1 2)
-
 //@succ = λn λs λz (s n)
 //@zero = λs λz z
 //@mul2 = λn (n λp(@succ (@succ (@mul2 p))) @zero)
 //@main = (@mul2 (@succ (@succ (@succ @zero))))
+//@foo(x y) = #0{y x}
+//@main = @foo(@foo(5 8) @foo(1 2))
 
-@foo(x y) = #0{y x}
+data Bits {
+  #O{pred}
+  #I{pred}
+  #E{}
+}
 
-@main = @foo(@foo(5 8) @foo(1 2))
+//(Repeat 0 f x) = x
+//(Repeat n f x) = (f (Repeat (- n 1) f x))
+//(Square 0 f x) = x
+//(Square n f x) = (Square (/ n 2) λk(f (f k)) (Repeat (% n 2) f x))
+
+@rep(n f x) = ~ n {
+  #0: x
+  #_: λnp !&0{f0 f1}=f (f0 @rep(np f1 x))
+}
+
+@rap(n f x) = ~ n {
+  #0: x
+  #_: λnp !&0{np0 np1}=(+ np 1) !&0{fA f0}=f !&0{f1 f2}=fA @rap((/ np0 2) λk(f0 (f1 k)) @rep((% np1 2) f2 x))
+}
+
+
+@o(x) = λo λi λe (o x)
+@i(x) = λo λi λe (i x)
+@e    = λo λi λe e
+
+@bits(xs) = (xs
+  λp0 #O{@bits(p0)}
+  λp1 #I{@bits(p1)}
+  #E)
+
+@inc(x) = λo λi λe (x i λop(o @inc(op)) e)
+
+@main = @bits(@rap(1000 λx@inc(x) @o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@o(@e))))))))))))))))))
+//@main = @rap(10000 λx(+ x 1) 0)
