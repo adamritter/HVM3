@@ -3,7 +3,7 @@ HVM3 - Work In Progress
 
 **HVM3** will combine the strengths of HVM1 and HVM2 while addressing their
 limitations. It aims to be the long-term runtime for
-[Bend](https://github.com/Bend). It has 2 modes:
+[Bend](https://github.com/HigherOrderCO/Bend). It has 2 modes:
 
 - **HVML**: lazy mode. Pointers represent positive-to-negative ports in
   polarized nets, which coincides with the [Interaction
