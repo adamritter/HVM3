@@ -39,7 +39,7 @@ hvms run-c file.hvms  # runs strict-mode, compiled (TODO)
 ```
 
 Note that `run-c` will also generate a standalone `.main.c` file, which you
-compile and run independently. See examples on the [book/](book/) directory.
+can compile and run independently. See examples on the [book/](book/) directory.
 
 Performance
 -----------
