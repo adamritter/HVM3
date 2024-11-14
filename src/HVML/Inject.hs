@@ -90,7 +90,6 @@ doInjectCore :: Book -> Core -> [(String, Term)] -> HVM Term
 doInjectCore book core initialArgs = do
   (_, state) <- runStateT (injectCore book core 0) (emptyState { args = Map.fromList initialArgs })
   forM_ (vars state) $ \(name, loc) -> 
-
     case Map.lookup name (args state) of
       Just term -> set loc term
       Nothing   -> error $ "Unbound variable: " ++ name

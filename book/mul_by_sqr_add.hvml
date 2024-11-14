@@ -55,4 +55,9 @@
 // Multiplication by squared addition
 @mul(a b) = @u32(@sqr(a (@add @bits(b)) @zero(64)))
 
-@main = @mul(12345 12345)
+@main = @mul(1234567 1234567)
+
+//WORK: 233357193 interactions
+//TIME: 3.202 seconds
+//SIZE: 1402714952 nodes
+//PERF: 72.890 MIPS

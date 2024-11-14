@@ -320,7 +320,7 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) = do
   dp1Nam <- fresh "dp1"
   valNam <- fresh "val"
   valT   <- compileFastCore book fid val
-  emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
+  emit $ "Term " ++ valNam ++ " = (" ++ valT ++ ");"
   emit $ "Term " ++ dp0Nam ++ ";"
   emit $ "Term " ++ dp1Nam ++ ";"
   emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
@@ -367,8 +367,8 @@ compileFastCore book fid (Op2 opr nu0 nu1) = do
   nu1Nam <- fresh "nu1"
   nu0T <- compileFastCore book fid nu0
   nu1T <- compileFastCore book fid nu1
-  emit $ "Term " ++ nu0Nam ++ " = reduce(" ++ nu0T ++ ");"
-  emit $ "Term " ++ nu1Nam ++ " = reduce(" ++ nu1T ++ ");"
+  emit $ "Term " ++ nu0Nam ++ " = (" ++ nu0T ++ ");"
+  emit $ "Term " ++ nu1Nam ++ " = (" ++ nu1T ++ ");"
   emit $ "Term " ++ retNam ++ ";"
   emit $ "if (term_tag(" ++ nu0Nam ++ ") == W32 && term_tag(" ++ nu1Nam ++ ") == W32) {"
   emit $ "  itrs += 2;"
@@ -421,11 +421,3 @@ compileSlow book fid core args = do
   emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
   emit $ "  return " ++ idToName book MS.! fid ++ "_t(ref);"
   emit $ "}"
-
-
-TASK: find and report any obvious bug or typo you find.
-write below the full overview in ENGLISH:
-
-
-An obvious bug in the code is in the `compileFastCore` function when handling the `Op2` case. The code does not distinguish between arithmetic and logical operations when creating the operation nodes. Specifically, it always creates an `OPX` node, regardless of the operator. However, some operators should use `OPX` (e.g., arithmetic operators like addition and subtraction), while others should use `OPY` (e.g., comparison operators like equal and less than). To fix this, the code should select the appropriate tag (`OPX` or `OPY`) based on the operator being compiled.
-
