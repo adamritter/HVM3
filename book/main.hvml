@@ -15,4 +15,3 @@
 @foo(x y) = #0{y x}
 
 @main = @foo(@foo(5 8) @foo(1 2))
-
