@@ -13,6 +13,3 @@ data List { #Nil #Cons{ head tail } }
 }
 
 @main = @sum(@range(50_000_000 #Nil) 0)
-
-// 50000005
-//160000018
