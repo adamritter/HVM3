@@ -4,7 +4,9 @@ import Control.Monad (when)
 import System.CPUTime
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(ExitSuccess, ExitFailure))
-import System.IO (readFile)
+import System.IO (readFile, print)
+
+import Text.Parsec
 
 import HVMS.Type
 import HVMS.Inject
@@ -19,30 +21,32 @@ import HVMS.Normal
 main :: IO ()
 main = do
   args <- getArgs
-  result <- case args of
+
+  case args of
     ["run", file, "-s"] -> cliRun file True
     ["run", file]       -> cliRun file False
     ["help"]            -> printHelp
     _                   -> printHelp
-  case result of
-    Left err -> do
-      putStrLn err
-      exitWith (ExitFailure 1)
-    Right _ -> do
-      exitWith ExitSuccess
 
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> IO (Either String ())
+cliRun :: FilePath -> Bool -> IO ()
 cliRun filePath showStats = do
   start <- getCPUTime
+
   hvmInit
 
   code <- readFile filePath
-  let net = doParseNet code
+  net <- case doParseNet code of
+    Right net -> pure net
+    Left  err -> exitWithError ("ParserError: " ++ err)
+
+  print net
+
   root <- doInjectNet net
   norm <- normal root
+
   set 0 norm
   norm' <- doExtractNet norm []
   putStrLn $ netToString norm'
@@ -59,11 +63,14 @@ cliRun filePath showStats = do
     putStrLn $ "MIPS: " ++ show mips
 
   hvmFree
-  return $ Right ()
 
-printHelp :: IO (Either String ())
+printHelp :: IO ()
 printHelp = do
   putStrLn "HVM-Strict usage:"
   putStrLn "  hvms run [-s] <file>  # Normalizes the specified file"
   putStrLn "  hvms help             # Shows this help message"
-  return $ Right ()
+
+exitWithError :: String -> IO a
+exitWithError msg = do
+  putStrLn msg
+  exitWith $ ExitFailure 1
