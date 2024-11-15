@@ -76,8 +76,8 @@ foreign import ccall unsafe "Runtime.c term_lab"
 foreign import ccall unsafe "Runtime.c term_loc"
   termLoc :: Term -> Loc
 
-foreign import ccall unsafe "Runtime.c term_key"
-  termKey :: Term -> Loc
+-- foreign import ccall unsafe "Runtime.c term_key"
+--   termKey :: Term -> Loc
 
 foreign import ccall unsafe "Runtime.c swap"
   swap :: Loc -> Term -> IO Term
@@ -88,8 +88,8 @@ foreign import ccall unsafe "Runtime.c got"
 foreign import ccall unsafe "Runtime.c set"
   set :: Loc -> Term -> IO ()
 
-foreign import ccall unsafe "Runtime.c take"
-  take :: Loc -> IO Term
+-- foreign import ccall unsafe "Runtime.c take"
+--   take :: Loc -> IO Term
 
 foreign import ccall unsafe "Runtime.c alloc_node"
   allocNode :: Word64 -> IO Word64
