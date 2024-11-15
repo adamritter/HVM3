@@ -4,13 +4,14 @@ import Text.Parsec
 import Text.Parsec.String
 import HVMS.Type
 
+import Debug.Trace
+
 -- Core Parser
 -- ----------
 
 parsePCore :: Parser PCore
 parsePCore = do
-  spaces
-  head <- lookAhead anyChar
+  head <- peekNextChar
   case head of
     '*' -> do
       consume "*"
@@ -33,8 +34,7 @@ parsePCore = do
 
 parseNCore :: Parser NCore
 parseNCore = do
-  spaces
-  head <- lookAhead anyChar
+  head <- peekNextChar
   case head of
     '*' -> do
       consume "*"
@@ -57,18 +57,15 @@ parseNCore = do
 
 parseDex :: Parser Dex
 parseDex = do
-  spaces
   consume "&"
   neg <- parseNCore
-  spaces
   consume "~"
   pos <- parsePCore
   return (neg, pos)
 
 parseBag :: Parser Bag
 parseBag = do
-  spaces
-  head <- lookAhead anyChar
+  head <- try peekNextChar <|> return ' '
   case head of
     '&' -> do
       dex <- parseDex
@@ -85,6 +82,9 @@ parseNet = do
 -- Utilities
 -- ---------
 
+peekNextChar :: Parser Char
+peekNextChar = spaces >> lookAhead anyChar
+
 parseName :: Parser String
 parseName = spaces >> many1 (alphaNum <|> char '_')
 
@@ -94,7 +94,7 @@ consume str = spaces >> string str
 -- Main Entry Points
 -- ----------------
 
-doParseNet :: String -> Net
+doParseNet :: String -> Either String Net
 doParseNet code = case parse parseNet "" code of
-  Right net -> net
-  Left _    -> Net PNul []
+  Right net -> Right net
+  Left  err -> Left  (show err)
