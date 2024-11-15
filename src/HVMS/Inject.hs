@@ -14,7 +14,7 @@ injectPCore :: PCore -> Maybe Word64 -> VarMap -> IO (VarMap, Term)
 injectPCore (PVar nam) host vars = case Map.lookup nam vars of
   Just neg_host -> return (vars, termNew _VAR_ 0 neg_host)
   Nothing       -> return (vars, termNew _NUL_ 0 0)
-injectPCore PNul _ vars = 
+injectPCore PNul _ vars =
   return (vars, termNew _NUL_ 0 0)
 injectPCore (PLam var bod) host vars = do
   lam <- allocNode 2
