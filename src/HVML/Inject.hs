@@ -22,13 +22,19 @@ injectCore :: Book -> Core -> Loc -> InjectM ()
 injectCore _ Era loc = do
   lift $ set loc (termNew _ERA_ 0 0)
 
+injectCore _ (Var nam) loc = do
+  args <- gets args
+  case Map.lookup nam args of
+    Just term -> lift $ set loc term
+    Nothing   -> modify $ \s -> s { vars = (nam, loc) : vars s }
+
 injectCore book (Let mod nam val bod) loc = do
-  lit <- lift $ allocNode 3
-  lift $ set (lit + 0) (termNew _SUB_ 0 0)
-  injectCore book val (lit + 1)
-  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (lit + 0)) (args s) }
-  injectCore book bod (lit + 2)
-  lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mod) lit)
+  let_node <- lift $ allocNode 3
+  lift $ set (let_node + 0) (termNew _SUB_ 0 0)
+  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (let_node + 0)) (args s) }
+  injectCore book val (let_node + 1)
+  injectCore book bod (let_node + 2)
+  lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mod) let_node)
 
 injectCore book (Lam vr0 bod) loc = do
   lam <- lift $ allocNode 2
@@ -88,9 +94,19 @@ injectCore book (Op2 opr nm0 nm1) loc = do
   injectCore book nm1 (opx + 1)
   lift $ set loc (termNew _OPX_ (fromIntegral $ fromEnum opr) opx)
 
-injectCore _ (Var nam) loc = do
-  modify $ \s -> s { vars = (nam, loc) : vars s }
-  lift $ set loc 0 -- placeholder
+
+injectCore book (USp lab tm0 tm1) loc = do
+  usp <- lift $ allocNode 2
+  injectCore book tm0 (usp + 0)
+  injectCore book tm1 (usp + 1)
+  lift $ set loc (termNew _USP_ lab usp)
+
+injectCore book (UDp lab dp0 val bod) loc = do
+  udp <- lift $ allocNode 2
+  lift $ set (udp + 0) (termNew _SUB_ 0 0)
+  modify $ \s -> s { args = Map.insert dp0 (termNew _UDP_ lab udp) (args s) }
+  injectCore book val (udp + 1)
+  injectCore book bod loc
 
 doInjectCoreAt :: Book -> Core -> Loc -> [(String, Term)] -> HVM Term
 doInjectCoreAt book core host argList = do

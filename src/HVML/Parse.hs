@@ -83,25 +83,14 @@ parseCore = do
       tm1 <- parseCore
       consume "}"
       return $ Sup lab tm0 tm1
-    -- '!' -> do
-      -- consume "!"
-      -- consume "&"
-      -- lab <- read <$> many1 digit
-      -- consume "{"
-      -- dp0 <- parseName
-      -- dp1 <- parseName
-      -- consume "}"
-      -- consume "="
-      -- val <- parseCore
-      -- bod <- parseCore
-      -- return $ Dup lab dp0 dp1 val bod
-    -- TODO: implement the 'let' parser.
-    -- it will be implemented in the same parser as Dup, as follows:
-    -- if we parse "!" then "&", that's a dup
-    -- if we parse "!" then ".", that's a strict let
-    -- if we parse "!" then "^", that's a parallel let
-    -- otherwise, that's a lazy let.
-    -- create a case-of for the next character, just like we did in other parsers
+    '%' -> do
+      consume "%"
+      lab <- read <$> many1 digit
+      consume "{"
+      tm0 <- parseCore
+      tm1 <- parseCore
+      consume "}"
+      return $ USp lab tm0 tm1
     '!' -> do
       consume "!"
       skip
@@ -119,6 +108,16 @@ parseCore = do
           val <- parseCore
           bod <- parseCore
           return $ Dup lab dp0 dp1 val bod
+        '%' -> do
+          consume "%"
+          lab <- read <$> many1 digit
+          consume "{"
+          dp0 <- parseName
+          consume "}"
+          consume "="
+          val <- parseCore
+          bod <- parseCore
+          return $ UDp lab dp0 val bod
         '!' -> do
           -- parsing strict 'let'
           consume "!"
@@ -372,6 +371,8 @@ decorateFnIds fids term = case term of
   Op2 op x y    -> Op2 op (decorateFnIds fids x) (decorateFnIds fids y)
   U32 n         -> U32 n
   Era           -> Era
+  USp l x y     -> USp l (decorateFnIds fids x) (decorateFnIds fids y)
+  UDp l x v b   -> UDp l x (decorateFnIds fids v) (decorateFnIds fids b)
 
 -- Errors
 -- ------

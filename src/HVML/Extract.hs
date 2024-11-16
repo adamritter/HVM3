@@ -101,6 +101,35 @@ extractCore book term = case tagT (termTag term) of
         val0 <- extractCore book val
         return $ Dup lab dp0 dp1 val0 (Var dp1)
     else extractCore book sub
+
+  UDP -> do
+    let loc = termLoc term
+    let lab = termLab term
+    let key = termKey term
+    sub <- lift $ got key
+    if termTag sub == _SUB_
+    then do
+      (dups, _) <- get
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName key
+        return $ Var name
+      else do
+        dp0 <- genName (loc + 0)
+        val <- lift $ got (loc + 1)
+        modify $ \x -> (IS.insert (fromIntegral loc) dups, snd x)
+        val0 <- extractCore book val
+        return $ UDp lab dp0 val0 (Var dp0)
+    else extractCore book sub
+
+  USP -> do
+    let loc = termLoc term
+    let lab = termLab term
+    tm0 <- lift $ got (loc + 0)
+    tm1 <- lift $ got (loc + 1)
+    tm00 <- extractCore book tm0
+    tm10 <- extractCore book tm1
+    return $ USp lab tm00 tm10
       
   CTR -> do
     let loc = termLoc term
@@ -206,7 +235,7 @@ liftDups (Sup lab tm0 tm1) = do
 liftDups (Dup lab dp0 dp1 val bod) = do
   val <- liftDups val
   bod <- liftDups bod
-  modify (\oldState k -> Dup lab dp0 dp1 val (oldState k))
+  modify (\oldState k -> oldState (Dup lab dp0 dp1 val k))
   return bod
 liftDups (Ctr cid fds) = do
   fds <- mapM liftDups fds
@@ -226,6 +255,15 @@ liftDups (Let mod nam val bod) = do
   val <- liftDups val
   bod <- liftDups bod
   return $ Let mod nam val bod
+liftDups (USp lab tm0 tm1) = do
+  tm0 <- liftDups tm0
+  tm1 <- liftDups tm1
+  return $ USp lab tm0 tm1
+liftDups (UDp lab dp val bod) = do
+  val <- liftDups val
+  bod <- liftDups bod
+  modify (\oldState k -> oldState (UDp lab dp val k))
+  return bod
 
 doLiftDups :: Core -> Core
 doLiftDups term =

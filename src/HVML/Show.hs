@@ -22,10 +22,12 @@ coreToString (Sup lab tm0 tm1)         = "&" ++ show lab ++ "{" ++ coreToString 
 coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ "\n" ++ coreToString bod
 coreToString (Ref nam fid arg)         = "@" ++ nam ++ "(" ++ intercalate " " (map coreToString arg) ++ ")"
 coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map coreToString fds) ++ "}"
-coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map (\ (ar,cs) -> coreToString cs) css) ++ "}"
+coreToString (Mat val css)             = "(~match " ++ coreToString val ++ " {" ++ unwords (map (\ (ar,cs) -> coreToString cs) css) ++ "})"
 coreToString (U32 val)                 = show val
-coreToString (Op2 opr nm0 nm1)         = "(" ++  operToString opr ++ coreToString nm0 ++ " " ++ coreToString nm1 ++ ")"
+coreToString (Op2 opr nm0 nm1)         = "(" ++  operToString opr ++ " " ++ coreToString nm0 ++ " " ++ coreToString nm1 ++ ")"
 coreToString (Let mod nam val bod)     = "! " ++ modeToString mod ++ nam ++ " = " ++ coreToString val ++ " " ++ coreToString bod
+coreToString (USp lab tm0 tm1)         = "%" ++ show lab ++ "{" ++ coreToString tm0 ++ " " ++ coreToString tm1 ++ "}"
+coreToString (UDp lab dp0 val bod)     = "! %" ++ show lab ++ "{" ++ dp0 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
 
 operToString :: Oper -> String
 operToString OP_ADD = "+"

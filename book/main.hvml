@@ -13,7 +13,18 @@
 //@foo(x y) = #0{y x}
 //@main = @foo(@foo(5 8) @foo(1 2))
 
+data List { #Nil #Cons{head tail} }
+
+@sum(xs r) = ~xs{
+  #Nil: r
+  #Cons: λhead λtail @sum(tail (+ head r))
+}
+
+@range(n xs) = ~n{
+  #0: xs
+  #_: λp !&0{p0 p1}=p @range(p0 #Cons{p1 xs})
+}
 
 @main =
-  ! .x = (+ 7 8)
-  70
+  !list = #Cons{0 #Cons{1 #Cons{&0{10 20} #Cons{3 #Cons{4 #Cons{5 #Cons{6 #Cons{7 #Cons{8 #Cons{9 #Nil}}}}}}}}}}
+  @sum(list 0)

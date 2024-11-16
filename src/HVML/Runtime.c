@@ -1,3 +1,5 @@
+//./Type.hs//
+
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -44,19 +46,21 @@ static State HVM = {
 
 #define DP0 0x00
 #define DP1 0x01
-#define VAR 0x02
-#define SUB 0x03
-#define REF 0x04
-#define LET 0x05
-#define APP 0x06
-#define MAT 0x07
-#define OPX 0x08
-#define OPY 0x09
-#define ERA 0x0A
-#define LAM 0x0B
-#define SUP 0x0C
-#define CTR 0x0D
-#define W32 0x0E
+#define UDP 0x02
+#define VAR 0x03
+#define SUB 0x04
+#define REF 0x05
+#define LET 0x06
+#define APP 0x07
+#define MAT 0x08
+#define OPX 0x09
+#define OPY 0x0A
+#define ERA 0x0B
+#define LAM 0x0C
+#define SUP 0x0D
+#define USP 0x0E
+#define CTR 0x0F
+#define W32 0x10
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -124,9 +128,10 @@ Loc term_loc(Term x) {
 
 Loc term_key(Term term) {
   switch (term_tag(term)) {
-    case VAR: return term_loc(term) + 0;
     case DP0: return term_loc(term) + 0;
     case DP1: return term_loc(term) + 1;
+    case UDP: return term_loc(term) + 0;
+    case VAR: return term_loc(term) + 0;
     default:  return 0;
   }
 }
@@ -200,6 +205,8 @@ void print_tag(Tag tag) {
     case W32: printf("W32"); break;
     case OPX: printf("OPX"); break;
     case OPY: printf("OPY"); break;
+    case UDP: printf("UDP"); break;
+    case USP: printf("USP"); break;
     default : printf("???"); break;
   }
 }
@@ -295,6 +302,36 @@ Term reduce_app_sup(Term app, Term sup) {
   set(su0 + 0, term_new(APP, 0, ap0));
   set(su0 + 1, term_new(APP, 0, ap1));
   return term_new(SUP, sup_lab, su0);
+}
+
+// (%L{a b} c)
+// --------------- APP-USP
+// ! %L{x} = c
+// %L{(a x) (b x)}
+Term reduce_app_usp(Term app, Term usp) {
+  inc_itr();
+  Loc app_loc = term_loc(app);
+  Loc usp_loc = term_loc(usp);
+  Lab usp_lab = term_lab(usp);
+  Term arg    = got(app_loc + 1);
+  Term tm0    = got(usp_loc + 0);
+  Term tm1    = got(usp_loc + 1);
+  Loc du0     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  Loc ap0     = alloc_node(2);
+  Loc ap1     = alloc_node(2);
+  if (term_tag(arg) == UDP) {
+    printf("SHORTEN\n");
+  }
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, arg);
+  set(ap0 + 0, tm0);
+  set(ap0 + 1, term_new(UDP, usp_lab, du0));
+  set(ap1 + 0, tm1);
+  set(ap1 + 1, term_new(UDP, usp_lab, du0));
+  set(su0 + 0, term_new(APP, 0, ap0));
+  set(su0 + 1, term_new(APP, 0, ap1));
+  return term_new(USP, usp_lab, su0);
 }
 
 // (#{x y z ...} a)
@@ -404,6 +441,40 @@ Term reduce_dup_sup(Term dup, Term sup) {
   }
 }
 
+// ! &L{x y} = %R{a b}
+// ------------------- DUP-USP
+// x <- %R{a0 b0} 
+// y <- %R{a1 b1}
+// ! &L{a0 a1} = a
+// ! &L{b0 b1} = b
+Term reduce_dup_usp(Term dup, Term usp) {
+  inc_itr();
+  Loc dup_loc = term_loc(dup);
+  Lab dup_lab = term_lab(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Lab usp_lab = term_lab(usp);
+  Loc usp_loc = term_loc(usp);
+  Loc du0 = alloc_node(3);
+  Loc du1 = alloc_node(3);
+  Loc us0 = alloc_node(2);
+  Loc us1 = alloc_node(2);
+  Term tm0 = got(usp_loc + 0);
+  Term tm1 = got(usp_loc + 1);
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, term_new(SUB, 0, 0));
+  set(du0 + 2, tm0);
+  set(du1 + 0, term_new(SUB, 0, 0));
+  set(du1 + 1, term_new(SUB, 0, 0));
+  set(du1 + 2, tm1);
+  set(us0 + 0, term_new(DP0, dup_lab, du0));
+  set(us0 + 1, term_new(DP0, dup_lab, du1));
+  set(us1 + 0, term_new(DP1, dup_lab, du0));
+  set(us1 + 1, term_new(DP1, dup_lab, du1));
+  set(dup_loc + 0, term_new(USP, usp_lab, us0));
+  set(dup_loc + 1, term_new(USP, usp_lab, us1));
+  return got(dup_loc + dup_num);
+}
+
 // ! &{x y} = #{a b c ...}
 // ----------------------- DUP-CTR
 // ! &{a0 a1} = a
@@ -465,14 +536,15 @@ Term reduce_mat_lam(Term mat, Term lam) {
   exit(0);
 }
 
-// ~ {x y} {K0 K1 K2 ...}
-// ---------------------- MAT-SUP
+// TODO: treat SUP label
+// ~ &{x y} {K0 K1 K2 ...}
+// ----------------------- MAT-SUP
 // ! &{k0a k0b} = K0
 // ! &{k1a k1b} = K1
 // ! &{k2a k2b} = K2
 // ...
-// { ~ x {K0a K1a K2a ...}
-//   ~ y {K0b K1b K2b ...} }
+// &{ ~ x {K0a K1a K2a ...}
+//    ~ y {K0b K1b K2b ...} }
 Term reduce_mat_sup(Term mat, Term sup) {
   inc_itr();
   Loc mat_loc = term_loc(mat);
@@ -496,6 +568,43 @@ Term reduce_mat_sup(Term mat, Term sup) {
   set(sup0 + 0, term_new(MAT, mat_len, mat0));
   set(sup0 + 1, term_new(MAT, mat_len, mat1));
   return term_new(SUP, 0, sup0);
+}
+
+// MAT_USP: TODO
+// ~ %L{x y} {K0 K1 K2 ...}
+// ------------------------ MAT-USP
+// ! %L{k0} = K0
+// ! %L{k1} = K1
+// ! %L{k2} = K2
+// ...
+// %L{ ~ x {K0 K1 K2 ...}
+//     ~ y {K0 K1 K2 ...} }
+Term reduce_mat_usp(Term mat, Term usp) {
+  inc_itr();
+  Loc mat_loc = term_loc(mat);
+  Loc usp_loc = term_loc(usp);
+  Lab usp_lab = term_lab(usp);
+  Term tm0    = got(usp_loc + 0);
+  Term tm1    = got(usp_loc + 1);
+  Lab mat_len = term_lab(mat);
+  Loc usp0    = alloc_node(2);
+  Loc mat0    = alloc_node(1 + mat_len);
+  Loc mat1    = alloc_node(1 + mat_len);
+  set(mat0 + 0, tm0);
+  set(mat1 + 0, tm1);
+  for (u64 i = 0; i < mat_len; i++) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, got(mat_loc + 1 + i));
+    if (term_tag(got(mat_loc + 1 + i)) == UDP) {
+      printf("SHORTEN\n");
+    }
+    set(mat0 + 1 + i, term_new(UDP, usp_lab, du0));
+    set(mat1 + 1 + i, term_new(UDP, usp_lab, du0));
+  }
+  set(usp0 + 0, term_new(MAT, mat_len, mat0));
+  set(usp0 + 1, term_new(MAT, mat_len, mat1));
+  return term_new(USP, usp_lab, usp0);
 }
 
 // ~ #N{x y z ...} {K0 K1 K2 ...} 
@@ -536,8 +645,6 @@ Term reduce_mat_w32(Term mat, Term w32) {
     return term_new(APP, 0, app);
   }
 }
-
-// TODO: now, let's implement the missing OPX interactions.
 
 // <op(* b)
 // --------- OPX-ERA
@@ -581,6 +688,34 @@ Term reduce_opx_sup(Term opx, Term sup) {
   set(su0 + 0, term_new(OPX, term_lab(opx), op0));
   set(su0 + 1, term_new(OPX, term_lab(opx), op1));
   return term_new(SUP, sup_lab, su0);
+}
+
+// <op(%L{x0 x1} y)
+// ------------------------- OPX-USP
+// ! %L{y0} = y
+// %L{<op(x0 y0) <op(x1 y0)}
+Term reduce_opx_usp(Term opx, Term usp) {
+  //printf("opx-usp\n");
+  inc_itr();
+  Loc opx_loc = term_loc(opx);
+  Loc usp_loc = term_loc(usp);
+  Lab usp_lab = term_lab(usp);
+  Term nmy    = got(opx_loc + 1);
+  Term tm0    = got(usp_loc + 0);
+  Term tm1    = got(usp_loc + 1);
+  Loc du0     = alloc_node(2);
+  Loc op0     = alloc_node(2);
+  Loc op1     = alloc_node(2);
+  Loc us0     = alloc_node(2);
+  set(du0 + 0, term_new(SUB, 0, 0));
+  set(du0 + 1, nmy);
+  set(op0 + 0, tm0);
+  set(op0 + 1, term_new(UDP, usp_lab, du0));
+  set(op1 + 0, tm1);
+  set(op1 + 1, term_new(UDP, usp_lab, du0));
+  set(us0 + 0, term_new(OPX, term_lab(opx), op0));
+  set(us0 + 1, term_new(OPX, term_lab(opx), op1));
+  return term_new(USP, usp_lab, us0);
 }
 
 // <op(#{x0 x1 x2...} y)
@@ -641,6 +776,29 @@ Term reduce_opy_sup(Term opy, Term sup) {
   return term_new(SUP, sup_lab, su0);
 }
 
+// >op(a %L{x y})
+// --------------------- OPY-USP
+// %L{>op(a x) >op(a y)}
+Term reduce_opy_usp(Term opy, Term usp) {
+  inc_itr();
+  Loc opy_loc = term_loc(opy);
+  Loc usp_loc = term_loc(usp);
+  Lab usp_lab = term_lab(usp);
+  Term nmx    = got(opy_loc + 0);
+  Term tm0    = got(usp_loc + 0);
+  Term tm1    = got(usp_loc + 1);
+  Loc op0     = alloc_node(2);
+  Loc op1     = alloc_node(2);
+  Loc us0     = alloc_node(2);
+  set(op0 + 0, nmx);
+  set(op0 + 1, tm0);
+  set(op1 + 0, nmx);
+  set(op1 + 1, tm1);
+  set(us0 + 0, term_new(OPY, term_lab(opy), op0));
+  set(us0 + 1, term_new(OPY, term_lab(opy), op1));
+  return term_new(USP, usp_lab, us0);
+}
+
 // >op(#{x y z ...} b)
 // ---------------------- OPY-CTR
 // ⊥
@@ -678,6 +836,96 @@ Term reduce_opy_w32(Term opy, Term w32) {
     default: result = 0;
   }
   return term_new(W32, 0, result);
+}
+
+// ! %L{x} = *
+// ----------- UDP-ERA
+// x <- *
+Term reduce_udp_era(Term udp, Term era) {
+  inc_itr();
+  Loc udp_loc = term_loc(udp);
+  set(udp_loc + 0, era);
+  return era;
+}
+
+// ! &L{F} = λx(f)
+// ---------------- UDP-LAM
+// F <- λx(f)
+Term reduce_udp_lam(Term udp, Term lam) {
+  inc_itr();
+  Loc udp_loc = term_loc(udp);
+  set(udp_loc + 0, lam);
+  return lam;
+}
+
+// TODO: UDP-SUP
+Term reduce_udp_sup(Term udp, Term sup) {
+  printf("TODO:udp-sup\n");
+  exit(0);
+}
+
+// ! %L{x} = %R{a b}
+// ------------------- UDP-USP
+// if L == R:
+//   x <- b
+//   a
+// else:
+//   TODO
+Term reduce_udp_usp(Term udp, Term usp) {
+  inc_itr();
+  Loc udp_loc = term_loc(udp);
+  Lab udp_lab = term_lab(udp);
+  Lab usp_lab = term_lab(usp);
+  Loc usp_loc = term_loc(usp);
+  if (udp_lab == usp_lab) {
+    Term tm0 = got(usp_loc + 0);
+    Term tm1 = got(usp_loc + 1);
+    set(udp_loc + 0, tm1);
+    return tm0;
+  } else {
+    printf("TODO:udp-usp\n");
+    exit(0);
+  }
+}
+
+// ! %L{x} = #{a b c ...}
+// ---------------------- UDP-CTR
+// x <- #{ax bx cx ...}
+// ! %L{ax} = a
+// ! %L{bx} = b
+// ! %L{cx} = c
+// ...
+// #{ax bx cx ...}
+// NOTE: this must create two separate CTRs
+Term reduce_udp_ctr(Term udp, Term ctr) {
+  inc_itr();
+  Loc udp_loc = term_loc(udp);
+  Lab udp_lab = term_lab(udp);
+  Loc ctr_loc = term_loc(ctr);
+  Lab ctr_lab = term_lab(ctr);
+  u64 ctr_ari = u12v2_y(ctr_lab);
+  Loc ct0     = alloc_node(ctr_ari);
+  Loc ct1     = alloc_node(ctr_ari);
+  for (u64 i = 0; i < ctr_ari; i++) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, got(ctr_loc + i));
+    set(ct0 + i, term_new(UDP, udp_lab, du0));
+    set(ct1 + i, term_new(UDP, udp_lab, du0));
+  }
+  set(udp_loc + 0, term_new(CTR, ctr_lab, ct1));
+  return term_new(CTR, ctr_lab, ct0);
+}
+
+// ! %L{x} = 123
+// ------------- UDP-W32
+// x <- 123
+// 123
+Term reduce_udp_w32(Term udp, Term w32) {
+  inc_itr();
+  Loc udp_loc = term_loc(udp);
+  set(udp_loc + 0, w32);
+  return w32;
 }
 
 Term reduce(Term term) {
@@ -721,6 +969,18 @@ Term reduce(Term term) {
         if (term_tag(sub) == SUB) {
           HVM.sbuf[(*spos)++] = next;
           next = got(loc + 2);
+          continue;
+        } else {
+          next = sub;
+          continue;
+        }
+      }
+      case UDP: {
+        Loc key = term_key(next);
+        Term sub = got(key);
+        if (term_tag(sub) == SUB) {
+          HVM.sbuf[(*spos)++] = next;
+          next = got(loc + 1);
           continue;
         } else {
           next = sub;
@@ -776,6 +1036,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_app_sup(prev, next); continue;
                 case CTR: next = reduce_app_ctr(prev, next); continue;
                 case W32: next = reduce_app_w32(prev, next); continue;
+                case USP: next = reduce_app_usp(prev, next); continue;
                 default: break;
               }
               break;
@@ -788,6 +1049,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_dup_sup(prev, next); continue;
                 case CTR: next = reduce_dup_ctr(prev, next); continue;
                 case W32: next = reduce_dup_w32(prev, next); continue;
+                case USP: next = reduce_dup_usp(prev, next); continue;
                 default: break;
               }
               break;
@@ -799,6 +1061,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_mat_sup(prev, next); continue;
                 case CTR: next = reduce_mat_ctr(prev, next); continue;
                 case W32: next = reduce_mat_w32(prev, next); continue;
+                case USP: next = reduce_mat_usp(prev, next); continue;
                 default: break;
               }
             }
@@ -809,6 +1072,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opx_sup(prev, next); continue;
                 case CTR: next = reduce_opx_ctr(prev, next); continue;
                 case W32: next = reduce_opx_w32(prev, next); continue;
+                case USP: next = reduce_opx_usp(prev, next); continue;
                 default: break;
               }
             }
@@ -819,6 +1083,18 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opy_sup(prev, next); continue;
                 case CTR: next = reduce_opy_ctr(prev, next); continue;
                 case W32: next = reduce_opy_w32(prev, next); continue;
+                case USP: next = reduce_opy_usp(prev, next); continue;
+                default: break;
+              }
+            } 
+            case UDP: {
+              switch (tag) {
+                case ERA: next = reduce_udp_era(prev, next); continue;
+                case LAM: next = reduce_udp_lam(prev, next); continue;
+                case SUP: next = reduce_udp_sup(prev, next); continue;
+                case CTR: next = reduce_udp_ctr(prev, next); continue;
+                case W32: next = reduce_udp_w32(prev, next); continue;
+                case USP: next = reduce_udp_usp(prev, next); continue;
                 default: break;
               }
             }
