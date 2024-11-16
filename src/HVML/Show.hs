@@ -1,7 +1,9 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Show where
 
+import Control.Monad.State
 import Data.Char (intToDigit)
 import Data.List
 import Data.Word
@@ -17,7 +19,7 @@ coreToString Era                       = "*"
 coreToString (Lam vr0 bod)             = "λ" ++ vr0 ++ " " ++ coreToString bod
 coreToString (App fun arg)             = "(" ++ coreToString fun ++ " " ++ coreToString arg ++ ")"
 coreToString (Sup lab tm0 tm1)         = "&" ++ show lab ++ "{" ++ coreToString tm0 ++ " " ++ coreToString tm1 ++ "}"
-coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ " " ++ coreToString bod
+coreToString (Dup lab dp0 dp1 val bod) = "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ coreToString val ++ "\n" ++ coreToString bod
 coreToString (Ref nam fid arg)         = "@" ++ nam ++ "(" ++ intercalate " " (map coreToString arg) ++ ")"
 coreToString (Ctr cid fds)             = "#" ++ show cid ++ "{" ++ unwords (map coreToString fds) ++ "}"
 coreToString (Mat val css)             = "~" ++ coreToString val ++ "{" ++ unwords (map (\ (ar,cs) -> coreToString cs) css) ++ "}"

@@ -98,18 +98,22 @@ cliRun filePath compiled showStats = do
     exitWith (ExitFailure 1)
 
   -- Normalize main
-  init <- getCPUTime
+  -- init <- getCPUTime
+  -- root <- doInjectCore book (Ref "main" (nameToId book MS.! "main") []) []
+  -- done <- (if compiled then normalC else normal) book root
+  -- norm <- doExtractCore book done
+  -- end  <- getCPUTime
+  -- putStrLn $ coreToString norm
 
-  root <- doInjectCore book (Ref "main" (nameToId book MS.! "main") []) []
-  -- norm <- doExtractCore root
-  done <- (if compiled then normalC else normal) book root
-  -- done <- reduce book root
-  norm <- doExtractCore done
+  init <- getCPUTime
+  root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
+  norm <- (if compiled then normalCAt else normalAt) book 0
+  norm <- doExtractCore book norm
+  end  <- getCPUTime
   putStrLn $ coreToString norm
 
   -- Show stats
   when showStats $ do
-    end  <- getCPUTime
     itrs <- getItr
     size <- getLen
     let time = fromIntegral (end - init) / (10^12) :: Double

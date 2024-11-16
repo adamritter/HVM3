@@ -1,5 +1,4 @@
 -- //./Type.hs//
--- //./Inject.hs//
 
 module HVML.Extract where
 
@@ -13,8 +12,8 @@ import qualified Data.Map.Strict as MS
 
 type ExtractM a = StateT (IS.IntSet, MS.Map Loc String) HVM a
 
-extractCore :: Term -> ExtractM Core
-extractCore term = case tagT (termTag term) of
+extractCore :: Book -> Term -> ExtractM Core
+extractCore book term = case tagT (termTag term) of
   ERA -> do
     return Era
 
@@ -24,23 +23,23 @@ extractCore term = case tagT (termTag term) of
     val <- lift $ got (loc + 1)
     bod <- lift $ got (loc + 2)
     name <- genName (loc + 0)
-    val0 <- extractCore val
-    bod0 <- extractCore bod
+    val0 <- extractCore book val
+    bod0 <- extractCore book bod
     return $ Let mode name val0 bod0
   
   LAM -> do
     let loc = termLoc term
     bod <- lift $ got (loc + 1)
     name <- genName (loc + 0)
-    bod0 <- extractCore bod
+    bod0 <- extractCore book bod
     return $ Lam name bod0
     
   APP -> do
     let loc = termLoc term
     fun <- lift $ got (loc + 0)
     arg <- lift $ got (loc + 1)
-    fun0 <- extractCore fun
-    arg0 <- extractCore arg
+    fun0 <- extractCore book fun
+    arg0 <- extractCore book arg
     return $ App fun0 arg0
     
   SUP -> do
@@ -48,8 +47,8 @@ extractCore term = case tagT (termTag term) of
     let lab = termLab term
     tm0 <- lift $ got (loc + 0)
     tm1 <- lift $ got (loc + 1)
-    tm00 <- extractCore tm0
-    tm10 <- extractCore tm1
+    tm00 <- extractCore book tm0
+    tm10 <- extractCore book tm1
     return $ Sup lab tm00 tm10
     
   VAR -> do
@@ -59,7 +58,7 @@ extractCore term = case tagT (termTag term) of
     then do
       name <- genName key
       return $ Var name
-    else extractCore sub
+    else extractCore book sub
       
   DP0 -> do
     let loc = termLoc term
@@ -68,7 +67,7 @@ extractCore term = case tagT (termTag term) of
     sub <- lift $ got key
     if termTag sub == _SUB_
     then do
-      (dups, nameMap) <- get
+      (dups, _) <- get
       if IS.member (fromIntegral loc) dups
       then do
         name <- genName key
@@ -77,10 +76,10 @@ extractCore term = case tagT (termTag term) of
         dp0 <- genName (loc + 0)
         dp1 <- genName (loc + 1)
         val <- lift $ got (loc + 2)
-        put (IS.insert (fromIntegral loc) dups, nameMap)
-        val0 <- extractCore val
+        modify $ \x -> (IS.insert (fromIntegral loc) dups, snd x)
+        val0 <- extractCore book val
         return $ Dup lab dp0 dp1 val0 (Var dp0)
-    else extractCore sub
+    else extractCore book sub
       
   DP1 -> do
     let loc = termLoc term
@@ -89,7 +88,7 @@ extractCore term = case tagT (termTag term) of
     sub <- lift $ got key
     if termTag sub == _SUB_
     then do
-      (dups, nameMap) <- get
+      (dups, _) <- get
       if IS.member (fromIntegral loc) dups
       then do
         name <- genName key
@@ -98,10 +97,10 @@ extractCore term = case tagT (termTag term) of
         dp0 <- genName (loc + 0)
         dp1 <- genName (loc + 1)
         val <- lift $ got (loc + 2)
-        put (IS.insert (fromIntegral loc) dups, nameMap)
-        val0 <- extractCore val
+        modify $ \x -> (IS.insert (fromIntegral loc) dups, snd x)
+        val0 <- extractCore book val
         return $ Dup lab dp0 dp1 val0 (Var dp1)
-    else extractCore sub
+    else extractCore book sub
       
   CTR -> do
     let loc = termLoc term
@@ -111,7 +110,7 @@ extractCore term = case tagT (termTag term) of
     fds <- if ari == 0
       then return []
       else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
-    fds0 <- mapM extractCore fds
+    fds0 <- mapM (extractCore book) fds
     return $ Ctr cid fds0
     
   MAT -> do
@@ -121,8 +120,8 @@ extractCore term = case tagT (termTag term) of
     css <- if len == 0
       then return []
       else lift $ mapM (\i -> got (loc + 1 + i)) [0..len-1]
-    val0 <- extractCore val
-    css0 <- mapM extractCore css
+    val0 <- extractCore book val
+    css0 <- mapM (extractCore book) css
     css1 <- mapM (\ cs -> return (0, cs)) css0 -- NOTE: case arity lost on extraction
     return $ Mat val0 css1
     
@@ -135,8 +134,8 @@ extractCore term = case tagT (termTag term) of
     let opr = toEnum (fromIntegral (termLab term))
     nm0 <- lift $ got (loc + 0)
     nm1 <- lift $ got (loc + 1)
-    nm00 <- extractCore nm0
-    nm10 <- extractCore nm1
+    nm00 <- extractCore book nm0
+    nm10 <- extractCore book nm1
     return $ Op2 opr nm00 nm10
     
   OPY -> do
@@ -144,8 +143,8 @@ extractCore term = case tagT (termTag term) of
     let opr = toEnum (fromIntegral (termLab term))
     nm0 <- lift $ got (loc + 0)
     nm1 <- lift $ got (loc + 1)
-    nm00 <- extractCore nm0
-    nm10 <- extractCore nm1
+    nm00 <- extractCore book nm0
+    nm10 <- extractCore book nm1
     return $ Op2 opr nm00 nm10
     
   REF -> do
@@ -156,13 +155,16 @@ extractCore term = case tagT (termTag term) of
     arg <- if ari == 0
       then return []
       else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
-    arg <- mapM extractCore arg
-    return $ Ref "?" fid arg
+    arg0 <- mapM (extractCore book) arg
+    let name = MS.findWithDefault "?" fid (idToName book)
+    return $ Ref name fid arg0
     
   _ -> return Era
 
-doExtractCore :: Term -> HVM Core
-doExtractCore term = evalStateT (extractCore term) (IS.empty, MS.empty)
+doExtractCore :: Book -> Term -> HVM Core
+doExtractCore book term = do
+  core <- evalStateT (extractCore book term) (IS.empty, MS.empty)
+  return $ doLiftDups core
 
 genName :: Loc -> ExtractM String
 genName loc = do
@@ -180,3 +182,52 @@ genNameFromIndex n = go (n + 1) "" where
   go n ac | n == 0    = ac
           | otherwise = go q (chr (ord 'a' + r) : ac)
           where (q,r) = quotRem (n - 1) 26
+
+-- Lifting Dups
+-- ------------
+
+liftDups :: Core -> State (Core -> Core) Core
+liftDups (Var nam) = return $ Var nam
+liftDups (Ref nam fid arg) = do
+  arg <- mapM liftDups arg
+  return $ Ref nam fid arg
+liftDups Era = return Era
+liftDups (Lam str bod) = do
+  bod <- liftDups bod
+  return $ Lam str bod
+liftDups (App fun arg) = do
+  fun <- liftDups fun
+  arg <- liftDups arg
+  return $ App fun arg
+liftDups (Sup lab tm0 tm1) = do
+  tm0 <- liftDups tm0
+  tm1 <- liftDups tm1
+  return $ Sup lab tm0 tm1
+liftDups (Dup lab dp0 dp1 val bod) = do
+  val <- liftDups val
+  bod <- liftDups bod
+  modify (\oldState k -> Dup lab dp0 dp1 val (oldState k))
+  return bod
+liftDups (Ctr cid fds) = do
+  fds <- mapM liftDups fds
+  return $ Ctr cid fds
+liftDups (Mat val css) = do
+  val <- liftDups val
+  css <- mapM (\(ar, cs) -> do
+    cs <- liftDups cs
+    return (ar, cs)) css
+  return $ Mat val css
+liftDups (U32 val) = return $ U32 val
+liftDups (Op2 opr nm0 nm1) = do
+  nm0 <- liftDups nm0
+  nm1 <- liftDups nm1
+  return $ Op2 opr nm0 nm1
+liftDups (Let mod nam val bod) = do
+  val <- liftDups val
+  bod <- liftDups bod
+  return $ Let mod nam val bod
+
+doLiftDups :: Core -> Core
+doLiftDups term =
+  let (liftedTerm, finalState) = runState (liftDups term) id
+  in finalState liftedTerm

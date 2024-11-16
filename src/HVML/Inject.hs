@@ -1,6 +1,3 @@
--- //./Type.hs//
--- //./Show.hs//
-
 module HVML.Inject where
 
 import Control.Monad (foldM)
@@ -25,13 +22,13 @@ injectCore :: Book -> Core -> Loc -> InjectM ()
 injectCore _ Era loc = do
   lift $ set loc (termNew _ERA_ 0 0)
 
-injectCore book (Let mode nam val bod) loc = do
+injectCore book (Let mod nam val bod) loc = do
   lit <- lift $ allocNode 3
   lift $ set (lit + 0) (termNew _SUB_ 0 0)
   injectCore book val (lit + 1)
   modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (lit + 0)) (args s) }
   injectCore book bod (lit + 2)
-  lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mode) lit)
+  lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mod) lit)
 
 injectCore book (Lam vr0 bod) loc = do
   lam <- lift $ allocNode 2
@@ -95,11 +92,11 @@ injectCore _ (Var nam) loc = do
   modify $ \s -> s { vars = (nam, loc) : vars s }
   lift $ set loc 0 -- placeholder
 
-doInjectCore :: Book -> Core -> [(String, Term)] -> HVM Term
-doInjectCore book core initialArgs = do
-  (_, state) <- runStateT (injectCore book core 0) (emptyState { args = Map.fromList initialArgs })
+doInjectCoreAt :: Book -> Core -> Loc -> [(String, Term)] -> HVM Term
+doInjectCoreAt book core host argList = do
+  (_, state) <- runStateT (injectCore book core host) (emptyState { args = Map.fromList argList })
   forM_ (vars state) $ \(name, loc) -> 
     case Map.lookup name (args state) of
       Just term -> set loc term
       Nothing   -> error $ "Unbound variable: " ++ name
-  got 0
+  got host

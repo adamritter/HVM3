@@ -126,7 +126,7 @@ foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
 
 foreign import ccall unsafe "Runtime.c reduce"
-  reduceC :: Term -> IO Term
+  reduce :: Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_let"
   reduceLet :: Term -> Term -> IO Term

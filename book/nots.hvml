@@ -1,4 +1,4 @@
-@main  = (@P16 @not @true)
+@main  = (@P24 @not @true)
 @true  = λt λf t
 @false = λt λf f
 @not   = λX (X @false @true)

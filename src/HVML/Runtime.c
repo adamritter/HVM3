@@ -17,6 +17,7 @@ typedef _Atomic(Term) ATerm;
 // Runtime Types
 // -------------
 
+
 // Global State Type
 typedef struct {
   Term*  sbuf; // reduction stack buffer
@@ -25,6 +26,7 @@ typedef struct {
   u64*   size; // global node length
   u64*   itrs; // interaction count
   Term (*book[1024])(Term); // functions
+  u64*   adts; // ADT Info
 } State;
 
 // Global State Value

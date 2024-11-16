@@ -2,115 +2,111 @@
 
 module HVML.Reduce where
 
-import Control.Monad (when)
+import Control.Monad (when, forM)
 import Data.Word
+import HVML.Extract
 import HVML.Inject
 import HVML.Show
 import HVML.Type
 import System.Exit
 import qualified Data.Map.Strict as MS
 
-import Debug.Trace
-
--- debug a b = trace a b
-debug a b = b
-
-reduce :: Book -> Term -> HVM Term
-reduce book term = debug ("NEXT: " ++ termToString term) $ do
+reduceAt :: Book -> Loc -> HVM Term
+reduceAt book host = do 
+  root <- got 0
+  root <- doExtractCore book root
+  putStrLn $ "---------------- ROOT:"
+  putStrLn $ coreToString root
+  term <- got host
   let tag = termTag term
-      lab = termLab term
-      loc = termLoc term
+  let lab = termLab term
+  let loc = termLoc term
   case tagT tag of
     LET -> do
       case modeT lab of
         LAZY -> do
           val <- got (loc + 1)
-          bod <- reduceLet term val
-          reduce book bod
+          cont host (reduceLet term val)
         STRI -> do
-          val <- got (loc + 1)
-          val <- reduce book val
-          bod <- reduceLet term val
-          reduce book bod
+          val <- reduceAt book (loc + 1)
+          cont host (reduceLet term val)
         PARA -> do
           error "TODO"
     APP -> do
-      fun <- got (loc + 0)
-      fun <- reduce book fun
+      fun <- reduceAt book (loc + 0)
       case tagT (termTag fun) of
-        ERA -> reduceAppEra term fun >>= reduce book
-        LAM -> reduceAppLam term fun >>= reduce book
-        SUP -> reduceAppSup term fun >>= reduce book
-        CTR -> reduceAppCtr term fun >>= reduce book
-        W32 -> reduceAppW32 term fun >>= reduce book
+        ERA -> cont host (reduceAppEra term fun)
+        LAM -> cont host (reduceAppLam term fun)
+        SUP -> cont host (reduceAppSup term fun)
+        CTR -> cont host (reduceAppCtr term fun)
+        W32 -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
     DP0 -> do
       let key = termKey term
       sub <- got key
       if termTag sub == _SUB_
         then do
-          val <- got (loc + 2)
-          val <- reduce book val
+          val <- reduceAt book (loc + 2)
           case tagT (termTag val) of
-            ERA -> reduceDupEra term val >>= reduce book
-            LAM -> reduceDupLam term val >>= reduce book
-            SUP -> reduceDupSup term val >>= reduce book
-            CTR -> reduceDupCtr term val >>= reduce book
-            W32 -> reduceDupW32 term val >>= reduce book
+            ERA -> cont host (reduceDupEra term val)
+            LAM -> cont host (reduceDupLam term val)
+            SUP -> cont host (reduceDupSup term val)
+            CTR -> cont host (reduceDupCtr term val)
+            W32 -> cont host (reduceDupW32 term val)
             _   -> set (loc + 2) val >> return term
         else do
-          reduce book sub
+          set host sub
+          reduceAt book host
     DP1 -> do
       let key = termKey term
       sub <- got key
       if termTag sub == _SUB_
         then do
-          val <- got (loc + 2)
-          val <- reduce book val
+          val <- reduceAt book (loc + 2)
           case tagT (termTag val) of
-            ERA -> reduceDupEra term val >>= reduce book
-            LAM -> reduceDupLam term val >>= reduce book
-            SUP -> reduceDupSup term val >>= reduce book
-            CTR -> reduceDupCtr term val >>= reduce book
-            W32 -> reduceDupW32 term val >>= reduce book
+            ERA -> cont host (reduceDupEra term val)
+            LAM -> cont host (reduceDupLam term val)
+            SUP -> cont host (reduceDupSup term val)
+            CTR -> cont host (reduceDupCtr term val)
+            W32 -> cont host (reduceDupW32 term val)
             _   -> set (loc + 2) val >> return term
         else do
-          reduce book sub
+          set host sub
+          reduceAt book host
     MAT -> do
-      val <- got (loc + 0)
-      val <- reduce book val
+      val <- reduceAt book (loc + 0)
       case tagT (termTag val) of
-        ERA -> reduceMatEra term val >>= reduce book
-        LAM -> reduceMatLam term val >>= reduce book
-        SUP -> reduceMatSup term val >>= reduce book
-        CTR -> reduceMatCtr term val >>= reduce book
-        W32 -> reduceMatW32 term val >>= reduce book
+        ERA -> cont host (reduceMatEra term val)
+        LAM -> cont host (reduceMatLam term val)
+        SUP -> cont host (reduceMatSup term val)
+        CTR -> cont host (reduceMatCtr term val)
+        W32 -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
     OPX -> do
-      val <- got (loc + 0)
-      val <- reduce book val
+      val <- reduceAt book (loc + 0)
       case tagT (termTag val) of
-        ERA -> reduceOpxEra term val >>= reduce book
-        LAM -> reduceOpxLam term val >>= reduce book
-        SUP -> reduceOpxSup term val >>= reduce book
-        CTR -> reduceOpxCtr term val >>= reduce book
-        W32 -> reduceOpxW32 term val >>= reduce book
+        ERA -> cont host (reduceOpxEra term val)
+        LAM -> cont host (reduceOpxLam term val)
+        SUP -> cont host (reduceOpxSup term val)
+        CTR -> cont host (reduceOpxCtr term val)
+        W32 -> cont host (reduceOpxW32 term val)
         _   -> set (loc + 0) val >> return term
     OPY -> do
-      val <- got (loc + 1)
-      val <- reduce book val
+      val <- reduceAt book (loc + 1)
       case tagT (termTag val) of
-        ERA -> reduceOpyEra term val >>= reduce book
-        LAM -> reduceOpyLam term val >>= reduce book
-        SUP -> reduceOpySup term val >>= reduce book
-        CTR -> reduceOpyCtr term val >>= reduce book
-        W32 -> reduceOpyW32 term val >>= reduce book
+        ERA -> cont host (reduceOpyEra term val)
+        LAM -> cont host (reduceOpyLam term val)
+        SUP -> cont host (reduceOpySup term val)
+        CTR -> cont host (reduceOpyCtr term val)
+        W32 -> cont host (reduceOpyW32 term val)
         _   -> set (loc + 1) val >> return term
     VAR -> do
       sub <- got (loc + 0)
       if termTag sub == _SUB_
-        then return $ term
-        else reduce book sub
+        then return term
+        else do
+          set host sub
+          reduceAt book host
     REF -> do
       let fid = u12v2X lab
       let ari = u12v2Y lab
@@ -123,68 +119,61 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
           args <- if ari == 0
             then return []
             else mapM (\i -> got (loc + i)) [0 .. ari - 1]
-          core <- doInjectCore book core $ zip nams args
-          reduce book core
+          doInjectCoreAt book core host $ zip nams args
+          reduceAt book host
         Nothing -> return term
     otherwise -> do
       return term
+  where
+    cont host action = do
+      ret <- action
+      set host ret
+      reduceAt book host
 
-normalizer :: (Book -> Term -> HVM Term) -> Book -> Term -> HVM Term
-normalizer reducer book term = debug ("NORM: " ++ termToString term) $ do
-  wnf <- reducer book term
-  let tag = termTag wnf
-      lab = termLab wnf
-      loc = termLoc wnf
+normalAtWith :: (Book -> Term -> HVM Term) -> Book -> Loc -> HVM Term
+normalAtWith reduceAt book host = do
+  -- print $ "NORMAL: " ++ termToString term
+  whnf <- reduceAt book host
+  let tag = termTag whnf
+  let lab = termLab whnf
+  let loc = termLoc whnf
   case tagT tag of
     APP -> do
-      fun <- got (loc + 0)
-      arg <- got (loc + 1)
-      fun <- normalizer reducer book fun
-      arg <- normalizer reducer book arg
-      set (loc + 0) fun
-      set (loc + 1) arg
-      return wnf
+      normalAtWith reduceAt book (loc + 0)
+      normalAtWith reduceAt book (loc + 1)
+      return whnf
     LAM -> do
-      bod <- got (loc + 1)
-      bod <- normalizer reducer book bod
-      set (loc + 1) bod
-      return wnf
+      normalAtWith reduceAt book (loc + 1)
+      return whnf
     SUP -> do
-      tm0 <- got (loc + 0)
-      tm1 <- got (loc + 1)
-      tm0 <- normalizer reducer book tm0
-      tm1 <- normalizer reducer book tm1
-      set (loc + 0) tm0
-      set (loc + 1) tm1
-      return wnf
+      normalAtWith reduceAt book (loc + 0)
+      normalAtWith reduceAt book (loc + 1)
+      return whnf
     DP0 -> do
-      val <- got (loc + 2)
-      val <- normalizer reducer book val
-      set (loc + 2) val
-      return wnf
+      normalAtWith reduceAt book (loc + 2)
+      return whnf
     DP1 -> do
-      val <- got (loc + 2)
-      val <- normalizer reducer book val
-      set (loc + 2) val
-      return wnf
+      normalAtWith reduceAt book (loc + 2)
+      return whnf
     CTR -> do
-      let cid = u12v2X lab
       let ari = u12v2Y lab
-      args <- mapM (\i -> got (loc + i)) (if ari == 0 then [] else [0 .. ari - 1])
-      args <- mapM (normalizer reducer book) args
-      mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
-      return wnf
+      let ars = (if ari == 0 then [] else [0 .. ari - 1]) :: [Word64]
+      mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+      return whnf
     MAT -> do
       let ari = lab
-      args <- mapM (\i -> got (loc + i)) [0 .. ari]
-      args <- mapM (normalizer reducer book) args
-      mapM_ (\ (i, arg) -> set (loc + i) arg) $ zip [0..] args
-      return wnf
+      let ars = [0 .. ari] :: [Word64]
+      mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+      return whnf
     _ -> do
-      return wnf
+      return whnf
 
-normal :: Book -> Term -> HVM Term
-normal = normalizer reduce
+normalAt :: Book -> Loc -> HVM Term
+normalAt = normalAtWith reduceAt
 
-normalC :: Book -> Term -> HVM Term
-normalC = normalizer (\ book -> reduceC)
+normalCAt :: Book -> Loc -> HVM Term
+normalCAt = normalAtWith $ \ _ host -> do
+  term <- got host
+  whnf <- reduce term
+  set host whnf
+  return $ whnf
