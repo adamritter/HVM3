@@ -316,19 +316,22 @@ Term reduce_app_usp(Term app, Term usp) {
   Term arg    = got(app_loc + 1);
   Term tm0    = got(usp_loc + 0);
   Term tm1    = got(usp_loc + 1);
-  Loc du0     = alloc_node(2);
   Loc su0     = alloc_node(2);
   Loc ap0     = alloc_node(2);
   Loc ap1     = alloc_node(2);
-  if (term_tag(arg) == UDP) {
-    printf("SHORTEN\n");
+  Term cop;
+  if (term_tag(arg) != UDP) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, arg);
+    cop = term_new(UDP, usp_lab, du0);
+  } else {
+    cop = arg;
   }
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, arg);
   set(ap0 + 0, tm0);
-  set(ap0 + 1, term_new(UDP, usp_lab, du0));
+  set(ap0 + 1, cop);
   set(ap1 + 0, tm1);
-  set(ap1 + 1, term_new(UDP, usp_lab, du0));
+  set(ap1 + 1, cop);
   set(su0 + 0, term_new(APP, 0, ap0));
   set(su0 + 1, term_new(APP, 0, ap1));
   return term_new(USP, usp_lab, su0);
@@ -593,14 +596,18 @@ Term reduce_mat_usp(Term mat, Term usp) {
   set(mat0 + 0, tm0);
   set(mat1 + 0, tm1);
   for (u64 i = 0; i < mat_len; i++) {
-    Loc du0 = alloc_node(2);
-    set(du0 + 0, term_new(SUB, 0, 0));
-    set(du0 + 1, got(mat_loc + 1 + i));
-    if (term_tag(got(mat_loc + 1 + i)) == UDP) {
-      printf("SHORTEN\n");
+    Term cse = got(mat_loc + 1 + i);
+    Term cop;
+    if (term_tag(cse) != UDP) {
+      Loc du0 = alloc_node(2);
+      set(du0 + 0, term_new(SUB, 0, 0));
+      set(du0 + 1, got(mat_loc + 1 + i));
+      cop = term_new(UDP, usp_lab, du0);
+    } else {
+      cop = cse;
     }
-    set(mat0 + 1 + i, term_new(UDP, usp_lab, du0));
-    set(mat1 + 1 + i, term_new(UDP, usp_lab, du0));
+    set(mat0 + 1 + i, cop);
+    set(mat1 + 1 + i, cop);
   }
   set(usp0 + 0, term_new(MAT, mat_len, mat0));
   set(usp0 + 1, term_new(MAT, mat_len, mat1));
@@ -703,16 +710,22 @@ Term reduce_opx_usp(Term opx, Term usp) {
   Term nmy    = got(opx_loc + 1);
   Term tm0    = got(usp_loc + 0);
   Term tm1    = got(usp_loc + 1);
-  Loc du0     = alloc_node(2);
   Loc op0     = alloc_node(2);
   Loc op1     = alloc_node(2);
   Loc us0     = alloc_node(2);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, nmy);
+  Term cop;
+  if (term_tag(nmy) != UDP) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, nmy);
+    cop = term_new(UDP, usp_lab, du0);
+  } else {
+    cop = nmy;
+  }
   set(op0 + 0, tm0);
-  set(op0 + 1, term_new(UDP, usp_lab, du0));
+  set(op0 + 1, cop);
   set(op1 + 0, tm1);
-  set(op1 + 1, term_new(UDP, usp_lab, du0));
+  set(op1 + 1, cop);
   set(us0 + 0, term_new(OPX, term_lab(opx), op0));
   set(us0 + 1, term_new(OPX, term_lab(opx), op1));
   return term_new(USP, usp_lab, us0);
@@ -849,13 +862,38 @@ Term reduce_udp_era(Term udp, Term era) {
 }
 
 // ! &L{F} = λx(f)
-// ---------------- UDP-LAM
-// F <- λx(f)
+// ----------------- UDP-LAM
+// ! &L{G} = f
+// F <- λx0(G)
+// F <- λx1(G)
+// x <- &L{x0 x1}
 Term reduce_udp_lam(Term udp, Term lam) {
   inc_itr();
   Loc udp_loc = term_loc(udp);
-  set(udp_loc + 0, lam);
-  return lam;
+  Lab udp_lab = term_lab(udp);
+  Loc lam_loc = term_loc(lam);
+  Term bod    = got(lam_loc + 1);
+  Loc lm0     = alloc_node(2);
+  Loc lm1     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  Term cop;
+  if (term_tag(bod) != UDP) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, term_new(SUB, 0, 0));
+    set(du0 + 1, bod);
+    cop = term_new(UDP, udp_lab, du0);
+  } else {
+    cop = bod;
+  }
+  set(lm0 + 0, term_new(SUB, 0, 0));
+  set(lm0 + 1, cop);
+  set(lm1 + 0, term_new(SUB, 0, 0));
+  set(lm1 + 1, cop);
+  set(su0 + 0, term_new(VAR, 0, lm0));
+  set(su0 + 1, term_new(VAR, 0, lm1));
+  set(udp_loc + 0, term_new(LAM, 0, lm0));
+  set(lam_loc + 0, term_new(USP, udp_lab, su0));
+  return got(udp_loc + 0);
 }
 
 // TODO: UDP-SUP
@@ -907,11 +945,18 @@ Term reduce_udp_ctr(Term udp, Term ctr) {
   Loc ct0     = alloc_node(ctr_ari);
   Loc ct1     = alloc_node(ctr_ari);
   for (u64 i = 0; i < ctr_ari; i++) {
-    Loc du0 = alloc_node(2);
-    set(du0 + 0, term_new(SUB, 0, 0));
-    set(du0 + 1, got(ctr_loc + i));
-    set(ct0 + i, term_new(UDP, udp_lab, du0));
-    set(ct1 + i, term_new(UDP, udp_lab, du0));
+    Term fld = got(ctr_loc + i);
+    Term cop;
+    if (term_tag(fld) != UDP) {
+      Loc du0 = alloc_node(2);
+      set(du0 + 0, term_new(SUB, 0, 0));
+      set(du0 + 1, got(ctr_loc + i));
+      cop = term_new(UDP, udp_lab, du0);
+    } else {
+      cop = fld;
+    }
+    set(ct0 + i, cop);
+    set(ct1 + i, cop);
   }
   set(udp_loc + 0, term_new(CTR, ctr_lab, ct1));
   return term_new(CTR, ctr_lab, ct0);
