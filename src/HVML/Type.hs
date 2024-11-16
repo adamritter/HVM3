@@ -1,15 +1,23 @@
+-- //./Runtime.c//
+
 module HVML.Type where
 
 import Data.Map.Strict as MS
 import Data.Word
 import Foreign.Ptr
 
--- IMPORTANT - NOTE TO AI:
--- We're now adding the 'Let' constructor to HVM.
--- All files must be updated to include it. 
-
 -- Core Types
 -- ----------
+
+-- NOTE TO AI: we're now implementing the notion of unordered Sup and Dup nodes (USp and UDp).
+-- These work like Sup/Dup, except that the order of the elements / variables isn't relevant.
+-- That is, swapping the elements of an unordered superposition has no observable effect.
+-- Because of that, in the UDp case, both variables it binds are observationally equivalent.
+-- As such, we store it as just a single variable. Below are the syntaxes:
+-- UDp: `! %L{x} = value`
+-- USp: `%L{a b}`
+-- And it holds that `∀ a b . %L{a b} == %L{b a}`.
+-- Your goal is to help implementing the cases of the USp and UDp nodes.
 
 data Core
   = Var String
@@ -24,6 +32,8 @@ data Core
   | U32 Word32
   | Op2 Oper Core Core
   | Let Mode String Core Core
+  | USp Word64 Core Core
+  | UDp Word64 String Core Core
   deriving (Show, Eq)
 
 data Mode
@@ -61,10 +71,12 @@ data TAG
   = DP0
   | DP1
   | VAR
+  | UDP
   | APP
   | ERA
   | LAM
   | SUP
+  | USP
   | SUB
   | REF
   | LET
@@ -146,6 +158,9 @@ foreign import ccall unsafe "Runtime.c reduce_app_ctr"
 foreign import ccall unsafe "Runtime.c reduce_app_w32"
   reduceAppW32 :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_app_usp"
+  reduceAppUsp :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_dup_era"
   reduceDupEra :: Term -> Term -> IO Term
 
@@ -160,6 +175,9 @@ foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
 
 foreign import ccall unsafe "Runtime.c reduce_dup_w32"
   reduceDupW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_dup_usp"
+  reduceDupUsp :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_mat_era"
   reduceMatEra :: Term -> Term -> IO Term
@@ -176,6 +194,9 @@ foreign import ccall unsafe "Runtime.c reduce_mat_ctr"
 foreign import ccall unsafe "Runtime.c reduce_mat_w32"
   reduceMatW32 :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_mat_usp"
+  reduceMatUsp :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_opx_era"
   reduceOpxEra :: Term -> Term -> IO Term
 
@@ -191,6 +212,9 @@ foreign import ccall unsafe "Runtime.c reduce_opx_ctr"
 foreign import ccall unsafe "Runtime.c reduce_opx_w32"
   reduceOpxW32 :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_opx_usp"
+  reduceOpxUsp :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_opy_era"
   reduceOpyEra :: Term -> Term -> IO Term
 
@@ -205,6 +229,27 @@ foreign import ccall unsafe "Runtime.c reduce_opy_ctr"
 
 foreign import ccall unsafe "Runtime.c reduce_opy_w32"
   reduceOpyW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_opy_usp"
+  reduceOpyUsp :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_era"
+  reduceUdpEra :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_lam"
+  reduceUdpLam :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_sup"
+  reduceUdpSup :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_ctr"
+  reduceUdpCtr :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_w32"
+  reduceUdpW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_udp_usp"
+  reduceUdpUsp :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
@@ -230,37 +275,41 @@ foreign import ccall unsafe "Runtime.c u12v2_y"
 tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
-tagT 0x02 = VAR
-tagT 0x03 = SUB
-tagT 0x04 = REF
-tagT 0x05 = LET
-tagT 0x06 = APP
-tagT 0x07 = MAT
-tagT 0x08 = OPX
-tagT 0x09 = OPY
-tagT 0x0A = ERA
-tagT 0x0B = LAM
-tagT 0x0C = SUP
-tagT 0x0D = CTR
-tagT 0x0E = W32
+tagT 0x02 = UDP
+tagT 0x03 = VAR
+tagT 0x04 = SUB
+tagT 0x05 = REF
+tagT 0x06 = LET
+tagT 0x07 = APP
+tagT 0x08 = MAT
+tagT 0x09 = OPX
+tagT 0x0A = OPY
+tagT 0x0B = ERA
+tagT 0x0C = LAM
+tagT 0x0D = SUP
+tagT 0x0E = USP
+tagT 0x0F = CTR
+tagT 0x10 = W32
 tagT tag  = error $ "unknown tag: " ++ show tag
 
-_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
+_DP0_, _DP1_, _VAR_, _SUB_, _UDP_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _USP_, _CTR_, _W32_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
-_VAR_ = 0x02
-_SUB_ = 0x03
-_REF_ = 0x04
-_LET_ = 0x05
-_APP_ = 0x06
-_MAT_ = 0x07
-_OPX_ = 0x08
-_OPY_ = 0x09
-_ERA_ = 0x0A
-_LAM_ = 0x0B
-_SUP_ = 0x0C
-_CTR_ = 0x0D
-_W32_ = 0x0E
+_UDP_ = 0x02
+_VAR_ = 0x03
+_SUB_ = 0x04
+_REF_ = 0x05
+_LET_ = 0x06
+_APP_ = 0x07
+_MAT_ = 0x08
+_OPX_ = 0x09
+_OPY_ = 0x0A
+_ERA_ = 0x0B
+_LAM_ = 0x0C
+_SUP_ = 0x0D
+_USP_ = 0x0E
+_CTR_ = 0x0F
+_W32_ = 0x10
 
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY

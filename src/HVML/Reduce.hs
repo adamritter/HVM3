@@ -4,6 +4,7 @@ module HVML.Reduce where
 
 import Control.Monad (when)
 import Data.Word
+import HVML.Extract
 import HVML.Inject
 import HVML.Show
 import HVML.Type
@@ -20,6 +21,8 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
   let tag = termTag term
       lab = termLab term
       loc = termLoc term
+  -- core <- doExtractCore term
+  -- debug ("CORE " ++ coreToString core) $
   case tagT tag of
     LET -> do
       case modeT lab of
@@ -43,6 +46,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         SUP -> reduceAppSup term fun >>= reduce book
         CTR -> reduceAppCtr term fun >>= reduce book
         W32 -> reduceAppW32 term fun >>= reduce book
+        USP -> reduceAppUsp term fun >>= reduce book
         _   -> set (loc + 0) fun >> return term
     DP0 -> do
       let key = termKey term
@@ -57,6 +61,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
             SUP -> reduceDupSup term val >>= reduce book
             CTR -> reduceDupCtr term val >>= reduce book
             W32 -> reduceDupW32 term val >>= reduce book
+            USP -> reduceDupUsp term val >>= reduce book
             _   -> set (loc + 2) val >> return term
         else do
           reduce book sub
@@ -73,6 +78,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
             SUP -> reduceDupSup term val >>= reduce book
             CTR -> reduceDupCtr term val >>= reduce book
             W32 -> reduceDupW32 term val >>= reduce book
+            USP -> reduceDupUsp term val >>= reduce book
             _   -> set (loc + 2) val >> return term
         else do
           reduce book sub
@@ -85,6 +91,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         SUP -> reduceMatSup term val >>= reduce book
         CTR -> reduceMatCtr term val >>= reduce book
         W32 -> reduceMatW32 term val >>= reduce book
+        USP -> reduceMatUsp term val >>= reduce book
         _   -> set (loc + 0) val >> return term
     OPX -> do
       val <- got (loc + 0)
@@ -95,6 +102,7 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         SUP -> reduceOpxSup term val >>= reduce book
         CTR -> reduceOpxCtr term val >>= reduce book
         W32 -> reduceOpxW32 term val >>= reduce book
+        USP -> reduceOpxUsp term val >>= reduce book
         _   -> set (loc + 0) val >> return term
     OPY -> do
       val <- got (loc + 1)
@@ -105,7 +113,25 @@ reduce book term = debug ("NEXT: " ++ termToString term) $ do
         SUP -> reduceOpySup term val >>= reduce book
         CTR -> reduceOpyCtr term val >>= reduce book
         W32 -> reduceOpyW32 term val >>= reduce book
+        USP -> reduceOpyUsp term val >>= reduce book
         _   -> set (loc + 1) val >> return term
+    UDP -> do
+      let key = termKey term
+      sub <- got key
+      if termTag sub == _SUB_
+        then do
+          val <- got (loc + 1)
+          val <- reduce book val
+          case tagT (termTag val) of
+            ERA -> reduceUdpEra term val >>= reduce book
+            LAM -> reduceUdpLam term val >>= reduce book
+            SUP -> reduceUdpSup term val >>= reduce book
+            CTR -> reduceUdpCtr term val >>= reduce book
+            W32 -> reduceUdpW32 term val >>= reduce book
+            USP -> reduceUdpUsp term val >>= reduce book
+            _   -> set (loc + 1) val >> return term
+        else do
+          reduce book sub
     VAR -> do
       sub <- got (loc + 0)
       if termTag sub == _SUB_
@@ -166,6 +192,19 @@ normalizer reducer book term = debug ("NORM: " ++ termToString term) $ do
       val <- got (loc + 2)
       val <- normalizer reducer book val
       set (loc + 2) val
+      return wnf
+    UDP -> do
+      val <- got (loc + 1)
+      val <- normalizer reducer book val
+      set (loc + 1) val
+      return wnf
+    USP -> do
+      tm0 <- got (loc + 0)
+      tm1 <- got (loc + 1)
+      tm0 <- normalizer reducer book tm0
+      tm1 <- normalizer reducer book tm1
+      set (loc + 0) tm0
+      set (loc + 1) tm1
       return wnf
     CTR -> do
       let cid = u12v2X lab

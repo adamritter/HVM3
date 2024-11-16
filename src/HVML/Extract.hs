@@ -102,6 +102,35 @@ extractCore term = case tagT (termTag term) of
         val0 <- extractCore val
         return $ Dup lab dp0 dp1 val0 (Var dp1)
     else extractCore sub
+
+  UDP -> do
+    let loc = termLoc term
+    let lab = termLab term
+    let key = termKey term
+    sub <- lift $ got key
+    if termTag sub == _SUB_
+    then do
+      (dups, nameMap) <- get
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName key
+        return $ Var name
+      else do
+        dp0 <- genName (loc + 0)
+        val <- lift $ got (loc + 1)
+        put (IS.insert (fromIntegral loc) dups, nameMap)
+        val0 <- extractCore val
+        return $ UDp lab dp0 val0 (Var dp0)
+    else extractCore sub
+
+  USP -> do
+    let loc = termLoc term
+    let lab = termLab term
+    tm0 <- lift $ got (loc + 0)
+    tm1 <- lift $ got (loc + 1)
+    tm00 <- extractCore tm0
+    tm10 <- extractCore tm1
+    return $ USp lab tm00 tm10
       
   CTR -> do
     let loc = termLoc term
