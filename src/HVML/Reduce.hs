@@ -13,18 +13,22 @@ import qualified Data.Map.Strict as MS
 
 reduceAt :: Book -> Loc -> HVM Term
 reduceAt book host = do 
+  let debug = False
   term <- got host
-  -- root <- got 0
-  -- root <- doExtractCore book root
-  -- core <- doExtractCore book term
-  -- putStrLn $ "---------------- CORE: "
-  -- putStrLn $ coreToString core
-  -- putStrLn $ "---------------- ROOT: "
-  -- putStrLn $ coreToString root
-  -- putStrLn $ "reduce " ++ termToString term
   let tag = termTag term
   let lab = termLab term
   let loc = termLoc term
+  when debug $ do
+    root <- got 0
+    root <- doExtractCore book root
+    core <- doExtractCore book term
+    putStrLn $ "---------------- CORE: "
+    putStrLn $ coreToString core
+    putStrLn $ "---------------- ROOT: "
+    putStrLn $ coreToString root
+    putStrLn $ "reduce " ++ termToString term
+    val <- got (loc + 2)
+    putStrLn $ "TERM: " ++ termToString term ++ " || VAL " ++ termToString val ++ " !!"
   case tagT tag of
     LET -> do
       case modeT lab of
@@ -86,21 +90,28 @@ reduceAt book host = do
       if termTag sub == _SUB_
         then do
           val <- got (loc + 2)
+          let vloc = termLoc val
           let vlab = termLab val
           let vtag = tagT (termTag val)
-          if (vtag == DH0 || vtag == DH1) && vlab == lab
-            then do
-              cont host (reduceDuhDuh term val)
-            else do
-              val <- reduceAt book (loc + 2)
-              case tagT (termTag val) of
-                ERA -> cont host (reduceDuhEra term val)
-                LAM -> cont host (reduceDuhLam term val)
-                SUP -> cont host (reduceDuhSup term val)
-                SUH -> cont host (reduceDuhSuh term val)
-                CTR -> cont host (reduceDuhCtr term val)
-                W32 -> cont host (reduceDuhW32 term val)
-                _   -> set (loc + 2) val >> return term
+          isChain <- if vtag == DH0 || vtag == DH1 then do
+            let vkey = termKey val
+            vsub <- got vkey
+            return $ termTag vsub == _SUB_
+          else do
+            return False
+          if isChain && vlab == lab then do
+            -- putStrLn $ "duhduh: " ++ show (tagT tag) ++ " " ++ show vtag
+            cont host (reduceDuhDuh term val)
+          else do
+            val <- reduceAt book (loc + 2)
+            case tagT (termTag val) of
+              ERA -> cont host (reduceDuhEra term val)
+              LAM -> cont host (reduceDuhLam term val)
+              SUP -> cont host (reduceDuhSup term val)
+              SUH -> cont host (reduceDuhSuh term val)
+              CTR -> cont host (reduceDuhCtr term val)
+              W32 -> cont host (reduceDuhW32 term val)
+              _   -> set (loc + 2) val >> return term
         else do
           set host sub
           reduceAt book host
@@ -110,10 +121,19 @@ reduceAt book host = do
       if termTag sub == _SUB_
         then do
           val <- got (loc + 2)
+          let vloc = termLoc val
           let vlab = termLab val
           let vtag = tagT (termTag val)
-          if (vtag == DH0 || vtag == DH1) && vlab == lab
+          isChain <- if vtag == DH0 || vtag == DH1 then do
+            let vkey = termKey val
+            vsub <- got vkey
+            return $ termTag vsub == _SUB_
+          else do
+            -- putStrLn "NOPES"
+            return False
+          if isChain && vlab == lab
             then do
+              -- putStrLn $ "duhduh: " ++ show (tagT tag) ++ " " ++ show vtag
               cont host (reduceDuhDuh term val)
             else do
               val <- reduceAt book (loc + 2)

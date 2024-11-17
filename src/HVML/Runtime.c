@@ -1091,6 +1091,7 @@ Term reduce(Term term) {
   u64* spos = HVM.spos;
   while (1) {
     //printf("reduce "); print_term(next); printf("\n");
+    //printf("NEXT! "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
@@ -1141,8 +1142,12 @@ Term reduce(Term term) {
           Lab  nlab = term_lab(next);
           Loc  nloc = term_loc(next);
           if ((ntag == DH0 || ntag == DH1) && lab == nlab) {
-            next = reduce_duh_duh(prev, next);
-            continue;
+            Loc  nkey = term_key(next);
+            Term nsub = got(nkey);
+            if (term_tag(nsub) == SUB) {
+              next = reduce_duh_duh(prev, next);
+              continue;
+            }
           }
           HVM.sbuf[(*spos)++] = prev;
           continue;
