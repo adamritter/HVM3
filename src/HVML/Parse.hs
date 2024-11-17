@@ -90,14 +90,13 @@ parseCore = do
       tm0 <- parseCore
       tm1 <- parseCore
       consume "}"
-      return $ USp lab tm0 tm1
+      return $ Suh lab tm0 tm1
     '!' -> do
       consume "!"
       skip
       next <- lookAhead anyChar
       case next of
         '&' -> do
-          -- parsing 'dup'
           consume "&"
           lab <- read <$> many1 digit
           consume "{"
@@ -113,11 +112,12 @@ parseCore = do
           lab <- read <$> many1 digit
           consume "{"
           dp0 <- parseName
+          dp1 <- parseName
           consume "}"
           consume "="
           val <- parseCore
           bod <- parseCore
-          return $ UDp lab dp0 val bod
+          return $ Duh lab dp0 dp1 val bod
         '!' -> do
           -- parsing strict 'let'
           consume "!"
@@ -365,14 +365,14 @@ decorateFnIds fids term = case term of
   Lam x bod     -> Lam x (decorateFnIds fids bod)
   App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
   Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)
+  Suh l x y     -> Suh l (decorateFnIds fids x) (decorateFnIds fids y)
   Dup l x y v b -> Dup l x y (decorateFnIds fids v) (decorateFnIds fids b)
+  Duh l x y v b -> Duh l x y (decorateFnIds fids v) (decorateFnIds fids b)
   Ctr cid fds   -> Ctr cid (map (decorateFnIds fids) fds)
   Mat x css     -> Mat (decorateFnIds fids x) (map (\ (ar,cs) -> (ar, decorateFnIds fids cs)) css)
   Op2 op x y    -> Op2 op (decorateFnIds fids x) (decorateFnIds fids y)
   U32 n         -> U32 n
   Era           -> Era
-  USp l x y     -> USp l (decorateFnIds fids x) (decorateFnIds fids y)
-  UDp l x v b   -> UDp l x (decorateFnIds fids v) (decorateFnIds fids b)
 
 -- Errors
 -- ------

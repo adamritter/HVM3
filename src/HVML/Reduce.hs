@@ -13,11 +13,15 @@ import qualified Data.Map.Strict as MS
 
 reduceAt :: Book -> Loc -> HVM Term
 reduceAt book host = do 
-  root <- got 0
-  root <- doExtractCore book root
-  putStrLn $ "---------------- ROOT:"
-  putStrLn $ coreToString root
   term <- got host
+  -- root <- got 0
+  -- root <- doExtractCore book root
+  -- core <- doExtractCore book term
+  -- putStrLn $ "---------------- CORE: "
+  -- putStrLn $ coreToString core
+  -- putStrLn $ "---------------- ROOT: "
+  -- putStrLn $ coreToString root
+  -- putStrLn $ "reduce " ++ termToString term
   let tag = termTag term
   let lab = termLab term
   let loc = termLoc term
@@ -38,9 +42,9 @@ reduceAt book host = do
         ERA -> cont host (reduceAppEra term fun)
         LAM -> cont host (reduceAppLam term fun)
         SUP -> cont host (reduceAppSup term fun)
+        SUH -> cont host (reduceAppSuh term fun)
         CTR -> cont host (reduceAppCtr term fun)
         W32 -> cont host (reduceAppW32 term fun)
-        USP -> cont host (reduceAppUsp term fun)
         _   -> set (loc + 0) fun >> return term
     DP0 -> do
       let key = termKey term
@@ -52,9 +56,9 @@ reduceAt book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
+            SUH -> cont host (reduceDupSuh term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
-            USP -> cont host (reduceDupUsp term val)
             _   -> set (loc + 2) val >> return term
         else do
           set host sub
@@ -69,10 +73,58 @@ reduceAt book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
+            SUH -> cont host (reduceDupSuh term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
-            USP -> cont host (reduceDupUsp term val)
             _   -> set (loc + 2) val >> return term
+        else do
+          set host sub
+          reduceAt book host
+    DH0 -> do
+      let key = termKey term
+      sub <- got key
+      if termTag sub == _SUB_
+        then do
+          val <- got (loc + 2)
+          let vlab = termLab val
+          let vtag = tagT (termTag val)
+          if (vtag == DH0 || vtag == DH1) && vlab == lab
+            then do
+              cont host (reduceDuhDuh term val)
+            else do
+              val <- reduceAt book (loc + 2)
+              case tagT (termTag val) of
+                ERA -> cont host (reduceDuhEra term val)
+                LAM -> cont host (reduceDuhLam term val)
+                SUP -> cont host (reduceDuhSup term val)
+                SUH -> cont host (reduceDuhSuh term val)
+                CTR -> cont host (reduceDuhCtr term val)
+                W32 -> cont host (reduceDuhW32 term val)
+                _   -> set (loc + 2) val >> return term
+        else do
+          set host sub
+          reduceAt book host
+    DH1 -> do
+      let key = termKey term
+      sub <- got key
+      if termTag sub == _SUB_
+        then do
+          val <- got (loc + 2)
+          let vlab = termLab val
+          let vtag = tagT (termTag val)
+          if (vtag == DH0 || vtag == DH1) && vlab == lab
+            then do
+              cont host (reduceDuhDuh term val)
+            else do
+              val <- reduceAt book (loc + 2)
+              case tagT (termTag val) of
+                ERA -> cont host (reduceDuhEra term val)
+                LAM -> cont host (reduceDuhLam term val)
+                SUP -> cont host (reduceDuhSup term val)
+                SUH -> cont host (reduceDuhSuh term val)
+                CTR -> cont host (reduceDuhCtr term val)
+                W32 -> cont host (reduceDuhW32 term val)
+                _   -> set (loc + 2) val >> return term
         else do
           set host sub
           reduceAt book host
@@ -82,9 +134,9 @@ reduceAt book host = do
         ERA -> cont host (reduceMatEra term val)
         LAM -> cont host (reduceMatLam term val)
         SUP -> cont host (reduceMatSup term val)
+        SUH -> cont host (reduceMatSuh term val)
         CTR -> cont host (reduceMatCtr term val)
         W32 -> cont host (reduceMatW32 term val)
-        USP -> cont host (reduceMatUsp term val)
         _   -> set (loc + 0) val >> return term
     OPX -> do
       val <- reduceAt book (loc + 0)
@@ -92,9 +144,9 @@ reduceAt book host = do
         ERA -> cont host (reduceOpxEra term val)
         LAM -> cont host (reduceOpxLam term val)
         SUP -> cont host (reduceOpxSup term val)
+        SUH -> cont host (reduceOpxSuh term val)
         CTR -> cont host (reduceOpxCtr term val)
         W32 -> cont host (reduceOpxW32 term val)
-        USP -> cont host (reduceOpxUsp term val)
         _   -> set (loc + 0) val >> return term
     OPY -> do
       val <- reduceAt book (loc + 1)
@@ -102,27 +154,10 @@ reduceAt book host = do
         ERA -> cont host (reduceOpyEra term val)
         LAM -> cont host (reduceOpyLam term val)
         SUP -> cont host (reduceOpySup term val)
+        SUH -> cont host (reduceOpySuh term val)
         CTR -> cont host (reduceOpyCtr term val)
         W32 -> cont host (reduceOpyW32 term val)
-        USP -> cont host (reduceOpyUsp term val)
         _   -> set (loc + 1) val >> return term
-    UDP -> do
-      let key = termKey term
-      sub <- got key
-      if termTag sub == _SUB_
-        then do
-          val <- reduceAt book (loc + 1)
-          case tagT (termTag val) of
-            ERA -> cont host (reduceUdpEra term val)
-            LAM -> cont host (reduceUdpLam term val)
-            SUP -> cont host (reduceUdpSup term val)
-            CTR -> cont host (reduceUdpCtr term val)
-            W32 -> cont host (reduceUdpW32 term val)
-            USP -> cont host (reduceUdpUsp term val)
-            _   -> set (loc + 1) val >> return term
-        else do
-          set host sub
-          reduceAt book host
     VAR -> do
       sub <- got (loc + 0)
       if termTag sub == _SUB_
@@ -171,18 +206,21 @@ normalAtWith reduceAt book host = do
       normalAtWith reduceAt book (loc + 0)
       normalAtWith reduceAt book (loc + 1)
       return whnf
+    SUH -> do
+      normalAtWith reduceAt book (loc + 0)
+      normalAtWith reduceAt book (loc + 1)
+      return whnf
     DP0 -> do
       normalAtWith reduceAt book (loc + 2)
       return whnf
     DP1 -> do
       normalAtWith reduceAt book (loc + 2)
       return whnf
-    UDP -> do
-      normalAtWith reduceAt book (loc + 1)
+    DH0 -> do
+      normalAtWith reduceAt book (loc + 2)
       return whnf
-    USP -> do
-      normalAtWith reduceAt book (loc + 0)
-      normalAtWith reduceAt book (loc + 1)
+    DH1 -> do
+      normalAtWith reduceAt book (loc + 2)
       return whnf
     CTR -> do
       let ari = u12v2Y lab
