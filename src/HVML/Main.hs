@@ -108,6 +108,10 @@ cliRun filePath compiled showStats = do
   init <- getCPUTime
   root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
   norm <- (if compiled then normalCAt else normalAt) book 0
+  norm <- (if compiled then normalCAt else normalAt) book 0
+  norm <- (if compiled then normalCAt else normalAt) book 0
+  norm <- (if compiled then normalCAt else normalAt) book 0
+  norm <- (if compiled then normalCAt else normalAt) book 0
   norm <- doExtractCore book norm
   end  <- getCPUTime
   putStrLn $ coreToString norm

@@ -312,10 +312,10 @@ Term reduce_app_sup(Term app, Term sup) {
 // :    |      |    :    |      |   :
 // :   /#\    /_\   :   /#\    /_\  :
 // :   | |    | |   :   | |    | |  :
-// :  /_\y    a/#\  :  /_\y   /#\b  :
-// :  | |     ↑| |  :  | |    | |↑  :
-// :  a b      x y  :  a b    x y   :
-// :  ↑        b    :    ↑    a     :
+// :  /_\y   /#\a   :  /_\y   /#\b  :
+// :  | |    | |↑   :  | |    | |↑  :
+// :  a b    x y    :  a b    x y   :
+// :  ↑      b      :    ↑    a     :
 // :----------------|---------------|
 // :   v       v    :   v       v   :
 // :   |       |    :   |       |   :
@@ -327,6 +327,20 @@ Term reduce_app_sup(Term app, Term sup) {
 // :   ↑         b  :     ↑     a   :
 // '----------------'---------------'
   
+
+// ,---------------,
+// :            v  :
+// :            |  :
+// :    v      /_\ :
+// :    |      | | :
+// :   /#\    /#\a :
+// :   | |    | |  :
+// :  /_\y   /_\y  :
+// :  | |    | |   :
+// :  a b    * b   :
+// :  ↑            :
+// '---------------'
+
 //A:
 //- in  = 0
 //- up  = 0
@@ -362,6 +376,7 @@ Term reduce_app_sup(Term app, Term sup) {
 // %L{y0 y1} = y0 
 // x1 <- y0
 Term reduce_duh_duh(Term bot, Term top) {
+  inc_itr();
   Loc  bot_loc = term_loc(bot);
   Lab  bot_lab = term_lab(bot);
   Loc  top_loc = term_loc(top);
@@ -369,17 +384,52 @@ Term reduce_duh_duh(Term bot, Term top) {
   Term bot_val = got(bot_loc + 2);
   Term top_val = got(top_loc + 2);
   Tag  in_A    = term_tag(bot) == DH0 ? 0 : 1;
-  Tag  in_B    = 1 - in_A;
   Tag  up_A    = term_tag(bot_val) == DH0 ? 0 : 1;
-  Tag  up_B    = 1 - up_A;
   Loc  new_duh = alloc_node(3);
+
+  //set(new_duh + 0, term_new(SUB, 0, 0));
+  //set(new_duh + 1, term_new(SUB, 0, 0));
+  //set(new_duh + 2, top_val);
+  //set(top_loc + up_A, term_new(SUB, 0, 0));
+  //set(top_loc + 2   , term_new(DH0+in_B, bot_lab, new_duh));
+  //set(bot_loc + in_B, term_new(DH0+up_A, bot_lab, top_loc));
+  //return term_new(DH0+in_A, bot_lab, new_duh);
+
+  //u32 PUT = in_A;
+  //u32 MOF = up_A;
+  //u32 RET = in_B;
+
+  //u32 PUT = in_A;
+  //u32 MOF = up_A;
+  //u32 RET = in_B;
+  //set(new_duh + 0, term_new(SUB, 0, 0));
+  //set(new_duh + 1, term_new(SUB, 0, 0));
+  //set(new_duh + 2, top_val);
+  //set(top_loc + MOF, term_new(SUB, 0, 0));
+  //set(top_loc + 2  , term_new(DH0+PUT, bot_lab, new_duh));
+  //set(bot_loc + PUT, term_new(DH0+MOF, bot_lab, top_loc));
+  //return term_new(DH0+RET, bot_lab, new_duh);
+
+  u32 PUT = in_A;
   set(new_duh + 0, term_new(SUB, 0, 0));
   set(new_duh + 1, term_new(SUB, 0, 0));
   set(new_duh + 2, top_val);
   set(top_loc + up_A, term_new(SUB, 0, 0));
-  set(top_loc + 2   , term_new(DH0+in_B, bot_lab, new_duh));
-  set(bot_loc + in_B, term_new(DH0+up_A, bot_lab, top_loc));
-  return term_new(DH0+in_A, bot_lab, new_duh);
+  set(top_loc + 2   , term_new(DH0+PUT, bot_lab, new_duh));
+  return term_new(DH0+!PUT, bot_lab, new_duh);
+
+
+  // CORRECT
+  //u32 PUT = in_A;
+  //set(new_duh + 0, term_new(SUB, 0, 0));
+  //set(new_duh + 1, term_new(SUB, 0, 0));
+  //set(new_duh + 2, top_val);
+  //set(top_loc + up_A, term_new(SUB, 0, 0));
+  //set(top_loc + 2   , term_new(DH0+PUT, bot_lab, new_duh));
+  //set(bot_loc + in_B, term_new(DH0+up_A, bot_lab, top_loc));
+  //return term_new(DH0+!PUT, bot_lab, new_duh);
+
+
 }
 
 // (%L{a b} c)

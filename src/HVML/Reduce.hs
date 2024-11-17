@@ -93,6 +93,7 @@ reduceAt book host = do
           let vloc = termLoc val
           let vlab = termLab val
           let vtag = tagT (termTag val)
+          -- let isChain = False
           isChain <- if vtag == DH0 || vtag == DH1 then do
             let vkey = termKey val
             vsub <- got vkey
