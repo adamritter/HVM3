@@ -172,23 +172,37 @@ parseMat = do
   consume "{"
   css <- many $ do
     closeWith "}"
-    consume "#"
-    name <- parseName
-    cids <- parsedCtrToCid <$> getState
-    aris <- parsedCtrToAri <$> getState
-    ari  <- case MS.lookup name aris of
-      Just ari -> return ari
-      Nothing  -> return (-1)
-    cid  <- case MS.lookup name cids of
-      Just id -> return id
-      Nothing -> case reads name of
-        [(num, "")] -> return (fromIntegral (num :: Integer))
-        _ -> if name == "_"
-          then return 0xFFFFFFFF
-          else fail $ "Unknown constructor: " ++ name
-    consume ":"
-    cas <- parseCore
-    return (cid, (ari, cas))
+    next <- lookAhead anyChar
+    case next of
+      '#' -> do
+        -- Parse ADT constructor case
+        consume "#"
+        name <- parseName
+        cids <- parsedCtrToCid <$> getState
+        aris <- parsedCtrToAri <$> getState
+        ari  <- case MS.lookup name aris of
+          Just ari -> return ari
+          Nothing  -> return (-1)
+        cid  <- case MS.lookup name cids of
+          Just id -> return id
+          Nothing -> fail $ "Unknown constructor: " ++ name
+        consume ":"
+        cas <- parseCore
+        return (cid, (ari, cas))
+      _ -> do
+        -- Parse U32 or named case
+        name <- parseName
+        cid <- case reads name of
+          [(num, "")] -> return (fromIntegral (num :: Integer))
+          otherwise   -> return 0xFFFFFFFF
+        consume ":"
+        cas <- if cid == 0xFFFFFFFF
+          then do
+            body <- parseCore
+            return $ Lam name body
+          else do
+            parseCore
+        return (cid, (-1, cas))
   consume "}"
   let sortedCss = map snd $ sortOn fst css
   return $ Mat val sortedCss

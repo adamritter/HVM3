@@ -1,6 +1,6 @@
 @count(n k) = ~n{
-  #0: k
-  #_: λpred @count(pred (+ k 2))
+  0: k
+  p: @count(p (+ k 2))
 }
 
 @main = @count(2_000_000_000 0)

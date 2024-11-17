@@ -2,14 +2,14 @@
 
 // Repeated Application
 @rep(n f x) = ~ n {
-  #0: x
-  #_: λnp !&0{f0 f1}=f (f0 @rep(np f1 x))
+  0: x
+  p: !&0{f0 f1}=f (f0 @rep(p f1 x))
 }
 
 // Squared Application
 @sqr(n f x) = ~ n {
-  #0: x
-  #_: λp
+  0: x
+  p:
     !&0{p0 p1}=(+ p 1)
     !&0{fA f0}=f
     !&0{f1 f2}=fA
@@ -23,17 +23,17 @@
 
 // Creates an all-zero Bits
 @zero(s) = ~s{
-  #0: @e
-  #_: λp @o(@zero(p))
+  0: @e
+  p: @o(@zero(p))
 }
 
 // U32 -> Bits
 @bits(n) = ~ n {
-  #0: @e
-  #_: λp !&0{n0 n1}=(+ p 1) ~ (% n0 2) {
-    #0: @o(@bits((/ n1 2)))
-    #1: @i(@bits((/ n1 2)))
-    #_: *
+  0: @e
+  p: !&0{n0 n1}=(+ p 1) ~ (% n0 2) {
+    0: @o(@bits((/ n1 2)))
+    1: @i(@bits((/ n1 2)))
+    p: *
   }
 }
 

@@ -1,0 +1,61 @@
+// Unary Peano Nats
+data Nat { #Z #S{pred} }
+data Par { #P{fst snd} }
+data Lis { #N #C{head tail} }
+
+// Converts an U32 to a Nat
+@nat(n) = ~n{
+  0: #Z
+  p: #S{@nat(p)}
+}
+
+// Converts a Nat to an U32
+@u32(n) = ~n{
+  #Z: 0
+  #S: λnp (+ 1 @u32(np))
+}
+
+// Adds two Nats
+@add(a b) = ~a{
+  #Z: b
+  #S: λap #S{@add(ap b)}
+}
+
+// Muls two Nats
+@mul(a b) = ~a{
+  #Z: #Z
+  #S: λap !&1{b0 b1}=b @add(b0 @mul(ap b1))
+}
+
+// Compares two Nats for equality
+@eq(a b) = ~a{
+  #Z: ~b{
+    #Z: 1
+    #S: λbp 0
+  }
+  #S: λap ~b{
+    #Z: 0
+    #S: λbp @eq(ap bp)
+  }
+}
+
+// A superposition of all Nats (pseudo-metavar)
+@X = &0{#Z #S{@X}}
+
+// Collapses a superposed Nat
+@col(X) =
+  ! &0{x xs} = X
+  ~x {
+    0: (+ 1 @col(xs))
+    p: 0
+  }
+
+// Solves '12 * X = 504'
+@main = @col(@eq(@mul(@nat(12) @X) @nat(504)))
+
+// This is quadratic. In the post below, I discuss solutions to make it linear:
+// https://gist.github.com/VictorTaelin/93c327e5b4e752b744d7798687977f8a
+// These solutions are implemented on the branches:
+// - oportunistic_swaps
+// - unordered_superpositions
+// Sadly they don't work as I expected in all cases. More clarity is needed.
