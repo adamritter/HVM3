@@ -46,7 +46,6 @@ reduceAt book host = do
         ERA -> cont host (reduceAppEra term fun)
         LAM -> cont host (reduceAppLam term fun)
         SUP -> cont host (reduceAppSup term fun)
-        SUH -> cont host (reduceAppSuh term fun)
         CTR -> cont host (reduceAppCtr term fun)
         W32 -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
@@ -60,7 +59,6 @@ reduceAt book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
-            SUH -> cont host (reduceDupSuh term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
             _   -> set (loc + 2) val >> return term
@@ -77,75 +75,9 @@ reduceAt book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
-            SUH -> cont host (reduceDupSuh term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
             _   -> set (loc + 2) val >> return term
-        else do
-          set host sub
-          reduceAt book host
-    DH0 -> do
-      let key = termKey term
-      sub <- got key
-      if termTag sub == _SUB_
-        then do
-          val <- got (loc + 2)
-          let vloc = termLoc val
-          let vlab = termLab val
-          let vtag = tagT (termTag val)
-          -- let isChain = False
-          isChain <- if vtag == DH0 || vtag == DH1 then do
-            let vkey = termKey val
-            vsub <- got vkey
-            return $ termTag vsub == _SUB_
-          else do
-            return False
-          if isChain && vlab == lab then do
-            -- putStrLn $ "duhduh: " ++ show (tagT tag) ++ " " ++ show vtag
-            cont host (reduceDuhDuh term val)
-          else do
-            val <- reduceAt book (loc + 2)
-            case tagT (termTag val) of
-              ERA -> cont host (reduceDuhEra term val)
-              LAM -> cont host (reduceDuhLam term val)
-              SUP -> cont host (reduceDuhSup term val)
-              SUH -> cont host (reduceDuhSuh term val)
-              CTR -> cont host (reduceDuhCtr term val)
-              W32 -> cont host (reduceDuhW32 term val)
-              _   -> set (loc + 2) val >> return term
-        else do
-          set host sub
-          reduceAt book host
-    DH1 -> do
-      let key = termKey term
-      sub <- got key
-      if termTag sub == _SUB_
-        then do
-          val <- got (loc + 2)
-          let vloc = termLoc val
-          let vlab = termLab val
-          let vtag = tagT (termTag val)
-          isChain <- if vtag == DH0 || vtag == DH1 then do
-            let vkey = termKey val
-            vsub <- got vkey
-            return $ termTag vsub == _SUB_
-          else do
-            -- putStrLn "NOPES"
-            return False
-          if isChain && vlab == lab
-            then do
-              -- putStrLn $ "duhduh: " ++ show (tagT tag) ++ " " ++ show vtag
-              cont host (reduceDuhDuh term val)
-            else do
-              val <- reduceAt book (loc + 2)
-              case tagT (termTag val) of
-                ERA -> cont host (reduceDuhEra term val)
-                LAM -> cont host (reduceDuhLam term val)
-                SUP -> cont host (reduceDuhSup term val)
-                SUH -> cont host (reduceDuhSuh term val)
-                CTR -> cont host (reduceDuhCtr term val)
-                W32 -> cont host (reduceDuhW32 term val)
-                _   -> set (loc + 2) val >> return term
         else do
           set host sub
           reduceAt book host
@@ -155,7 +87,6 @@ reduceAt book host = do
         ERA -> cont host (reduceMatEra term val)
         LAM -> cont host (reduceMatLam term val)
         SUP -> cont host (reduceMatSup term val)
-        SUH -> cont host (reduceMatSuh term val)
         CTR -> cont host (reduceMatCtr term val)
         W32 -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
@@ -165,7 +96,6 @@ reduceAt book host = do
         ERA -> cont host (reduceOpxEra term val)
         LAM -> cont host (reduceOpxLam term val)
         SUP -> cont host (reduceOpxSup term val)
-        SUH -> cont host (reduceOpxSuh term val)
         CTR -> cont host (reduceOpxCtr term val)
         W32 -> cont host (reduceOpxW32 term val)
         _   -> set (loc + 0) val >> return term
@@ -175,7 +105,6 @@ reduceAt book host = do
         ERA -> cont host (reduceOpyEra term val)
         LAM -> cont host (reduceOpyLam term val)
         SUP -> cont host (reduceOpySup term val)
-        SUH -> cont host (reduceOpySuh term val)
         CTR -> cont host (reduceOpyCtr term val)
         W32 -> cont host (reduceOpyW32 term val)
         _   -> set (loc + 1) val >> return term
@@ -227,20 +156,10 @@ normalAtWith reduceAt book host = do
       normalAtWith reduceAt book (loc + 0)
       normalAtWith reduceAt book (loc + 1)
       return whnf
-    SUH -> do
-      normalAtWith reduceAt book (loc + 0)
-      normalAtWith reduceAt book (loc + 1)
-      return whnf
     DP0 -> do
       normalAtWith reduceAt book (loc + 2)
       return whnf
     DP1 -> do
-      normalAtWith reduceAt book (loc + 2)
-      return whnf
-    DH0 -> do
-      normalAtWith reduceAt book (loc + 2)
-      return whnf
-    DH1 -> do
       normalAtWith reduceAt book (loc + 2)
       return whnf
     CTR -> do

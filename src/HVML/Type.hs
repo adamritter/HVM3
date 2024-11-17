@@ -26,9 +26,7 @@ data Core
   | Lam String Core
   | App Core Core
   | Sup Word64 Core Core
-  | Suh Word64 Core Core
   | Dup Word64 String String Core Core
-  | Duh Word64 String String Core Core
   | Ctr Word64 [Core]
   | Mat Core [(Int,Core)]
   | U32 Word32
@@ -70,14 +68,11 @@ type Term = Word64
 data TAG
   = DP0
   | DP1
-  | DH0
-  | DH1
   | VAR
   | APP
   | ERA
   | LAM
   | SUP
-  | SUH
   | SUB
   | REF
   | LET
@@ -159,9 +154,6 @@ foreign import ccall unsafe "Runtime.c reduce_app_ctr"
 foreign import ccall unsafe "Runtime.c reduce_app_w32"
   reduceAppW32 :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_app_suh"
-  reduceAppSuh :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_era"
   reduceDupEra :: Term -> Term -> IO Term
 
@@ -176,9 +168,6 @@ foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
 
 foreign import ccall unsafe "Runtime.c reduce_dup_w32"
   reduceDupW32 :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_dup_suh"
-  reduceDupSuh :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_mat_era"
   reduceMatEra :: Term -> Term -> IO Term
@@ -195,9 +184,6 @@ foreign import ccall unsafe "Runtime.c reduce_mat_ctr"
 foreign import ccall unsafe "Runtime.c reduce_mat_w32"
   reduceMatW32 :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_mat_suh"
-  reduceMatSuh :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_era"
   reduceOpxEra :: Term -> Term -> IO Term
 
@@ -213,9 +199,6 @@ foreign import ccall unsafe "Runtime.c reduce_opx_ctr"
 foreign import ccall unsafe "Runtime.c reduce_opx_w32"
   reduceOpxW32 :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_opx_suh"
-  reduceOpxSuh :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_era"
   reduceOpyEra :: Term -> Term -> IO Term
 
@@ -230,30 +213,6 @@ foreign import ccall unsafe "Runtime.c reduce_opy_ctr"
 
 foreign import ccall unsafe "Runtime.c reduce_opy_w32"
   reduceOpyW32 :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_opy_suh"
-  reduceOpySuh :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_era"
-  reduceDuhEra :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_lam"
-  reduceDuhLam :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_sup"
-  reduceDuhSup :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_ctr"
-  reduceDuhCtr :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_w32"
-  reduceDuhW32 :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_suh"
-  reduceDuhSuh :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_duh_duh"
-  reduceDuhDuh :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
@@ -279,43 +238,37 @@ foreign import ccall unsafe "Runtime.c u12v2_y"
 tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
-tagT 0x02 = DH0
-tagT 0x03 = DH1
-tagT 0x04 = VAR
-tagT 0x05 = SUB
-tagT 0x06 = REF
-tagT 0x07 = LET
-tagT 0x08 = APP
-tagT 0x09 = MAT
-tagT 0x0A = OPX
-tagT 0x0B = OPY
-tagT 0x0C = ERA
-tagT 0x0D = LAM
-tagT 0x0E = SUP
-tagT 0x0F = SUH
-tagT 0x10 = CTR
-tagT 0x11 = W32
+tagT 0x02 = VAR
+tagT 0x03 = SUB
+tagT 0x04 = REF
+tagT 0x05 = LET
+tagT 0x06 = APP
+tagT 0x07 = MAT
+tagT 0x08 = OPX
+tagT 0x09 = OPY
+tagT 0x0A = ERA
+tagT 0x0B = LAM
+tagT 0x0C = SUP
+tagT 0x0D = CTR
+tagT 0x0E = W32
 tagT tag  = error $ "unknown tag: " ++ show tag
 
-_DP0_, _DP1_, _VAR_, _SUB_, _DH0_, _DH1_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _SUH_, _CTR_, _W32_ :: Tag
+_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
-_DH0_ = 0x02
-_DH1_ = 0x03
-_VAR_ = 0x04
-_SUB_ = 0x05
-_REF_ = 0x06
-_LET_ = 0x07
-_APP_ = 0x08
-_MAT_ = 0x09
-_OPX_ = 0x0A
-_OPY_ = 0x0B
-_ERA_ = 0x0C
-_LAM_ = 0x0D
-_SUP_ = 0x0E
-_SUH_ = 0x0F
-_CTR_ = 0x10
-_W32_ = 0x11
+_VAR_ = 0x02
+_SUB_ = 0x03
+_REF_ = 0x04
+_LET_ = 0x05
+_APP_ = 0x06
+_MAT_ = 0x07
+_OPX_ = 0x08
+_OPY_ = 0x09
+_ERA_ = 0x0A
+_LAM_ = 0x0B
+_SUP_ = 0x0C
+_CTR_ = 0x0D
+_W32_ = 0x0E
 
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY

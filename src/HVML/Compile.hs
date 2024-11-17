@@ -140,25 +140,6 @@ compileFullCore book fid (Dup lab dp0 dp1 val bod) host = do
   emit $ "set(" ++ dupNam ++ " + 2, " ++ valT ++ ");"
   bodT <- compileFullCore book fid bod host
   return bodT
-compileFullCore book fid (Suh lab tm0 tm1) host = do
-  supNam <- fresh "sup"
-  emit $ "Loc " ++ supNam ++ " = alloc_node(2);"
-  tm0T <- compileFullCore book fid tm0 (supNam ++ " + 0")
-  tm1T <- compileFullCore book fid tm1 (supNam ++ " + 1")
-  emit $ "set(" ++ supNam ++ " + 0, " ++ tm0T ++ ");"
-  emit $ "set(" ++ supNam ++ " + 1, " ++ tm1T ++ ");"
-  return $ "term_new(SUH, " ++ show lab ++ ", " ++ supNam ++ ")"
-compileFullCore book fid (Duh lab dp0 dp1 val bod) host = do
-  dupNam <- fresh "dup"
-  emit $ "Loc " ++ dupNam ++ " = alloc_node(3);"
-  emit $ "set(" ++ dupNam ++ " + 0, term_new(SUB, 0, 0));"
-  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
-  bind dp0 $ "term_new(DH0, " ++ show lab ++ ", " ++ dupNam ++ " + 0)"
-  bind dp1 $ "term_new(DH1, " ++ show lab ++ ", " ++ dupNam ++ " + 0)"
-  valT <- compileFullCore book fid val (dupNam ++ " + 2")
-  emit $ "set(" ++ dupNam ++ " + 2, " ++ valT ++ ");"
-  bodT <- compileFullCore book fid bod host
-  return bodT
 compileFullCore book fid (Ctr cid fds) host = do
   ctrNam <- fresh "ctr"
   let arity = length fds
@@ -381,42 +362,6 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) = do
   emit $ "set(" ++ dupNam ++ " + 2, " ++ valNam ++ ");"
   emit $ dp0Nam ++ " = term_new(DP0, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   emit $ dp1Nam ++ " = term_new(DP1, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
-  tabDec
-  emit $ "}"
-  bind dp0 dp0Nam
-  bind dp1 dp1Nam
-  compileFastCore book fid bod
-compileFastCore book fid (Suh lab tm0 tm1) = do
-  supNam <- fresh "sup"
-  emit $ "Loc " ++ supNam ++ " = alloc_node(2);"
-  tm0T <- compileFastCore book fid tm0
-  tm1T <- compileFastCore book fid tm1
-  emit $ "set(" ++ supNam ++ " + 0, " ++ tm0T ++ ");"
-  emit $ "set(" ++ supNam ++ " + 1, " ++ tm1T ++ ");"
-  return $ "term_new(SUH, " ++ show lab ++ ", " ++ supNam ++ ")"
-compileFastCore book fid (Duh lab dp0 dp1 val bod) = do
-  dupNam <- fresh "dup"
-  dp0Nam <- fresh "dp0"
-  dp1Nam <- fresh "dp1"
-  valNam <- fresh "val"
-  valT   <- compileFastCore book fid val
-  emit $ "Term " ++ valNam ++ " = (" ++ valT ++ ");"
-  emit $ "Term " ++ dp0Nam ++ ";"
-  emit $ "Term " ++ dp1Nam ++ ";"
-  emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
-  tabInc
-  emit $ "itrs += 1;"
-  emit $ dp0Nam ++ " = " ++ valNam ++ ";"
-  emit $ dp1Nam ++ " = " ++ valNam ++ ";"
-  tabDec
-  emit $ "} else {"
-  tabInc
-  emit $ "Loc " ++ dupNam ++ " = alloc_node(3);"
-  emit $ "set(" ++ dupNam ++ " + 0, term_new(SUB, 0, 0));"
-  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
-  emit $ "set(" ++ dupNam ++ " + 2, " ++ valNam ++ ");"
-  emit $ dp0Nam ++ " = term_new(DH0, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
-  emit $ dp1Nam ++ " = term_new(DH1, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   tabDec
   emit $ "}"
   bind dp0 dp0Nam

@@ -55,12 +55,6 @@ injectCore book (Sup lab tm0 tm1) loc = do
   injectCore book tm1 (sup + 1)
   lift $ set loc (termNew _SUP_ lab sup)
 
-injectCore book (Suh lab tm0 tm1) loc = do
-  suh <- lift $ allocNode 2
-  injectCore book tm0 (suh + 0)
-  injectCore book tm1 (suh + 1)
-  lift $ set loc (termNew _SUH_ lab suh)
-
 injectCore book (Dup lab dp0 dp1 val bod) loc = do
   dup <- lift $ allocNode 3
   lift $ set (dup + 0) (termNew _SUB_ 0 0)
@@ -70,17 +64,6 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
            $ Map.insert dp1 (termNew _DP1_ lab dup) (args s) 
     }
   injectCore book val (dup + 2)
-  injectCore book bod loc
-
-injectCore book (Duh lab dh0 dh1 val bod) loc = do
-  duh <- lift $ allocNode 3
-  lift $ set (duh + 0) (termNew _SUB_ 0 0)
-  lift $ set (duh + 1) (termNew _SUB_ 0 0)
-  modify $ \s -> s 
-    { args = Map.insert dh0 (termNew _DH0_ lab duh) 
-           $ Map.insert dh1 (termNew _DH1_ lab duh) (args s) 
-    }
-  injectCore book val (duh + 2)
   injectCore book bod loc
 
 injectCore book (Ref nam fid arg) loc = do

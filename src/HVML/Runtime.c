@@ -19,7 +19,6 @@ typedef _Atomic(Term) ATerm;
 // Runtime Types
 // -------------
 
-
 // Global State Type
 typedef struct {
   Term*  sbuf; // reduction stack buffer
@@ -46,22 +45,19 @@ static State HVM = {
 
 #define DP0 0x00
 #define DP1 0x01
-#define DH0 0x02
-#define DH1 0x03
-#define VAR 0x04
-#define SUB 0x05
-#define REF 0x06
-#define LET 0x07
-#define APP 0x08
-#define MAT 0x09
-#define OPX 0x0A
-#define OPY 0x0B
-#define ERA 0x0C
-#define LAM 0x0D
-#define SUP 0x0E
-#define SUH 0x0F
-#define CTR 0x10
-#define W32 0x11
+#define VAR 0x02
+#define SUB 0x03
+#define REF 0x04
+#define LET 0x05
+#define APP 0x06
+#define MAT 0x07
+#define OPX 0x08
+#define OPY 0x09
+#define ERA 0x0A
+#define LAM 0x0B
+#define SUP 0x0C
+#define CTR 0x0D
+#define W32 0x0E
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -131,8 +127,6 @@ Loc term_key(Term term) {
   switch (term_tag(term)) {
     case DP0: return term_loc(term) + 0;
     case DP1: return term_loc(term) + 1;
-    case DH0: return term_loc(term) + 0;
-    case DH1: return term_loc(term) + 1;
     case VAR: return term_loc(term) + 0;
     default:  return 0;
   }
@@ -196,8 +190,6 @@ void print_tag(Tag tag) {
     case VAR: printf("VAR"); break;
     case DP0: printf("DP0"); break;
     case DP1: printf("DP1"); break;
-    case DH0: printf("DH0"); break;
-    case DH1: printf("DH1"); break;
     case APP: printf("APP"); break;
     case ERA: printf("ERA"); break;
     case LAM: printf("LAM"); break;
@@ -209,7 +201,6 @@ void print_tag(Tag tag) {
     case W32: printf("W32"); break;
     case OPX: printf("OPX"); break;
     case OPY: printf("OPY"); break;
-    case SUH: printf("SUH"); break;
     default : printf("???"); break;
   }
 }
@@ -305,159 +296,6 @@ Term reduce_app_sup(Term app, Term sup) {
   set(su0 + 0, term_new(APP, 0, ap0));
   set(su0 + 1, term_new(APP, 0, ap1));
   return term_new(SUP, sup_lab, su0);
-}
-
-// ,----------------,---------------,
-// :    v      v    :    v      v   :
-// :    |      |    :    |      |   :
-// :   /#\    /_\   :   /#\    /_\  :
-// :   | |    | |   :   | |    | |  :
-// :  /_\y   /#\a   :  /_\y   /#\b  :
-// :  | |    | |↑   :  | |    | |↑  :
-// :  a b    x y    :  a b    x y   :
-// :  ↑      b      :    ↑    a     :
-// :----------------|---------------|
-// :   v       v    :   v       v   :
-// :   |       |    :   |       |   :
-// :  /#\     /_\   :  /#\     /_\  :
-// :  | |     | |   :  | |     | |  :
-// : x /_\    a/#\  : x /_\   /#\b  :
-// :   | |    ↑| |  :   | |   | |↑  :
-// :   a b     x y  :   a b   x y   :
-// :   ↑         b  :     ↑     a   :
-// '----------------'---------------'
-  
-
-// ,---------------,
-// :            v  :
-// :            |  :
-// :    v      /_\ :
-// :    |      | | :
-// :   /#\    /#\a :
-// :   | |    | |  :
-// :  /_\y   /_\y  :
-// :  | |    | |   :
-// :  a b    * b   :
-// :  ↑            :
-// '---------------'
-
-//A:
-//- in  = 0
-//- up  = 0
-//- put = 1 = !in
-//- mof = 0 = up
-//- ret = 0 = in
-
-//B:
-//- in  = 1
-//- up  = 0
-//- put = 0 = !in
-//- mof = 0 = up
-//- ret = 1 = in
-
-//C:
-//- in  = 0
-//- up  = 1
-//- put = 1 = !in
-//- mof = 1 = up
-//- ret = 0 = in
-
-//D:
-//- in  = 1
-//- up  = 1
-//- put = 0 = !in
-//- mof = 1 = up
-//- ret = 1 = in
-
-// %L{y0 y1} = v 
-// %L{x0 x1} = y0
-// --------------- DUH_DUH
-// %L{x0 x1} = v
-// %L{y0 y1} = y0 
-// x1 <- y0
-Term reduce_duh_duh(Term bot, Term top) {
-  inc_itr();
-  Loc  bot_loc = term_loc(bot);
-  Lab  bot_lab = term_lab(bot);
-  Loc  top_loc = term_loc(top);
-  Loc  top_lab = term_lab(top);
-  Term bot_val = got(bot_loc + 2);
-  Term top_val = got(top_loc + 2);
-  Tag  in_A    = term_tag(bot) == DH0 ? 0 : 1;
-  Tag  up_A    = term_tag(bot_val) == DH0 ? 0 : 1;
-  Loc  new_duh = alloc_node(3);
-
-  //set(new_duh + 0, term_new(SUB, 0, 0));
-  //set(new_duh + 1, term_new(SUB, 0, 0));
-  //set(new_duh + 2, top_val);
-  //set(top_loc + up_A, term_new(SUB, 0, 0));
-  //set(top_loc + 2   , term_new(DH0+in_B, bot_lab, new_duh));
-  //set(bot_loc + in_B, term_new(DH0+up_A, bot_lab, top_loc));
-  //return term_new(DH0+in_A, bot_lab, new_duh);
-
-  //u32 PUT = in_A;
-  //u32 MOF = up_A;
-  //u32 RET = in_B;
-
-  //u32 PUT = in_A;
-  //u32 MOF = up_A;
-  //u32 RET = in_B;
-  //set(new_duh + 0, term_new(SUB, 0, 0));
-  //set(new_duh + 1, term_new(SUB, 0, 0));
-  //set(new_duh + 2, top_val);
-  //set(top_loc + MOF, term_new(SUB, 0, 0));
-  //set(top_loc + 2  , term_new(DH0+PUT, bot_lab, new_duh));
-  //set(bot_loc + PUT, term_new(DH0+MOF, bot_lab, top_loc));
-  //return term_new(DH0+RET, bot_lab, new_duh);
-
-  u32 PUT = in_A;
-  set(new_duh + 0, term_new(SUB, 0, 0));
-  set(new_duh + 1, term_new(SUB, 0, 0));
-  set(new_duh + 2, top_val);
-  set(top_loc + up_A, term_new(SUB, 0, 0));
-  set(top_loc + 2   , term_new(DH0+PUT, bot_lab, new_duh));
-  return term_new(DH0+!PUT, bot_lab, new_duh);
-
-
-  // CORRECT
-  //u32 PUT = in_A;
-  //set(new_duh + 0, term_new(SUB, 0, 0));
-  //set(new_duh + 1, term_new(SUB, 0, 0));
-  //set(new_duh + 2, top_val);
-  //set(top_loc + up_A, term_new(SUB, 0, 0));
-  //set(top_loc + 2   , term_new(DH0+PUT, bot_lab, new_duh));
-  //set(bot_loc + in_B, term_new(DH0+up_A, bot_lab, top_loc));
-  //return term_new(DH0+!PUT, bot_lab, new_duh);
-
-
-}
-
-// (%L{a b} c)
-// ----------------- APP-SUP
-// ! %L{x0 x1} = c
-// %L{(a x0) (b x1)}
-Term reduce_app_suh(Term app, Term sup) {
-  inc_itr();
-  Loc app_loc = term_loc(app);
-  Loc sup_loc = term_loc(sup);
-  Lab sup_lab = term_lab(sup);
-  Term arg    = got(app_loc + 1);
-  Term tm0    = got(sup_loc + 0);
-  Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(3);
-  Loc su0     = alloc_node(2);
-  Loc ap0     = alloc_node(2);
-  Loc ap1     = alloc_node(2);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, term_new(SUB, 0, 0));
-  set(du0 + 2, arg);
-  set(ap0 + 0, tm0);
-  set(ap0 + 1, term_new(DH0, sup_lab, du0));
-  set(ap1 + 0, tm1);
-  set(ap1 + 1, term_new(DH1, sup_lab, du0));
-  set(su0 + 0, term_new(APP, 0, ap0));
-  set(su0 + 1, term_new(APP, 0, ap1));
-  return term_new(SUH, sup_lab, su0);
 }
 
 // (#{x y z ...} a)
@@ -567,40 +405,6 @@ Term reduce_dup_sup(Term dup, Term sup) {
   }
 }
 
-// ! &L{x y} = %R{a b}
-// ------------------- DUP-SUH
-// x <- %R{a0 b0} 
-// y <- %R{a1 b1}
-// ! &L{a0 a1} = a
-// ! &L{b0 b1} = b
-Term reduce_dup_suh(Term dup, Term sup) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  Lab sup_lab = term_lab(sup);
-  Loc sup_loc = term_loc(sup);
-  Loc du0 = alloc_node(3);
-  Loc du1 = alloc_node(3);
-  Loc su0 = alloc_node(2);
-  Loc su1 = alloc_node(2);
-  Term tm0 = got(sup_loc + 0);
-  Term tm1 = got(sup_loc + 1);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, term_new(SUB, 0, 0));
-  set(du0 + 2, tm0);
-  set(du1 + 0, term_new(SUB, 0, 0));
-  set(du1 + 1, term_new(SUB, 0, 0));
-  set(du1 + 2, tm1);
-  set(su0 + 0, term_new(DH0, dup_lab, du0));
-  set(su0 + 1, term_new(DH0, dup_lab, du1));
-  set(su1 + 0, term_new(DH1, dup_lab, du0));
-  set(su1 + 1, term_new(DH1, dup_lab, du1));
-  set(dup_loc + 0, term_new(SUH, sup_lab, su0));
-  set(dup_loc + 1, term_new(SUH, sup_lab, su1));
-  return got(dup_loc + dup_num);
-}
-
 // ! &L{x y} = #{a b c ...}
 // ------------------------ DUP-CTR
 // ! &L{a0 a1} = a
@@ -698,40 +502,6 @@ Term reduce_mat_sup(Term mat, Term sup) {
   return term_new(SUP, sup_lab, sup0);
 }
 
-// ~ %L{x y} {K0 K1 K2 ...}
-// ------------------------ MAT-SUH
-// ! %L{k0} = K0
-// ! %L{k1} = K1
-// ! %L{k2} = K2
-// ...
-// %L{ ~ x {K0 K1 K2 ...}
-//     ~ y {K0 K1 K2 ...} }
-Term reduce_mat_suh(Term mat, Term sup) {
-  inc_itr();
-  Loc mat_loc = term_loc(mat);
-  Loc sup_loc = term_loc(sup);
-  Lab sup_lab = term_lab(sup);
-  Term tm0    = got(sup_loc + 0);
-  Term tm1    = got(sup_loc + 1);
-  Lab mat_len = term_lab(mat);
-  Loc sup0    = alloc_node(2);
-  Loc mat0    = alloc_node(1 + mat_len);
-  Loc mat1    = alloc_node(1 + mat_len);
-  set(mat0 + 0, tm0);
-  set(mat1 + 0, tm1);
-  for (u64 i = 0; i < mat_len; i++) {
-    Loc du0 = alloc_node(3);
-    set(du0 + 0, term_new(SUB, 0, 0));
-    set(du0 + 1, term_new(SUB, 0, 0));
-    set(du0 + 2, got(mat_loc + 1 + i));
-    set(mat0 + 1 + i, term_new(DH0, sup_lab, du0));
-    set(mat1 + 1 + i, term_new(DH1, sup_lab, du0));
-  }
-  set(sup0 + 0, term_new(MAT, mat_len, mat0));
-  set(sup0 + 1, term_new(MAT, mat_len, mat1));
-  return term_new(SUH, sup_lab, sup0);
-}
-
 // ~ #N{x y z ...} {K0 K1 K2 ...} 
 // ------------------------------ MAT-CTR
 // (((KN x) y) z ...)
@@ -815,34 +585,6 @@ Term reduce_opx_sup(Term opx, Term sup) {
   return term_new(SUP, sup_lab, su0);
 }
 
-// <op(%L{x0 x1} y)
-// ------------------------- OPX-SUH
-// ! %L{y0} = y
-// %L{<op(x0 y0) <op(x1 y0)}
-Term reduce_opx_suh(Term opx, Term sup) {
-  inc_itr();
-  Loc opx_loc = term_loc(opx);
-  Loc sup_loc = term_loc(sup);
-  Lab sup_lab = term_lab(sup);
-  Term nmy    = got(opx_loc + 1);
-  Term tm0    = got(sup_loc + 0);
-  Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(3);
-  Loc op0     = alloc_node(2);
-  Loc op1     = alloc_node(2);
-  Loc su0     = alloc_node(2);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, term_new(SUB, 0, 0));
-  set(du0 + 2, nmy);
-  set(op0 + 0, tm0);
-  set(op0 + 1, term_new(DH0, sup_lab, du0));
-  set(op1 + 0, tm1);
-  set(op1 + 1, term_new(DH1, sup_lab, du0));
-  set(su0 + 0, term_new(OPX, term_lab(opx), op0));
-  set(su0 + 1, term_new(OPX, term_lab(opx), op1));
-  return term_new(SUH, sup_lab, su0);
-}
-
 // <op(#{x0 x1 x2...} y)
 // ---------------------- OPX-CTR
 // ⊥
@@ -901,29 +643,6 @@ Term reduce_opy_sup(Term opy, Term sup) {
   return term_new(SUP, sup_lab, su0);
 }
 
-// >op(a %L{x y})
-// --------------------- OPY-SUH
-// %L{>op(a x) >op(a y)}
-Term reduce_opy_suh(Term opy, Term sup) {
-  inc_itr();
-  Loc opy_loc = term_loc(opy);
-  Loc sup_loc = term_loc(sup);
-  Lab sup_lab = term_lab(sup);
-  Term nmx    = got(opy_loc + 0);
-  Term tm0    = got(sup_loc + 0);
-  Term tm1    = got(sup_loc + 1);
-  Loc op0     = alloc_node(2);
-  Loc op1     = alloc_node(2);
-  Loc su0     = alloc_node(2);
-  set(op0 + 0, nmx);
-  set(op0 + 1, tm0);
-  set(op1 + 0, nmx);
-  set(op1 + 1, tm1);
-  set(su0 + 0, term_new(OPY, term_lab(opy), op0));
-  set(su0 + 1, term_new(OPY, term_lab(opy), op1));
-  return term_new(SUH, sup_lab, su0);
-}
-
 // >op(#{x y z ...} b)
 // ---------------------- OPY-CTR
 // ⊥
@@ -961,177 +680,6 @@ Term reduce_opy_w32(Term opy, Term w32) {
     default: result = 0;
   }
   return term_new(W32, 0, result);
-}
-
-// ! %L{x y} = *
-// ------------- DUP-ERA
-// x <- *
-// y <- *
-Term reduce_duh_era(Term dup, Term era) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  set(dup_loc + 0, era);
-  set(dup_loc + 1, era);
-  return got(dup_loc + dup_num);
-}
-
-// ! %L{r s} = λx(f)
-// ----------------- DUP-LAM
-// ! %L{f0 f1} = f
-// r <- λx0(f0)
-// s <- λx1(f1)
-// x <- %L{x0 x1}
-Term reduce_duh_lam(Term dup, Term lam) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  Loc lam_loc = term_loc(lam);
-  Term bod    = got(lam_loc + 1);
-  Loc du0     = alloc_node(3);
-  Loc lm0     = alloc_node(2);
-  Loc lm1     = alloc_node(2);
-  Loc su0     = alloc_node(2);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, term_new(SUB, 0, 0));
-  set(du0 + 2, bod);
-  set(lm0 + 0, term_new(SUB, 0, 0));
-  set(lm0 + 1, term_new(DH0, dup_lab, du0));
-  set(lm1 + 0, term_new(SUB, 0, 0));
-  set(lm1 + 1, term_new(DH1, dup_lab, du0));
-  set(su0 + 0, term_new(VAR, 0, lm0));
-  set(su0 + 1, term_new(VAR, 0, lm1));
-  set(dup_loc + 0, term_new(LAM, 0, lm0));
-  set(dup_loc + 1, term_new(LAM, 0, lm1));
-  set(lam_loc + 0, term_new(SUH, dup_lab, su0));
-  return got(dup_loc + dup_num);
-}
-
-// ! %L{x y} = &R{a b}
-// ------------------- DUP-SUP
-// x <- &R{a0 b0} 
-// y <- &R{a1 b1}
-// ! %L{a0 a1} = a
-// ! %L{b0 b1} = b
-Term reduce_duh_sup(Term dup, Term sup) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  Lab sup_lab = term_lab(sup);
-  Loc sup_loc = term_loc(sup);
-  Loc du0 = alloc_node(3);
-  Loc du1 = alloc_node(3);
-  Loc su0 = alloc_node(2);
-  Loc su1 = alloc_node(2);
-  Term tm0 = got(sup_loc + 0);
-  Term tm1 = got(sup_loc + 1);
-  set(du0 + 0, term_new(SUB, 0, 0));
-  set(du0 + 1, term_new(SUB, 0, 0));
-  set(du0 + 2, tm0);
-  set(du1 + 0, term_new(SUB, 0, 0));
-  set(du1 + 1, term_new(SUB, 0, 0));
-  set(du1 + 2, tm1);
-  set(su0 + 0, term_new(DH0, dup_lab, du0));
-  set(su0 + 1, term_new(DH0, dup_lab, du1));
-  set(su1 + 0, term_new(DH1, dup_lab, du0));
-  set(su1 + 1, term_new(DH1, dup_lab, du1));
-  set(dup_loc + 0, term_new(SUP, sup_lab, su0));
-  set(dup_loc + 1, term_new(SUP, sup_lab, su1));
-  return got(dup_loc + dup_num);
-}
-
-// ! %L{x y} = %R{a b}
-// ------------------- DUP-SUP
-// if L == R:
-//   x <- a
-//   y <- b
-// else:
-//   x <- %R{a0 b0} 
-//   y <- %R{a1 b1}
-//   ! %L{a0 a1} = a
-//   ! %L{b0 b1} = b
-Term reduce_duh_suh(Term dup, Term sup) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  Lab sup_lab = term_lab(sup);
-  Loc sup_loc = term_loc(sup);
-  if (dup_lab == sup_lab) {
-    Term tm0 = got(sup_loc + 0);
-    Term tm1 = got(sup_loc + 1);
-    set(dup_loc + 0, tm0);
-    set(dup_loc + 1, tm1);
-    return got(dup_loc + dup_num);
-  } else {
-    Loc du0 = alloc_node(3);
-    Loc du1 = alloc_node(3);
-    Loc su0 = alloc_node(2);
-    Loc su1 = alloc_node(2);
-    Term tm0 = got(sup_loc + 0);
-    Term tm1 = got(sup_loc + 1);
-    set(du0 + 0, term_new(SUB, 0, 0));
-    set(du0 + 1, term_new(SUB, 0, 0));
-    set(du0 + 2, tm0);
-    set(du1 + 0, term_new(SUB, 0, 0));
-    set(du1 + 1, term_new(SUB, 0, 0));
-    set(du1 + 2, tm1);
-    set(su0 + 0, term_new(DH0, dup_lab, du0));
-    set(su0 + 1, term_new(DH0, dup_lab, du1));
-    set(su1 + 0, term_new(DH1, dup_lab, du0));
-    set(su1 + 1, term_new(DH1, dup_lab, du1));
-    set(dup_loc + 0, term_new(SUH, sup_lab, su0));
-    set(dup_loc + 1, term_new(SUH, sup_lab, su1));
-    return got(dup_loc + dup_num);
-  }
-}
-
-// ! %L{x y} = #{a b c ...}
-// ------------------------ DUH-CTR
-// ! %L{a0 a1} = a
-// ! %L{b0 b1} = b
-// ! %L{c0 c1} = c
-// ...
-// %L{#{a0 b0 c0 ...} #{a1 b1 c1 ...}}
-Term reduce_duh_ctr(Term dup, Term ctr) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  Loc ctr_loc = term_loc(ctr);
-  Lab ctr_lab = term_lab(ctr);
-  u64 ctr_ari = u12v2_y(ctr_lab);
-  Loc ctr0    = alloc_node(ctr_ari);
-  Loc ctr1    = alloc_node(ctr_ari);
-  for (u64 i = 0; i < ctr_ari; i++) {
-    Loc du0 = alloc_node(3);
-    set(du0 + 0, term_new(SUB, 0, 0));
-    set(du0 + 1, term_new(SUB, 0, 0));
-    set(du0 + 2, got(ctr_loc + i));
-    set(ctr0 + i, term_new(DH0, dup_lab, du0));
-    set(ctr1 + i, term_new(DH1, dup_lab, du0));
-  }
-  Loc sup = alloc_node(2);
-  set(sup + 0, term_new(CTR, ctr_lab, ctr0));
-  set(sup + 1, term_new(CTR, ctr_lab, ctr1));
-  set(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
-  set(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
-  return got(dup_loc + dup_num);
-}
-
-// ! %L{x y} = 123
-// --------------- DUH-W32
-// x <- 123
-// y <- 123
-Term reduce_duh_w32(Term dup, Term w32) {
-  inc_itr();
-  Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DH0 ? 0 : 1;
-  set(dup_loc + 0, w32);
-  set(dup_loc + 1, w32);
-  return got(dup_loc + dup_num);
 }
 
 Term reduce(Term term) {
@@ -1175,31 +723,6 @@ Term reduce(Term term) {
         if (term_tag(sub) == SUB) {
           HVM.sbuf[(*spos)++] = next;
           next = got(loc + 2);
-          continue;
-        } else {
-          next = sub;
-          continue;
-        }
-      }
-      case DH0:
-      case DH1: {
-        Loc key = term_key(next);
-        Term sub = got(key);
-        if (term_tag(sub) == SUB) {
-          Term prev = next;
-          next      = got(loc + 2);
-          Tag  ntag = term_tag(next);
-          Lab  nlab = term_lab(next);
-          Loc  nloc = term_loc(next);
-          if ((ntag == DH0 || ntag == DH1) && lab == nlab) {
-            Loc  nkey = term_key(next);
-            Term nsub = got(nkey);
-            if (term_tag(nsub) == SUB) {
-              next = reduce_duh_duh(prev, next);
-              continue;
-            }
-          }
-          HVM.sbuf[(*spos)++] = prev;
           continue;
         } else {
           next = sub;
@@ -1255,7 +778,6 @@ Term reduce(Term term) {
                 case SUP: next = reduce_app_sup(prev, next); continue;
                 case CTR: next = reduce_app_ctr(prev, next); continue;
                 case W32: next = reduce_app_w32(prev, next); continue;
-                case SUH: next = reduce_app_suh(prev, next); continue;
                 default: break;
               }
               break;
@@ -1268,20 +790,6 @@ Term reduce(Term term) {
                 case SUP: next = reduce_dup_sup(prev, next); continue;
                 case CTR: next = reduce_dup_ctr(prev, next); continue;
                 case W32: next = reduce_dup_w32(prev, next); continue;
-                case SUH: next = reduce_dup_suh(prev, next); continue;
-                default: break;
-              }
-              break;
-            }
-            case DH0:
-            case DH1: {
-              switch (tag) {
-                case ERA: next = reduce_duh_era(prev, next); continue;
-                case LAM: next = reduce_duh_lam(prev, next); continue;
-                case SUP: next = reduce_duh_sup(prev, next); continue;
-                case CTR: next = reduce_duh_ctr(prev, next); continue;
-                case W32: next = reduce_duh_w32(prev, next); continue;
-                case SUH: next = reduce_duh_suh(prev, next); continue;
                 default: break;
               }
               break;
@@ -1293,7 +801,6 @@ Term reduce(Term term) {
                 case SUP: next = reduce_mat_sup(prev, next); continue;
                 case CTR: next = reduce_mat_ctr(prev, next); continue;
                 case W32: next = reduce_mat_w32(prev, next); continue;
-                case SUH: next = reduce_mat_suh(prev, next); continue;
                 default: break;
               }
             }
@@ -1304,7 +811,6 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opx_sup(prev, next); continue;
                 case CTR: next = reduce_opx_ctr(prev, next); continue;
                 case W32: next = reduce_opx_w32(prev, next); continue;
-                case SUH: next = reduce_opx_suh(prev, next); continue;
                 default: break;
               }
             }
@@ -1315,7 +821,6 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opy_sup(prev, next); continue;
                 case CTR: next = reduce_opy_ctr(prev, next); continue;
                 case W32: next = reduce_opy_w32(prev, next); continue;
-                case SUH: next = reduce_opy_suh(prev, next); continue;
                 default: break;
               }
             } 
@@ -1376,24 +881,8 @@ Term normal(Term term) {
       set(loc + 1, tm1);
       return wnf;
     }
-    case SUH: {
-      Term tm0 = got(loc + 0);
-      Term tm1 = got(loc + 1);
-      tm0 = normal(tm0);
-      tm1 = normal(tm1);
-      set(loc + 0, tm0);
-      set(loc + 1, tm1);
-      return wnf;
-    }
     case DP0:
     case DP1: {
-      Term val = got(loc + 2);
-      val = normal(val);
-      set(loc + 2, val);
-      return wnf;
-    }
-    case DH0:
-    case DH1: {
       Term val = got(loc + 2);
       val = normal(val);
       set(loc + 2, val);
