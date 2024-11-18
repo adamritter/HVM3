@@ -144,7 +144,8 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       let lab = termLab term
       let cid = u12v2X lab
       let ari = u12v2Y lab
-      fds0 <- mapM (collapseDupsAt state reduceAt book) [loc + i | i <- [0..ari-1]]
+      let ars = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]
+      fds0 <- mapM (collapseDupsAt state reduceAt book) ars
       return $ Ctr cid fds0
 
     MAT -> do
