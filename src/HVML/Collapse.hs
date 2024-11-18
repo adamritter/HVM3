@@ -203,7 +203,6 @@ genNameFromIndex n = go (n + 1) "" where
 
 collapseSups :: Book -> Core -> Collapse Core
 collapseSups book core = case core of
-  Era -> return Era
   Var name -> return $ Var name
   Ref name fid args -> do
     args <- mapM (collapseSups book) args
@@ -215,10 +214,6 @@ collapseSups book core = case core of
     fun <- collapseSups book fun
     arg <- collapseSups book arg
     return $ App fun arg
-  Sup lab tm0 tm1 -> do
-    let tm0' = collapseSups book tm0
-    let tm1' = collapseSups book tm1
-    CSup lab tm0' tm1'
   Dup lab x y val body -> do
     val <- collapseSups book val
     body <- collapseSups book body
@@ -241,6 +236,12 @@ collapseSups book core = case core of
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Let mode name val body
+  Era -> do
+    CEra
+  Sup lab tm0 tm1 -> do
+    let tm0' = collapseSups book tm0
+    let tm1' = collapseSups book tm1
+    CSup lab tm0' tm1'
 
 -- Flattener
 -- ---------
