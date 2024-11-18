@@ -19,6 +19,7 @@ executable hvml
     other-modules:    HVML.Type
                     , HVML.Compile
                     , HVML.Extract
+                    , HVML.Collapse
                     , HVML.Inject
                     , HVML.Reduce
                     , HVML.Parse
@@ -32,6 +33,7 @@ executable hvml
                       hs-highlight == 1.0.3,
                       ansi-terminal == 1.1.1,
                       transformers == 0.6.1.1,
+                      list-t == 1.0.5.7,
                       process,
                       libffi,
                       unix,

@@ -140,40 +140,45 @@ reduceAt book host = do
 
 normalAtWith :: (Book -> Term -> HVM Term) -> Book -> Loc -> HVM Term
 normalAtWith reduceAt book host = do
-  whnf <- reduceAt book host
-  let tag = termTag whnf
-  let lab = termLab whnf
-  let loc = termLoc whnf
-  case tagT tag of
-    APP -> do
-      normalAtWith reduceAt book (loc + 0)
-      normalAtWith reduceAt book (loc + 1)
-      return whnf
-    LAM -> do
-      normalAtWith reduceAt book (loc + 1)
-      return whnf
-    SUP -> do
-      normalAtWith reduceAt book (loc + 0)
-      normalAtWith reduceAt book (loc + 1)
-      return whnf
-    DP0 -> do
-      normalAtWith reduceAt book (loc + 2)
-      return whnf
-    DP1 -> do
-      normalAtWith reduceAt book (loc + 2)
-      return whnf
-    CTR -> do
-      let ari = u12v2Y lab
-      let ars = (if ari == 0 then [] else [0 .. ari - 1]) :: [Word64]
-      mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
-      return whnf
-    MAT -> do
-      let ari = lab
-      let ars = [0 .. ari] :: [Word64]
-      mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
-      return whnf
-    _ -> do
-      return whnf
+  term <- got host
+  if termBit term == 1 then do
+    return term
+  else do
+    whnf <- reduceAt book host
+    set host $ termSetBit whnf
+    let tag = termTag whnf
+    let lab = termLab whnf
+    let loc = termLoc whnf
+    case tagT tag of
+      APP -> do
+        normalAtWith reduceAt book (loc + 0)
+        normalAtWith reduceAt book (loc + 1)
+        return whnf
+      LAM -> do
+        normalAtWith reduceAt book (loc + 1)
+        return whnf
+      SUP -> do
+        normalAtWith reduceAt book (loc + 0)
+        normalAtWith reduceAt book (loc + 1)
+        return whnf
+      DP0 -> do
+        normalAtWith reduceAt book (loc + 2)
+        return whnf
+      DP1 -> do
+        normalAtWith reduceAt book (loc + 2)
+        return whnf
+      CTR -> do
+        let ari = u12v2Y lab
+        let ars = (if ari == 0 then [] else [0 .. ari - 1]) :: [Word64]
+        mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+        return whnf
+      MAT -> do
+        let ari = lab
+        let ars = [0 .. ari] :: [Word64]
+        mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+        return whnf
+      _ -> do
+        return whnf
 
 normalAt :: Book -> Loc -> HVM Term
 normalAt = normalAtWith reduceAt

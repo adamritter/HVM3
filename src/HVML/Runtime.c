@@ -112,7 +112,11 @@ Term term_new(Tag tag, Lab lab, Loc loc) {
 }
 
 Tag term_tag(Term x) {
-  return x & 0xFF;
+  return x & 0x7F;
+}
+
+Tag term_bit(Term x) {
+  return (x >> 7) & 1;
 }
 
 Lab term_lab(Term x) {
@@ -130,6 +134,10 @@ Loc term_key(Term term) {
     case VAR: return term_loc(term) + 0;
     default:  return 0;
   }
+}
+
+Term term_set_bit(Term term) {
+  return term | (1ULL << 7);
 }
 
 // u12v2

@@ -3,6 +3,7 @@
 
 module HVML.Parse where
 
+import Control.Monad.State
 import Data.List
 import Data.Maybe
 import Data.Word
@@ -217,26 +218,10 @@ parseOper op = do
   return $ Op2 op nm0 nm1
 
 parseName :: ParserM String
-parseName = skip >> many (alphaNum <|> char '_')
+parseName = skip >> many (alphaNum <|> char '_' <|> char '$')
 
 parseName1 :: ParserM String
 parseName1 = skip >> many1 (alphaNum <|> char '_')
-
--- parseDef :: ParserM (String, ([String], Core))
--- parseDef = do
-  -- try $ do
-    -- skip
-    -- consume "@"
-  -- name <- parseName
-  -- args <- many $ do
-    -- closeWith "="
-    -- name <- parseName1
-    -- return name
-  -- skip
-  -- consume "="
-  -- core <- parseCore
-  -- trace ("PARSED: " ++ name ++ " " ++ show args ++ " = " ++ coreToString core) $ return ()
-  -- return (name, (args, core))
 
 -- TODO: update the syntax of definitions, from '@foo x y z = body' to '@foo(x,y,z) = body'. update the trace too
 parseDef :: ParserM (String, ([String], Core))
@@ -349,23 +334,88 @@ createBook :: [(String, ([String], Core))] -> MS.Map String Word64 -> MS.Map Str
 createBook defs ctrToCid ctrToAri =
   let nameToId' = MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (nameToId' MS.! name, (args, decorateFnIds nameToId' core))) defs
+      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (nameToId' MS.! name, (args, lexify (setRefIds nameToId' core)))) defs
   in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid
 
-decorateFnIds :: MS.Map String Word64 -> Core -> Core
-decorateFnIds fids term = case term of
+-- Adds the function id to Ref constructors
+setRefIds :: MS.Map String Word64 -> Core -> Core
+setRefIds fids term = case term of
   Var nam       -> Var nam
-  Ref nam _ arg -> Ref nam (fids MS.! nam) (map (decorateFnIds fids) arg)
-  Let m x v b   -> Let m x (decorateFnIds fids v) (decorateFnIds fids b)
-  Lam x bod     -> Lam x (decorateFnIds fids bod)
-  App f x       -> App (decorateFnIds fids f) (decorateFnIds fids x)
-  Sup l x y     -> Sup l (decorateFnIds fids x) (decorateFnIds fids y)
-  Dup l x y v b -> Dup l x y (decorateFnIds fids v) (decorateFnIds fids b)
-  Ctr cid fds   -> Ctr cid (map (decorateFnIds fids) fds)
-  Mat x css     -> Mat (decorateFnIds fids x) (map (\ (ar,cs) -> (ar, decorateFnIds fids cs)) css)
-  Op2 op x y    -> Op2 op (decorateFnIds fids x) (decorateFnIds fids y)
+  Ref nam _ arg -> Ref nam (fids MS.! nam) (map (setRefIds fids) arg)
+  Let m x v b   -> Let m x (setRefIds fids v) (setRefIds fids b)
+  Lam x bod     -> Lam x (setRefIds fids bod)
+  App f x       -> App (setRefIds fids f) (setRefIds fids x)
+  Sup l x y     -> Sup l (setRefIds fids x) (setRefIds fids y)
+  Dup l x y v b -> Dup l x y (setRefIds fids v) (setRefIds fids b)
+  Ctr cid fds   -> Ctr cid (map (setRefIds fids) fds)
+  Mat x css     -> Mat (setRefIds fids x) (map (\ (ar,cs) -> (ar, setRefIds fids cs)) css)
+  Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
   U32 n         -> U32 n
   Era           -> Era
+
+-- Gives unique names to lexically scoped vars, unless they start with '$'.
+-- Example: `λx λt (t λx(x) x)` will read as `λx0 λt1 (t1 λx2(x2) x0)`.
+lexify :: Core -> Core
+lexify term = evalState (go term MS.empty) 0 where
+  fresh :: String -> State Int String
+  fresh nam@('$':_) = return $ nam
+  fresh nam         = do i <- get; put (i+1); return $ nam++"$"++show i
+
+  extend :: String -> String -> MS.Map String String -> State Int (MS.Map String String)
+  extend old@('$':_) new ctx = return $ ctx
+  extend old         new ctx = return $ MS.insert old new ctx
+
+  go :: Core -> MS.Map String String -> State Int Core
+  go term ctx = case term of
+    Var nam -> 
+      return $ Var (MS.findWithDefault nam nam ctx)
+    Ref nam fid arg -> do
+      arg <- mapM (\x -> go x ctx) arg
+      return $ Ref nam fid arg
+    Let mod nam val bod -> do
+      val  <- go val ctx
+      nam' <- fresh nam
+      ctx  <- extend nam nam' ctx
+      bod  <- go bod ctx
+      return $ Let mod nam' val bod
+    Lam nam bod -> do
+      nam' <- fresh nam
+      ctx  <- extend nam nam' ctx
+      bod  <- go bod ctx
+      return $ Lam nam' bod
+    App fun arg -> do
+      fun <- go fun ctx
+      arg <- go arg ctx
+      return $ App fun arg
+    Sup lab tm0 tm1 -> do
+      tm0 <- go tm0 ctx
+      tm1 <- go tm1 ctx
+      return $ Sup lab tm0 tm1
+    Dup lab dp0 dp1 val bod -> do
+      val  <- go val ctx
+      dp0' <- fresh dp0
+      dp1' <- fresh dp1
+      ctx  <- extend dp0 dp0' ctx
+      ctx  <- extend dp1 dp1' ctx
+      bod  <- go bod ctx
+      return $ Dup lab dp0' dp1' val bod
+    Ctr cid fds -> do
+      fds <- mapM (\x -> go x ctx) fds
+      return $ Ctr cid fds
+    Mat val css -> do
+      val <- go val ctx
+      css <- mapM (\(ar, cs) -> do
+        cs <- go cs ctx
+        return (ar, cs)) css
+      return $ Mat val css
+    Op2 op nm0 nm1 -> do
+      nm0 <- go nm0 ctx
+      nm1 <- go nm1 ctx
+      return $ Op2 op nm0 nm1
+    U32 n -> 
+      return $ U32 n
+    Era -> 
+      return Era
 
 -- Errors
 -- ------

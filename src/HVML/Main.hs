@@ -21,6 +21,7 @@ import System.Process (callCommand)
 import Text.Printf
 import qualified Data.Map.Strict as MS
 
+import HVML.Collapse
 import HVML.Compile
 import HVML.Extract
 import HVML.Inject
@@ -39,12 +40,13 @@ main :: IO ()
 main = do
   args <- getArgs
   result <- case args of
-    ["run", file, "-s"]   -> cliRun file False True
-    ["run", file]         -> cliRun file False False
-    ["run-c", file, "-s"] -> cliRun file True True
-    ["run-c", file]       -> cliRun file True False
-    ["help"]              -> printHelp
-    _                     -> printHelp
+    ("run" : file : args) -> do
+      let compiled  = "-c" `elem` args
+      let collapse  = "-C" `elem` args
+      let showStats = "-s" `elem` args
+      cliRun file compiled collapse showStats
+    ["help"] -> printHelp
+    _ -> printHelp
   case result of
     Left err -> do
       putStrLn err
@@ -52,11 +54,21 @@ main = do
     Right _ -> do
       exitWith ExitSuccess
 
+printHelp :: IO (Either String ())
+printHelp = do
+  putStrLn "HVM-Lazy usage:"
+  putStrLn "  hvml run [-c] [-C] [-s] <file>  # Normalizes the specified file"
+  putStrLn "    -c       # Compile to native code"
+  putStrLn "    -C       # Collapse the result"
+  putStrLn "    -s       # Show statistics"
+  putStrLn "  hvml help  # Shows this help message"
+  return $ Right ()
+
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> IO (Either String ())
-cliRun filePath compiled showStats = do
+cliRun :: FilePath -> Bool -> Bool -> Bool -> IO (Either String ())
+cliRun filePath compiled collapse showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -98,23 +110,22 @@ cliRun filePath compiled showStats = do
     exitWith (ExitFailure 1)
 
   -- Normalize main
-  -- init <- getCPUTime
-  -- root <- doInjectCore book (Ref "main" (nameToId book MS.! "main") []) []
-  -- done <- (if compiled then normalC else normal) book root
-  -- norm <- doExtractCore book done
-  -- end  <- getCPUTime
-  -- putStrLn $ coreToString norm
-
   init <- getCPUTime
   root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
-  norm <- (if compiled then normalCAt else normalAt) book 0
-  norm <- (if compiled then normalCAt else normalAt) book 0
-  norm <- (if compiled then normalCAt else normalAt) book 0
-  norm <- (if compiled then normalCAt else normalAt) book 0
-  norm <- (if compiled then normalCAt else normalAt) book 0
-  norm <- doExtractCore book norm
-  end  <- getCPUTime
-  putStrLn $ coreToString norm
+  norm <- if compiled
+    then normalCAt book 0
+    else normalAt book 0
+  vals <- if collapse
+    then do
+      doCollapseCore book norm
+    else do
+      core <- doExtractCore book norm
+      return [core]
+  end <- getCPUTime
+
+  -- Print results
+  forM_ vals $ \ term ->
+    putStrLn $ coreToString term
 
   -- Show stats
   when showStats $ do
@@ -152,10 +163,3 @@ genMain book =
     , "  return 0;"
     , "}"
     ]
-
-printHelp :: IO (Either String ())
-printHelp = do
-  putStrLn "HVM-Lazy usage:"
-  putStrLn "  hvml run [-s] <file>  # Normalizes the specified file"
-  putStrLn "  hvml help             # Shows this help message"
-  return $ Right ()
