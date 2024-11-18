@@ -85,6 +85,8 @@ data TAG
 
 type HVM = IO
 
+type ReduceAt = Book -> Loc -> HVM Term
+
 -- C Functions
 -- -----------
 
@@ -140,7 +142,7 @@ foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
 
 foreign import ccall unsafe "Runtime.c reduce"
-  reduce :: Term -> IO Term
+  reduceC :: Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_let"
   reduceLet :: Term -> Term -> IO Term

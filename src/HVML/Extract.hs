@@ -5,176 +5,26 @@ module HVML.Extract where
 import Control.Monad (foldM)
 import Control.Monad.State
 import Data.Char (chr, ord)
+import Data.IORef
 import Data.Word
+import HVML.Show
 import HVML.Type
+import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as MS
 
-type ExtractM a = StateT (IS.IntSet, MS.Map Loc String) HVM a
+import Debug.Trace
 
-extractCore :: Book -> Term -> ExtractM Core
-extractCore book term = case tagT (termTag term) of
-  ERA -> do
-    return Era
+type ExtractState = (IORef IS.IntSet, IORef (MS.Map Loc String))
 
-  LET -> do
-    let loc = termLoc term
-    let mode = modeT (termLab term)
-    val <- lift $ got (loc + 1)
-    bod <- lift $ got (loc + 2)
-    name <- genName (loc + 0)
-    val0 <- extractCore book val
-    bod0 <- extractCore book bod
-    return $ Let mode name val0 bod0
-  
-  LAM -> do
-    let loc = termLoc term
-    bod <- lift $ got (loc + 1)
-    name <- genName (loc + 0)
-    bod0 <- extractCore book bod
-    return $ Lam name bod0
-    
-  APP -> do
-    let loc = termLoc term
-    fun <- lift $ got (loc + 0)
-    arg <- lift $ got (loc + 1)
-    fun0 <- extractCore book fun
-    arg0 <- extractCore book arg
-    return $ App fun0 arg0
-    
-  SUP -> do
-    let loc = termLoc term
-    let lab = termLab term
-    tm0 <- lift $ got (loc + 0)
-    tm1 <- lift $ got (loc + 1)
-    tm00 <- extractCore book tm0
-    tm10 <- extractCore book tm1
-    return $ Sup lab tm00 tm10
-    
-  VAR -> do
-    let key = termKey term
-    sub <- lift $ got key
-    if termTag sub == _SUB_
-    then do
-      name <- genName key
-      return $ Var name
-    else extractCore book sub
-      
-  DP0 -> do
-    let loc = termLoc term
-    let lab = termLab term
-    let key = termKey term
-    sub <- lift $ got key
-    if termTag sub == _SUB_
-    then do
-      (dups, _) <- get
-      if IS.member (fromIntegral loc) dups
-      then do
-        name <- genName key
-        return $ Var name
-      else do
-        dp0 <- genName (loc + 0)
-        dp1 <- genName (loc + 1)
-        val <- lift $ got (loc + 2)
-        modify $ \x -> (IS.insert (fromIntegral loc) dups, snd x)
-        val0 <- extractCore book val
-        return $ Dup lab dp0 dp1 val0 (Var dp0)
-    else extractCore book sub
-      
-  DP1 -> do
-    let loc = termLoc term
-    let lab = termLab term
-    let key = termKey term
-    sub <- lift $ got key
-    if termTag sub == _SUB_
-    then do
-      (dups, _) <- get
-      if IS.member (fromIntegral loc) dups
-      then do
-        name <- genName key
-        return $ Var name
-      else do
-        dp0 <- genName (loc + 0)
-        dp1 <- genName (loc + 1)
-        val <- lift $ got (loc + 2)
-        modify $ \x -> (IS.insert (fromIntegral loc) dups, snd x)
-        val0 <- extractCore book val
-        return $ Dup lab dp0 dp1 val0 (Var dp1)
-    else extractCore book sub
-
-  CTR -> do
-    let loc = termLoc term
-    let lab = termLab term
-    let cid = u12v2X lab
-    let ari = u12v2Y lab
-    fds <- if ari == 0
-      then return []
-      else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
-    fds0 <- mapM (extractCore book) fds
-    return $ Ctr cid fds0
-    
-  MAT -> do
-    let loc = termLoc term
-    let len = termLab term
-    val <- lift $ got (loc + 0)
-    css <- if len == 0
-      then return []
-      else lift $ mapM (\i -> got (loc + 1 + i)) [0..len-1]
-    val0 <- extractCore book val
-    css0 <- mapM (extractCore book) css
-    css1 <- mapM (\ cs -> return (0, cs)) css0 -- NOTE: case arity lost on extraction
-    return $ Mat val0 css1
-    
-  W32 -> do
-    let val = termLoc term
-    return $ U32 (fromIntegral val)
-    
-  OPX -> do
-    let loc = termLoc term
-    let opr = toEnum (fromIntegral (termLab term))
-    nm0 <- lift $ got (loc + 0)
-    nm1 <- lift $ got (loc + 1)
-    nm00 <- extractCore book nm0
-    nm10 <- extractCore book nm1
-    return $ Op2 opr nm00 nm10
-    
-  OPY -> do
-    let loc = termLoc term
-    let opr = toEnum (fromIntegral (termLab term))
-    nm0 <- lift $ got (loc + 0)
-    nm1 <- lift $ got (loc + 1)
-    nm00 <- extractCore book nm0
-    nm10 <- extractCore book nm1
-    return $ Op2 opr nm00 nm10
-    
-  REF -> do
-    let loc = termLoc term
-    let lab = termLab term
-    let fid = u12v2X lab
-    let ari = u12v2Y lab
-    arg <- if ari == 0
-      then return []
-      else lift $ mapM (\i -> got (loc + i)) [0..ari-1]
-    arg0 <- mapM (extractCore book) arg
-    let name = MS.findWithDefault "?" fid (idToName book)
-    return $ Ref name fid arg0
-    
-  _ -> return Era
-
-doExtractCore :: Book -> Term -> HVM Core
-doExtractCore book term = do
-  core <- evalStateT (extractCore book term) (IS.empty, MS.empty)
-  return $ doLiftDups core
-
-genName :: Loc -> ExtractM String
-genName loc = do
-  (dups, nameMap) <- get
-  case MS.lookup loc nameMap of
-    Just name -> do
-      return name
+genName :: ExtractState -> Loc -> HVM String
+genName (_, namsRef) loc = do
+  nams <- readIORef namsRef
+  case MS.lookup loc nams of
+    Just name -> return name
     Nothing -> do
-      let newName = genNameFromIndex (MS.size nameMap)
-      put (dups, MS.insert loc newName nameMap)
+      let newName = genNameFromIndex (MS.size nams)
+      modifyIORef' namsRef (MS.insert loc newName)
       return newName
 
 genNameFromIndex :: Int -> String
@@ -182,6 +32,131 @@ genNameFromIndex n = go (n + 1) "" where
   go n ac | n == 0    = ac
           | otherwise = go q (chr (ord 'a' + r) : ac)
           where (q,r) = quotRem (n - 1) 26
+
+extractCoreAt :: ExtractState -> ReduceAt -> Book -> Loc -> HVM Core
+extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
+  term <- reduceAt book host
+  case tagT (termTag term) of
+    ERA -> do
+      return Era
+
+    LET -> do
+      let loc  = termLoc term
+      let mode = modeT (termLab term)
+      name <- genName state (loc + 0)
+      val  <- extractCoreAt state reduceAt book (loc + 1)
+      bod  <- extractCoreAt state reduceAt book (loc + 2)
+      return $ Let mode name val bod
+
+    LAM -> do
+      let loc = termLoc term
+      name <- genName state (loc + 0)
+      bod  <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Lam name bod
+    
+    APP -> do
+      let loc = termLoc term
+      fun <- extractCoreAt state reduceAt book (loc + 0)
+      arg <- extractCoreAt state reduceAt book (loc + 1)
+      return $ App fun arg
+    
+    SUP -> do
+      let loc = termLoc term
+      let lab = termLab term
+      tm0 <- extractCoreAt state reduceAt book (loc + 0)
+      tm1 <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Sup lab tm0 tm1
+    
+    VAR -> do
+      let key = termKey term
+      name <- genName state key
+      return $ Var name
+    
+    DP0 -> do
+      let loc = termLoc term
+      let lab = termLab term
+      dups <- readIORef dupsRef
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName state (termKey term)
+        return $ Var name
+      else do
+        dp0 <- genName state (loc + 0)
+        dp1 <- genName state (loc + 1)
+        val <- extractCoreAt state reduceAt book (loc + 2)
+        modifyIORef' dupsRef (IS.insert (fromIntegral loc))
+        return $ Dup lab dp0 dp1 val (Var dp0)
+    
+    DP1 -> do
+      let loc = termLoc term
+      let lab = termLab term
+      dups <- readIORef dupsRef
+      if IS.member (fromIntegral loc) dups
+      then do
+        name <- genName state (termKey term)
+        return $ Var name
+      else do
+        dp0 <- genName state (loc + 0)
+        dp1 <- genName state (loc + 1)
+        val <- extractCoreAt state reduceAt book (loc + 2)
+        modifyIORef' dupsRef (IS.insert (fromIntegral loc))
+        return $ Dup lab dp0 dp1 val (Var dp1)
+
+    CTR -> do
+      let loc = termLoc term
+      let lab = termLab term
+      let cid = u12v2X lab
+      let ari = u12v2Y lab
+      let ars = if ari == 0 then [] else [0..ari-1]
+      fds <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) ars
+      return $ Ctr cid fds
+    
+    MAT -> do
+      let loc = termLoc term
+      let len = termLab term
+      val <- extractCoreAt state reduceAt book (loc + 0)
+      css <- mapM (\i -> extractCoreAt state reduceAt book (loc + 1 + i)) [0..len-1]
+      css <- mapM (\c -> return (0, c)) css -- NOTE: case arity lost on extraction
+      return $ Mat val css
+    
+    W32 -> do
+      let val = termLoc term
+      return $ U32 (fromIntegral val)
+    
+    OPX -> do
+      let loc = termLoc term
+      let opr = toEnum (fromIntegral (termLab term))
+      nm0 <- extractCoreAt state reduceAt book (loc + 0)
+      nm1 <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Op2 opr nm0 nm1
+    
+    OPY -> do
+      let loc = termLoc term
+      let opr = toEnum (fromIntegral (termLab term))
+      nm0 <- extractCoreAt state reduceAt book (loc + 0)
+      nm1 <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Op2 opr nm0 nm1
+    
+    REF -> do
+      let loc = termLoc term
+      let lab = termLab term
+      let fid = u12v2X lab
+      let ari = u12v2Y lab
+      arg <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) [0..ari-1]
+      let name = MS.findWithDefault "?" fid (idToName book)
+      return $ Ref name fid arg
+    
+    _ -> do
+      return Era
+
+doExtractCoreAt :: ReduceAt -> Book -> Loc -> HVM Core
+doExtractCoreAt reduceAt book loc = do
+  dupsRef <- newIORef IS.empty
+  namsRef <- newIORef MS.empty
+  let state = (dupsRef, namsRef)
+  core <- extractCoreAt state reduceAt book loc
+  return core
+  -- return $ doLiftDups core
 
 -- Lifting Dups
 -- ------------

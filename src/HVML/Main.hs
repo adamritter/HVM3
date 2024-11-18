@@ -57,11 +57,11 @@ main = do
 printHelp :: IO (Either String ())
 printHelp = do
   putStrLn "HVM-Lazy usage:"
-  putStrLn "  hvml run [-c] [-C] [-s] <file>  # Normalizes the specified file"
-  putStrLn "    -c       # Compile to native code"
-  putStrLn "    -C       # Collapse the result"
-  putStrLn "    -s       # Show statistics"
-  putStrLn "  hvml help  # Shows this help message"
+  putStrLn "  hvml help # Shows this help message"
+  putStrLn "  hvml run <file> [-c] [-C] [-s] # Normalizes the file's main"
+  putStrLn "    -c # Runs with compiled mode (fast)"
+  putStrLn "    -C # Collapse the result to λ-Terms"
+  putStrLn "    -s # Show statistics"
   return $ Right ()
 
 -- CLI Commands
@@ -112,20 +112,21 @@ cliRun filePath compiled collapse showStats = do
   -- Normalize main
   init <- getCPUTime
   root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
-  norm <- if compiled
-    then normalCAt book 0
-    else normalAt book 0
+  rxAt <- if compiled
+    then return reduceCAt
+    else return reduceAt
   vals <- if collapse
-    then do
-      doCollapseCore book norm
+    then doCollapseAt rxAt book 0
     else do
-      core <- doExtractCore book norm
-      return [core]
-  end <- getCPUTime
+      core <- doExtractCoreAt rxAt book 0
+      return [(doLiftDups core)]
 
   -- Print results
   forM_ vals $ \ term ->
     putStrLn $ coreToString term
+
+  -- Prints total time
+  end <- getCPUTime
 
   -- Show stats
   when showStats $ do

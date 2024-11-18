@@ -11,7 +11,7 @@ import HVML.Type
 import System.Exit
 import qualified Data.Map.Strict as MS
 
-reduceAt :: Book -> Loc -> HVM Term
+reduceAt :: ReduceAt
 reduceAt book host = do 
   let debug = False
   term <- got host
@@ -19,11 +19,10 @@ reduceAt book host = do
   let lab = termLab term
   let loc = termLoc term
   when debug $ do
-    root <- got 0
-    root <- doExtractCore book root
-    core <- doExtractCore book term
-    putStrLn $ "---------------- CORE: "
-    putStrLn $ coreToString core
+    root <- doExtractCoreAt reduceAt book 0
+    core <- doExtractCoreAt reduceAt book host
+    -- putStrLn $ "---------------- CORE: "
+    -- putStrLn $ coreToString core
     putStrLn $ "---------------- ROOT: "
     putStrLn $ coreToString root
     putStrLn $ "reduce " ++ termToString term
@@ -138,6 +137,13 @@ reduceAt book host = do
       set host ret
       reduceAt book host
 
+reduceCAt :: ReduceAt
+reduceCAt = \ _ host -> do
+  term <- got host
+  whnf <- reduceC term
+  set host whnf
+  return $ whnf
+
 normalAtWith :: (Book -> Term -> HVM Term) -> Book -> Loc -> HVM Term
 normalAtWith reduceAt book host = do
   term <- got host
@@ -184,8 +190,4 @@ normalAt :: Book -> Loc -> HVM Term
 normalAt = normalAtWith reduceAt
 
 normalCAt :: Book -> Loc -> HVM Term
-normalCAt = normalAtWith $ \ _ host -> do
-  term <- got host
-  whnf <- reduce term
-  set host whnf
-  return $ whnf
+normalCAt = normalAtWith reduceCAt
