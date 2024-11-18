@@ -15,14 +15,14 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 
 // Constants
-const Tag VAR = 0x01;
-const Tag SUB = 0x02;
-const Tag NUL = 0x03;
-const Tag ERA = 0x04;
-const Tag LAM = 0x05;
-const Tag APP = 0x06;
-const Tag SUP = 0x07;
-const Tag DUP = 0x08;
+#define VAR 0x01
+#define SUB 0x02
+#define NUL 0x03
+#define ERA 0x04
+#define LAM 0x05
+#define APP 0x06
+#define SUP 0x07
+#define DUP 0x08
 
 const Term VOID = 0;
 
@@ -34,7 +34,7 @@ typedef _Atomic(u64) a64;
 static a64* BUFF     = NULL;
 static u64  RNOD_INI = 0;
 static u64  RNOD_END = 0;
-static u64  RBAG     = 0x100000000;
+static u64  RBAG     = 0x1000;
 static u64  RBAG_INI = 0;
 static u64  RBAG_END = 0;
 
@@ -64,7 +64,7 @@ Term swap(Loc loc, Term term) {
   return atomic_exchange_explicit(&BUFF[loc], term, memory_order_relaxed);
 }
 
-Term got(Loc loc) {
+Term get(Loc loc) {
   return atomic_load_explicit(&BUFF[loc], memory_order_relaxed);
 }
 
@@ -78,7 +78,7 @@ Loc port(u64 n, Loc x) {
 
 // Allocation
 Loc alloc_node(u64 arity) {
-  u64 loc = RNOD_END;
+  Loc loc = RNOD_END;
   RNOD_END += arity;
   return loc;
 }
@@ -87,25 +87,40 @@ u64 inc_itr() {
   return RBAG_END / 2;
 }
 
-// Atomic Linker
-static void move(u64 neg_loc, u64 pos);
+Loc rbag_push(Term neg, Term pos) {
+  Loc loc = RBAG + RBAG_END;
+  RBAG_END += 2;
+  set(loc + 0, neg);
+  set(loc + 1, pos);
+  return loc;
+}
 
-static void link(u64 neg, u64 pos) {
+Loc rbag_pop() {
+  if (RBAG_INI < RBAG_END) {
+    Loc loc = RBAG + RBAG_INI;
+    RBAG_INI += 2;
+    return loc;
+  }
+
+  return 0;
+}
+
+// Atomic Linker
+static void move(Loc neg_loc, u64 pos);
+
+static void link(Term neg, Term pos) {
   if (term_tag(pos) == VAR) {
-    u64 far = swap(term_loc(pos), neg);
+    Term far = swap(term_loc(pos), neg);
     if (term_tag(far) != SUB) {
       move(term_loc(pos), far);
     }
   } else {
-    u64 loc = RBAG + RBAG_END;
-    RBAG_END += 2;
-    set(loc + 0, neg);
-    set(loc + 1, pos);
+    rbag_push(neg, pos);
   }
 }
 
-static void move(u64 neg_loc, u64 pos) {
-  u64 neg = swap(neg_loc, pos);
+static void move(Loc neg_loc, Term pos) {
+  Term neg = swap(neg_loc, pos);
   if (term_tag(neg) != SUB) {
     link(neg, pos);
   }
@@ -231,17 +246,22 @@ static void interact(Term a, Term b) {
         case NUL: break;
       }
       break;
+    // TODO(enricozb): missing / SUB?
   }
 }
 
 // Evaluation
 static int normal_step() {
+  // TODO(enricozb): "rbag is empty" check + pop is not thread safe
   if (RBAG_INI < RBAG_END) {
-    Loc  loc = RBAG + RBAG_INI;
-    Term neg = got(loc + 0);
-    Term pos = got(loc + 1);
+    Loc loc = rbag_pop();
+
+    // TODO(enricozb): change to take(..) instead of get(..) / set(.., 0)
+    Term neg = get(loc + 0);
+    Term pos = get(loc + 1);
     set(loc + 0, VOID);
     set(loc + 1, VOID);
+
     interact(neg, pos);
     RBAG_INI += 2;
     return 1;
@@ -253,7 +273,7 @@ static int normal_step() {
 // FFI exports
 void hvm_init() {
   if (BUFF == NULL) {
-    BUFF = calloc((1ULL << 33), sizeof(a64));
+    BUFF = calloc((1ULL << 16), sizeof(a64));
   }
   RNOD_INI = 0;
   RNOD_END = 0;
@@ -274,12 +294,54 @@ Term normal(Term term) {
   return term;
 }
 
+// Debugging Functions
+
+static char* tag_to_str(Tag tag) {
+  switch (tag) {
+    case VAR: return "VAR";
+    case SUB: return "SUB";
+    case NUL: return "NUL";
+    case ERA: return "ERA";
+    case LAM: return "LAM";
+    case APP: return "APP";
+    case SUP: return "SUP";
+    case DUP: return "DUP";
+    default:  return "???";
+  }
+}
+
+void dump_buff() {
+  printf("------------------\n");
+  printf("NODES\n");
+  printf("ADDR   LOC LAB TAG\n");
+  printf("------------------\n");
+  for (Loc loc = RNOD_INI; loc < RNOD_END; loc++) {
+    Term term = get(loc);
+    Loc t_loc = term_loc(term);
+    Lab t_lab = term_lab(term);
+    Tag t_tag = term_tag(term);
+    printf("%06X %03X %03X %s\n", loc, term_loc(term), term_lab(term), tag_to_str(term_tag(term)));
+  }
+  printf("------------------\n");
+  printf("REDEX BAG\n");
+  printf("ADDR   LOC LAB TAG\n");
+  printf("------------------\n");
+  for (Loc loc = RBAG_INI; loc < RBAG_END; loc++) {
+    Term term = get(loc + RBAG);
+    Loc t_loc = term_loc(term);
+    Lab t_lab = term_lab(term);
+    Tag t_tag = term_tag(term);
+    printf("%06X %03X %03X %s\n", loc, term_loc(term), term_lab(term), tag_to_str(term_tag(term)));
+  }
+  printf("------------------\n");
+}
+
 //u64 term_new(u64 tag, u64 lab, u64 loc);
 //u64 term_tag(u64 term);
 //u64 term_lab(u64 term);
 //u64 term_loc(u64 term);
 //u64 swap(u64 loc, u64 term);
-//u64 got(u64 loc);
+//u64 get(u64 loc);
 //void set(u64 loc, u64 term);
 //u64 alloc_node(u64 arity);
 //u64 inc_itr();

@@ -44,10 +44,10 @@ tagToString tag
   | tag == _DUP_ = "DUP"
   | otherwise    = "???"
 
-labToString :: Word64 -> String
+labToString :: Lab -> String
 labToString lab = padLeft (showHex lab "") 6 '0'
 
-locToString :: Word64 -> String
+locToString :: Loc -> String
 locToString loc = padLeft (showHex loc "") 9 '0'
 
 termToString :: Term -> String

@@ -43,8 +43,13 @@ cliRun filePath showStats = do
     Left  err -> exitWithError ("ParserError: " ++ err)
 
   print net
-
   root <- doInjectNet net
+
+  dumpBuff
+
+  print "printing root"
+  print root
+
   norm <- normal root
 
   set 0 norm
