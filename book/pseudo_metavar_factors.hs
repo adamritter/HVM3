@@ -1,3 +1,5 @@
+-- //./pseudo_metavar_factors.hvml//
+
 import Control.Monad (forM_, when)
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import System.Exit (exitSuccess)
@@ -5,26 +7,10 @@ import Text.Printf (printf)
 
 data Bin = O Bin | I Bin | E deriving (Show, Eq)
 
-if' :: Bool -> a -> a -> a
-if' True t _ = t
-if' False _ f = f
-
-not' :: Bool -> Bool
-not' False = True
-not' _ = False
-
-and' :: Bool -> Bool -> Bool
-and' False _ = False
-and' _ b = b
-
-or' :: Bool -> Bool -> Bool
-or' False b = b
-or' _ _ = True
-
 u32 :: Bin -> Int
 u32 (O p) = 2 * u32 p + 0
 u32 (I p) = 2 * u32 p + 1
-u32 E = 0
+u32 E     = 0
 
 bin :: Int -> Int -> Bin
 bin 0 _ = E
@@ -33,38 +19,33 @@ bin s n = case n `mod` 2 of
   _ -> I (bin (s-1) (n `div` 2))
 
 eq :: Bin -> Bin -> Bool
-eq E E = True
+eq E     E     = True
 eq (O a) (O b) = eq a b
 eq (I a) (I b) = eq a b
-eq _ _ = False
+eq _     _     = False
 
 inc :: Bin -> Bin
 inc (O p) = I p
 inc (I p) = O (inc p)
-inc E = E
-
-dec :: Bin -> Bin
-dec (O p) = I (dec p)
-dec (I p) = O p
-dec E = E
+inc E     = E
 
 add :: Bin -> Bin -> Bin
 add (O a) (O b) = O (add a b)
 add (O a) (I b) = I (add a b)
 add (I a) (O b) = I (add a b)
 add (I a) (I b) = O (inc (add a b))
-add E b = E
-add a E = E
+add E     b     = E
+add a     E     = E
 
 mul :: Bin -> Bin -> Bin
-mul _ E = E
+mul _ E     = E
 mul a (O b) = O (mul a b)
 mul a (I b) = add a (O (mul a b))
 
 cat :: Bin -> Bin -> Bin
 cat (O a) b = O (cat a b)
 cat (I a) b = I (cat a b)
-cat E b = b
+cat E     b = b
 
 k = 14
 h = 15
