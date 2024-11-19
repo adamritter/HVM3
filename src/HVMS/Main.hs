@@ -42,18 +42,12 @@ cliRun filePath showStats = do
     Right net -> pure net
     Left  err -> exitWithError ("ParserError: " ++ err)
 
-  print net
   root <- doInjectNet net
-
-  dumpBuff
-
-  print "printing root"
-  print root
-
+  net' <- doExtractNet root
   norm <- normal root
 
   set 0 norm
-  norm' <- doExtractNet norm []
+  norm' <- doExtractNet norm
   putStrLn $ netToString norm'
 
   when showStats $ do
@@ -72,7 +66,7 @@ cliRun filePath showStats = do
 printHelp :: IO ()
 printHelp = do
   putStrLn "HVM-Strict usage:"
-  putStrLn "  hvms run [-s] <file>  # Normalizes the specified file"
+  putStrLn "  hvms run <file> [-s]  # Normalizes the specified file"
   putStrLn "  hvms help             # Shows this help message"
 
 exitWithError :: String -> IO a

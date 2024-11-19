@@ -17,7 +17,7 @@ normalize net = do
   norm <- normal root
 
   -- Convert back to core terms
-  result <- doExtractNet norm []
+  result <- doExtractNet norm
 
   -- Cleanup runtime
   hvmFree

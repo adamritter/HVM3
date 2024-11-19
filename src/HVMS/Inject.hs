@@ -37,17 +37,14 @@ injectPCore (PSup tm1 tm2) loc vars = do
 
 injectNCore :: NCore -> Maybe Loc -> VarMap -> IO (VarMap, Term)
 injectNCore (NSub name) loc vars = case (Map.lookup name vars, loc) of
-  -- we've seen the positive end of this var already, so we should mutate
-  -- it to hold the SUB's location.
   (Just pos_loc, Just neg_host) -> do
-    putStrLn $ "injectNCore: set pos_loc=" ++ show pos_loc ++ " for name=" ++ name
+    -- we've seen the positive end of this var already, so we should mutate
+    -- it to hold the SUB's location.
     set pos_loc (termNew _VAR_ 0 neg_host)
     return (Map.delete name vars, termNew _SUB_ 0 0)
   -- we haven't seen the positive end of this var yet, so we save the
-  -- SUB's location so the positive VAR can reference it.
-  (Nothing, Just neg_host)      -> do
-    putStrLn $ "injectNCore: insert name=" ++ name ++ " neg_host=" ++ show neg_host
-    return (Map.insert name neg_host vars, termNew _SUB_ 0 0)
+  -- SUB's location so the VAR can reference it.
+  (Nothing, Just neg_host)      -> return (Map.insert name neg_host vars, termNew _SUB_ 0 0)
   _                             -> do
     putStrLn $ "injectNCore: invalid SUB (" ++ name ++ ")"
     return (vars, _VOID_)
@@ -83,6 +80,7 @@ injectNet (Net root bag) vars = do
   root_loc <- allocNode 1
   (vars, root) <- injectPCore root (Just root_loc) vars
   vars <- foldr (\dex acc -> acc >>= injectDex dex) (return vars) bag
+  root <- get root_loc
   return (vars, root)
 
 -- Main Entry Points

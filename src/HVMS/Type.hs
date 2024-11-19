@@ -88,6 +88,12 @@ foreign import ccall unsafe "Runtime.c set"
 foreign import ccall unsafe "Runtime.c rbag_push"
   rbagPush :: Term -> Term -> IO ()
 
+foreign import ccall unsafe "Runtime.c rbag_ini"
+  rbagIni :: IO Loc
+
+foreign import ccall unsafe "Runtime.c rbag_end"
+  rbagEnd :: IO Loc
+
 -- foreign import ccall unsafe "Runtime.c take"
 --   take :: Loc -> IO Term
 

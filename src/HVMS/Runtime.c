@@ -68,6 +68,10 @@ Term get(Loc loc) {
   return atomic_load_explicit(&BUFF[loc], memory_order_relaxed);
 }
 
+Term take(Loc loc) {
+  return atomic_exchange_explicit(&BUFF[loc], VOID, memory_order_relaxed);
+}
+
 void set(Loc loc, Term term) {
   atomic_store_explicit(&BUFF[loc], term, memory_order_relaxed);
 }
@@ -105,6 +109,14 @@ Loc rbag_pop() {
   return 0;
 }
 
+Loc rbag_ini() {
+  return RBAG + RBAG_INI;
+}
+
+Loc rbag_end() {
+  return RBAG + RBAG_END;
+}
+
 // Atomic Linker
 static void move(Loc neg_loc, u64 pos);
 
@@ -128,19 +140,19 @@ static void move(Loc neg_loc, Term pos) {
 
 // Interactions
 static void interact_applam(Loc a_loc, Loc b_loc) {
-  Term arg = swap(port(1, a_loc), VOID);
+  Term arg = take(port(1, a_loc));
   Loc  ret = port(2, a_loc);
   Loc  var = port(1, b_loc);
-  Term bod = swap(port(2, b_loc), VOID);
+  Term bod = take(port(2, b_loc));
   move(var, arg);
   move(ret, bod);
 }
 
 static void interact_appsup(Loc a_loc, Loc b_loc) {
-  Term arg = swap(port(1, a_loc), VOID);
+  Term arg = take(port(1, a_loc));
   Loc  ret = port(2, a_loc);
-  Term tm1 = swap(port(1, b_loc), VOID);
-  Term tm2 = swap(port(2, b_loc), VOID);
+  Term tm1 = take(port(1, b_loc));
+  Term tm2 = take(port(2, b_loc));
   Loc  dp1 = alloc_node(2);
   Loc  dp2 = alloc_node(2);
   Loc  cn1 = alloc_node(2);
@@ -160,7 +172,7 @@ static void interact_appsup(Loc a_loc, Loc b_loc) {
 }
 
 static void interact_appnul(Loc a_loc) {
-  Term arg = swap(port(1, a_loc), VOID);
+  Term arg = take(port(1, a_loc));
   Loc  ret = port(2, a_loc);
   link(term_new(ERA, 0, 0), arg);
   move(ret, term_new(NUL, 0, 0));
@@ -169,8 +181,8 @@ static void interact_appnul(Loc a_loc) {
 static void interact_dupsup(Loc a_loc, Loc b_loc) {
   Loc  dp1 = port(1, a_loc);
   Loc  dp2 = port(2, a_loc);
-  Term tm1 = swap(port(1, b_loc), VOID);
-  Term tm2 = swap(port(2, b_loc), VOID);
+  Term tm1 = take(port(1, b_loc));
+  Term tm2 = take(port(2, b_loc));
   move(dp1, tm1);
   move(dp2, tm2);
 }
@@ -179,7 +191,7 @@ static void interact_duplam(Loc a_loc, Loc b_loc) {
   Loc  dp1 = port(1, a_loc);
   Loc  dp2 = port(2, a_loc);
   Loc  var = port(1, b_loc);
-  Term bod = swap(port(2, b_loc), VOID);
+  Term bod = take(port(2, b_loc));
   Loc  co1 = alloc_node(2);
   Loc  co2 = alloc_node(2);
   Loc  du1 = alloc_node(2);
@@ -207,23 +219,28 @@ static void interact_dupnul(u64 a_loc) {
 
 static void interact_eralam(Loc b_loc) {
   Loc  var = port(1, b_loc);
-  Term bod = swap(port(2, b_loc), VOID);
+  Term bod = take(port(2, b_loc));
   move(var, term_new(NUL, 0, 0));
   link(term_new(ERA, 0, 0), bod);
 }
 
 static void interact_erasup(Loc b_loc) {
-  Term tm1 = swap(port(1, b_loc), VOID);
-  Term tm2 = swap(port(2, b_loc), VOID);
+  Term tm1 = take(port(1, b_loc));
+  Term tm2 = take(port(2, b_loc));
   link(term_new(ERA, 0, 0), tm1);
   link(term_new(ERA, 0, 0), tm2);
 }
+
+static char* tag_to_str(Tag tag);
 
 static void interact(Term a, Term b) {
   Tag a_tag = term_tag(a);
   Tag b_tag = term_tag(b);
   Loc a_loc = term_loc(a);
   Loc b_loc = term_loc(b);
+
+  // printf("INTERACT %s ~ %s\n", tag_to_str(a_tag), tag_to_str(b_tag));
+
   switch (a_tag) {
     case APP:
       switch (b_tag) {
@@ -246,28 +263,23 @@ static void interact(Term a, Term b) {
         case NUL: break;
       }
       break;
-    // TODO(enricozb): missing / SUB?
   }
 }
 
 // Evaluation
 static int normal_step() {
-  // TODO(enricozb): "rbag is empty" check + pop is not thread safe
-  if (RBAG_INI < RBAG_END) {
-    Loc loc = rbag_pop();
-
-    // TODO(enricozb): change to take(..) instead of get(..) / set(.., 0)
-    Term neg = get(loc + 0);
-    Term pos = get(loc + 1);
-    set(loc + 0, VOID);
-    set(loc + 1, VOID);
-
-    interact(neg, pos);
-    RBAG_INI += 2;
-    return 1;
+  Loc loc = rbag_pop();
+  if (loc == 0) {
+    return 0;
   }
 
-  return 0;
+  // TODO(enricozb): change to take(..) instead of get(..) / set(.., 0)
+  Term neg = take(loc + 0);
+  Term pos = take(loc + 1);
+
+  interact(neg, pos);
+
+  return 1;
 }
 
 // FFI exports
@@ -298,21 +310,22 @@ Term normal(Term term) {
 
 static char* tag_to_str(Tag tag) {
   switch (tag) {
-    case VAR: return "VAR";
-    case SUB: return "SUB";
-    case NUL: return "NUL";
-    case ERA: return "ERA";
-    case LAM: return "LAM";
-    case APP: return "APP";
-    case SUP: return "SUP";
-    case DUP: return "DUP";
-    default:  return "???";
+    case VOID: return "___";
+    case VAR:  return "VAR";
+    case SUB:  return "SUB";
+    case NUL:  return "NUL";
+    case ERA:  return "ERA";
+    case LAM:  return "LAM";
+    case APP:  return "APP";
+    case SUP:  return "SUP";
+    case DUP:  return "DUP";
+    default:   return "???";
   }
 }
 
 void dump_buff() {
   printf("------------------\n");
-  printf("NODES\n");
+  printf("      NODES\n");
   printf("ADDR   LOC LAB TAG\n");
   printf("------------------\n");
   for (Loc loc = RNOD_INI; loc < RNOD_END; loc++) {
@@ -323,11 +336,11 @@ void dump_buff() {
     printf("%06X %03X %03X %s\n", loc, term_loc(term), term_lab(term), tag_to_str(term_tag(term)));
   }
   printf("------------------\n");
-  printf("REDEX BAG\n");
+  printf("    REDEX BAG\n");
   printf("ADDR   LOC LAB TAG\n");
   printf("------------------\n");
-  for (Loc loc = RBAG_INI; loc < RBAG_END; loc++) {
-    Term term = get(loc + RBAG);
+  for (Loc loc = RBAG + RBAG_INI; loc < RBAG + RBAG_END; loc++) {
+    Term term = get(loc);
     Loc t_loc = term_loc(term);
     Lab t_lab = term_lab(term);
     Tag t_tag = term_tag(term);
@@ -335,13 +348,3 @@ void dump_buff() {
   }
   printf("------------------\n");
 }
-
-//u64 term_new(u64 tag, u64 lab, u64 loc);
-//u64 term_tag(u64 term);
-//u64 term_lab(u64 term);
-//u64 term_loc(u64 term);
-//u64 swap(u64 loc, u64 term);
-//u64 get(u64 loc);
-//void set(u64 loc, u64 term);
-//u64 alloc_node(u64 arity);
-//u64 inc_itr();
