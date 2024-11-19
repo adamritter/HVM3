@@ -696,8 +696,6 @@ Term reduce(Term term) {
   u64  stop = *HVM.spos;
   u64* spos = HVM.spos;
   while (1) {
-    //printf("reduce "); print_term(next); printf("\n");
-    //printf("NEXT! "); print_term(next); printf("\n");
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
@@ -839,7 +837,6 @@ Term reduce(Term term) {
       }
     }
     if ((*HVM.spos) == stop) {
-      //printf("retr: "); print_term(next); printf("\n");
       return next;
     } else {
       Term host = HVM.sbuf[--(*HVM.spos)];
@@ -852,7 +849,8 @@ Term reduce(Term term) {
         case DP1: set(hloc + 2, next); break;
         case MAT: set(hloc + 0, next); break;
       }
-      return HVM.sbuf[0];
+      *HVM.spos = stop;
+      return HVM.sbuf[stop];
     }
   }
   printf("retr: ERR\n");
