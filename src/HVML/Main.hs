@@ -36,6 +36,12 @@ runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
 -- Main
 -- ----
 
+data RunMode
+  = Normalize
+  | Collapse
+  | Search
+  deriving Eq
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -43,8 +49,10 @@ main = do
     ("run" : file : args) -> do
       let compiled  = "-c" `elem` args
       let collapse  = "-C" `elem` args
+      let search    = "-S" `elem` args
       let showStats = "-s" `elem` args
-      cliRun file compiled collapse showStats
+      let mode = if collapse then Collapse else if search then Search else Normalize
+      cliRun file compiled mode showStats
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -60,15 +68,16 @@ printHelp = do
   putStrLn "  hvml help # Shows this help message"
   putStrLn "  hvml run <file> [-c] [-C] [-s] # Normalizes the file's main"
   putStrLn "    -c # Runs with compiled mode (fast)"
-  putStrLn "    -C # Collapse the result to λ-Terms"
+  putStrLn "    -C # Collapse the result to a list of λ-Terms"
+  putStrLn "    -S # Search (collapse, then print the 1st λ-Term)"
   putStrLn "    -s # Show statistics"
   return $ Right ()
 
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> Bool -> IO (Either String ())
-cliRun filePath compiled collapse showStats = do
+cliRun :: FilePath -> Bool -> RunMode -> Bool -> IO (Either String ())
+cliRun filePath compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -115,18 +124,20 @@ cliRun filePath compiled collapse showStats = do
   rxAt <- if compiled
     then return reduceCAt
     else return reduceAt
-  vals <- if collapse
+  vals <- if mode == Collapse || mode == Search
     then doCollapseAt rxAt book 0
     else do
       core <- doExtractCoreAt rxAt book 0
       return [(doLiftDups core)]
 
   -- Print all collapsed results
-  forM_ vals $ \ term ->
-    putStrLn $ coreToString term
+  when (mode == Collapse) $ do
+    forM_ vals $ \ term ->
+      putStrLn $ coreToString term
 
   -- Prints just the first collapsed result
-  -- putStrLn $ coreToString (head vals)
+  when (mode == Search || mode == Normalize) $ do
+    putStrLn $ coreToString (head vals)
 
   -- Prints total time
   end <- getCPUTime
