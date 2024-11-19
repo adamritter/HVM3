@@ -121,9 +121,12 @@ cliRun filePath compiled collapse showStats = do
       core <- doExtractCoreAt rxAt book 0
       return [(doLiftDups core)]
 
-  -- Print results
+  -- Print all collapsed results
   forM_ vals $ \ term ->
     putStrLn $ coreToString term
+
+  -- Prints just the first collapsed result
+  -- putStrLn $ coreToString (head vals)
 
   -- Prints total time
   end <- getCPUTime
@@ -135,7 +138,7 @@ cliRun filePath compiled collapse showStats = do
     let time = fromIntegral (end - init) / (10^12) :: Double
     let mips = (fromIntegral itrs / 1000000.0) / time
     printf "WORK: %llu interactions\n" itrs
-    printf "TIME: %.3f seconds\n" time
+    printf "TIME: %.7f seconds\n" time
     printf "SIZE: %llu nodes\n" size
     printf "PERF: %.3f MIPS\n" mips
     return ()

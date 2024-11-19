@@ -1,0 +1,57 @@
+@main =
+  !c2_0 = λf !&0{f0 f1}=f λx(f0 (f1 x))
+  !c2_1 = λf !&1{f0 f1}=f λx(f0 (f1 x))
+  (c2_0 c2_1)
+
+//data T { #T{x y z} }
+
+//@main = #T{(+ 1 1) (+ 1 1) (+ 7 7)}
+
+//@main = 12
+
+//@main = λt(t &0{(+ 5 5) 2} &0{* 20})
+
+
+
+//#Pair{ &0{* 2} &0{λ$x(+ 5 5) $x} }
+
+
+//@main = #Pair{* 5}
+
+//@main = λt(t &0{&0{1 2} &0{3 4}})
+
+//@main = λt(t (+ 1 2) (+ 3 4))
+
+//@main = λt(t &0{1 2})
+
+//@main = 
+  //!f = λx λt (t λx(x) x)
+  //(f 7)
+
+
+//! 0x34 {f g} = a
+//! 0x44 {c d} = 0x42 (f 0x54 (g {d e}))
+//#0x9 λa #0x2B λb c
+
+//Collapsing term: term_new(LAM,0x000000,0x000000009) (at 0x0)
+//Current paths: fromList []
+//Collapsing term: term_new(LAM,0x000000,0x00000002b) (at 0xa)
+//Current paths: fromList []
+//Collapsing term: term_new(DP0,0x000001,0x000000044) (at 0x2c)
+//Current paths: fromList []
+//Collapsing term: term_new(APP,0x000000,0x000000042) (at 0x46)
+//Current paths: fromList [(1,[0])]
+//Collapsing term: term_new(DP0,0x000001,0x000000034) (at 0x42)
+//Current paths: fromList [(1,[0])]
+//Collapsing term: term_new(VAR,0x000000,0x000000009) (at 0x36)
+//Current paths: fromList [(1,[0,0])]
+//Collapsing term: term_new(APP,0x000000,0x000000054) (at 0x43)
+//Current paths: fromList [(1,[0,0])]
+//Collapsing term: term_new(DP1,0x000001,0x000000034) (at 0x54)
+//Current paths: fromList [(1,[0,0])]
+//Collapsing term: term_new(VAR,0x000000,0x000000009) (at 0x36)
+//Current paths: fromList [(1,[1,0,0])]
+//Collapsing term: term_new(SUP,0x000001,0x00000004b) (at 0x55)
+//Current paths: fromList [(1,[1,0,0])]
+//Collapsing term: term_new(VAR,0x000000,0x000000049) (at 0x4c)
+//Current paths: fromList [(1,[0,0])]

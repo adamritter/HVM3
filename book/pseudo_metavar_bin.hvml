@@ -1,13 +1,31 @@
-// This shows how to use a 'pseudo-metavar' to invert the binary add function,
-// and solve the equation: 'X + 1234560 = 1234567'. Run it with collapse mode:
-// $ hvml run pseudo_metavar_nat.hvml -C -s
-
+// Bitstrings
 data Bin { #O{pred} #I{pred} #E }
+
+// Pairs
+data Pair { #Pair{fst snd} }
 
 // If-Then-Else
 @if(b t f) = ~b {
   0: f
   k: t
+}
+
+// Not
+@not(a) = ~a {
+  0: 1
+  _: 0
+}
+
+// And
+@and(a b) = ~a {
+  0: 0
+  _: b
+}
+
+// Or
+@or(a b) = ~a {
+  0: b
+  _: 1
 }
 
 // Converts a Bin to an U32
@@ -28,9 +46,21 @@ data Bin { #O{pred} #I{pred} #E }
 
 // Bin Equality
 @eq(a b) = ~a{
-  #E: ~b { #O: λ_ 0 #I: λ_ 0 #E: 1 }
-  #O: λap ~b{ #O: λbp @eq(ap bp) #I: λ_ 0 #E: 0 }
-  #I: λap ~b{ #O: λ_ 0 #I: λbp @eq(ap bp) #E: 0 }
+  #E: ~b {
+    #O: λ_ 0
+    #I: λ_ 0
+    #E: 1
+  }
+  #O: λap ~b{
+    #O: λbp @eq(ap bp)
+    #I: λ_ 0
+    #E: 0
+  }
+  #I: λap ~b{
+    #O: λ_ 0
+    #I: λbp @eq(ap bp)
+    #E: 0
+  }
 }
 
 // Increments a Bin
@@ -40,30 +70,278 @@ data Bin { #O{pred} #I{pred} #E }
   #E: #E
 }
 
+// Decrements a Bin
+@dec(a) = ~a{
+  #O: λp #O{@dec(p)}
+  #I: λp #I{p}
+  #E: #E
+}
+
 // Adds two Bins
 @add(a b) = ~a {
   #O: λap ~b {
     #O: λbp #O{@add(ap bp)}
     #I: λbp #I{@add(ap bp)}
-    #E: #E
+    #E: #O{ap}
   }
   #I: λap ~b {
     #O: λbp #I{@add(ap bp)}
     #I: λbp #O{@inc(@add(ap bp))}
-    #E: #E
+    #E: #I{ap}
   }
   #E: #E
 }
 
-// Enumerates all Bins of given size
-@all(s) = ~s{
-  0: #E
-  p: !&0{p0 p1}=p &0{#O{@all(p0)} #I{@all(p1)}}
+// Muls two Bins
+@mul(a b) = ~b {
+  #E: #E
+  #O: λbp #O{@mul(a bp)}
+  #I: λbp !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
 }
 
-@S = 64
-@X = @all(@S)
+// Concatenates two Bins
+@cat(a b) = ~a {
+  #O: λap #O{@cat(ap b)}
+  #I: λap #I{@cat(ap b)}
+  #E: b
+}
 
-@main =
-  ! ok = @eq(@add(@X @bin(@S 1234560)) @bin(@S 1234567))
-  @if(ok @u32(@X) *)
+// Lt two Bins (a < b)
+@lt(a b) = @lt_go(0 a b)
+
+@lt_go(k a b) = ~a {
+  #E: ~b {
+    #E: k
+    #O: λ_ 1
+    #I: λ_ 1
+  }
+  #O: λap ~b {
+    #E: 0
+    #O: λbp @lt_go(k ap bp)
+    #I: λbp @lt_go(1 ap bp)
+  }
+  #I: λap ~b {
+    #E: 0
+    #O: λbp @lt_go(0 ap bp)
+    #I: λbp @lt_go(k ap bp)
+  }
+}
+
+// Take the first N bits of a Bin
+@take(n b) = ~n {
+  0: #E
+  p: ~b {
+    #O: λbp #O{@take(p bp)}
+    #I: λbp #I{@take(p bp)}
+    #E: #E
+  }
+}
+
+// Enums all Bins of given size (label 1)
+@all1(s) = ~s{
+  0: #E
+  p: !&1{p0 p1}=p 
+      &1{
+        #O{@all1(p0)}
+        #I{@all1(p1)}
+      }
+}
+
+// Enums all Bins of given size (label 2)
+@all2(s) = ~s{
+  0: #E
+  p: !&2{p0 p1}=p &2{
+    #O{@all2(p0)}
+    #I{@all2(p1)}
+  }
+}
+
+//// 4:
+//@K = 1
+//@H = 2
+//@S = 4
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 3) @bin(@H 0))
+//@B = @cat(@bin(@H 3) @bin(@H 0))
+//@P = @bin(@S 9)
+
+//// 6:
+//@K = 2
+//@H = 3
+//@S = 6
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 5) @bin(@H 0))
+//@B = @cat(@bin(@H 5) @bin(@H 0))
+//@P = @bin(@S 25)
+
+//// 8:
+//@K = 3
+//@H = 4
+//@S = 8
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 13) @bin(@H 0))
+//@B = @cat(@bin(@H 13) @bin(@H 0))
+//@P = @bin(@S 169)
+
+//// 10:
+//@K = 4
+//@H = 5
+//@S = 10
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 31) @bin(@H 0))
+//@B = @cat(@bin(@H 19) @bin(@H 0))
+//@P = @bin(@S 589)
+
+//// 12:
+//@K = 5
+//@H = 6
+//@S = 12
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 53) @bin(@H 0))
+//@B = @cat(@bin(@H 37) @bin(@H 0))
+//@P = @bin(@S 1961)
+
+//// 14:
+//@K = 6
+//@H = 7
+//@S = 14
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 109) @bin(@H 0))
+//@B = @cat(@bin(@H 97) @bin(@H 0))
+//@P = @bin(@S 10573)
+
+//// 16:
+//@K = 7
+//@H = 8
+//@S = 16
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 173) @bin(@H 0))
+//@B = @cat(@bin(@H 233) @bin(@H 0))
+//@P = @bin(@S 40309)
+
+//// 18:
+//@K = 8
+//@H = 9
+//@S = 18
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 449) @bin(@H 0))
+//@B = @cat(@bin(@H 389) @bin(@H 0))
+//@P = @bin(@S 174661)
+
+//// 20:
+//@K = 9
+//@H = 10
+//@S = 20
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 769) @bin(@H 0))
+//@B = @cat(@bin(@H 569) @bin(@H 0))
+//@P = @bin(@S 437561)
+
+//// 22:
+//@K = 10
+//@H = 11
+//@S = 22
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 1423) @bin(@H 0))
+//@B = @cat(@bin(@H 1229) @bin(@H 0))
+//@P = @bin(@S 1748867)
+
+//// 24:
+//@K = 11
+//@H = 12
+//@S = 24
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 2437) @bin(@H 0))
+//@B = @cat(@bin(@H 2333) @bin(@H 0))
+//@P = @bin(@S 5685521)
+
+//// 26:
+//@K = 12
+//@H = 13
+//@S = 26
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 4987) @bin(@H 0))
+//@B = @cat(@bin(@H 6203) @bin(@H 0))
+//@P = @bin(@S 30934361)
+
+//// 28:
+//@K = 13
+//@H = 14
+//@S = 28
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 13513) @bin(@H 0))
+//@B = @cat(@bin(@H 13721) @bin(@H 0))
+//@P = @bin(@S 185411873)
+
+//// 30:
+//@K = 14
+//@H = 15
+//@S = 30
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 24923) @bin(@H 0))
+//@B = @cat(@bin(@H 19489) @bin(@H 0))
+//@P = @bin(@S 485724347)
+
+// 32:
+@K = 15
+@H = 16
+@S = 32
+@X = @cat(@all1(@H) @bin(@H 0))
+@Y = @cat(@all2(@H) @bin(@H 0))
+@A = @cat(@bin(@K 47791) @bin(@H 0))
+@B = @cat(@bin(@H 54881) @bin(@H 0))
+@P = @bin(@S 2622817871)
+
+//  21536832
+//4294967296
+
+@main = 
+  ! cond = @eq(@mul(@X @Y) @P)
+  ! not1 = @not(@eq(@X @bin(@S 1)))
+  @if(@and(cond not1) λt(t @u32(@X) @u32(@Y)) *)
+
+  //λt(t @u32(@X) @u32(@mul(@X @B)))
+
+// Solve: X * Y = P mod 2^32
+//@main =
+  //! solved = @eq(@mul(@X @Y) @P)
+  //@if(solved λt(t (@X) (@Y)) *)
+
+//@main = @lt(@bin(32 155) @bin(32 155))
+
+//@main = @u32(@mul(@bin(32 1234) @bin(32 4321)))
+
+
+
+
+// printing all solutions
+//    4 bits ->     23416 itrs ~ 
+//    8 bits ->    137738 itrs ~ 538
+//    9 bits ->    334663 itrs ~ 653
+//   10 bits ->    813044 itrs ~ 793
+//   11 bits ->   2002681 itrs ~ 977
+//   12 bits ->   4799018 itrs ~ 1171
+//   16 bits -> 138896024 itrs ~ 2119
+
+//    8 bits ->      3813 itrs
+//   16 bits ->     26944 itrs
+//   32 bits ->    250514 itrs
+//   64 bits ->   2652646 itrs
+//  128 bits ->  31219719 itrs (1 second)
+//  256 bits -> 430236928 itrs (10 seconds)
+
+//2048 bits -> 

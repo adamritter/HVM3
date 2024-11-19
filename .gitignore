@@ -18,4 +18,5 @@ cabal.sandbox.config
 .sys.txt
 .out.hvm
 tmp/
+TIMES/
 .main*

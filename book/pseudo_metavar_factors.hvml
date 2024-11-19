@@ -1,0 +1,139 @@
+// Bitstrings
+data Bin { #O{pred} #I{pred} #E }
+
+// If-Then-Else
+@if(b t f) = ~b {
+  0: f
+  k: t
+}
+
+// Not
+@not(a) = ~a {
+  0: 1
+  _: 0
+}
+
+// And
+@and(a b) = ~a {
+  0: 0
+  _: b
+}
+
+// Or
+@or(a b) = ~a {
+  0: b
+  _: 1
+}
+
+// Converts a Bin to an U32
+@u32(b) = ~b{
+  #O: λp (+ (* 2 @u32(p)) 0)
+  #I: λp (+ (* 2 @u32(p)) 1)
+  #E: 0
+}
+
+// Converts an U32 to a Bin of given size
+@bin(s n) = ~s{
+  0: #E
+  p: !&0{n0 n1}=n ~(% n0 2) {
+    0: #O{@bin(p (/ n1 2))}
+    k: #I{@bin(p (/ n1 2))}
+  }
+}
+
+// Bin Equality
+@eq(a b) = ~a{
+  #E: ~b {
+    #O: λ_ 0
+    #I: λ_ 0
+    #E: 1
+  }
+  #O: λap ~b{
+    #O: λbp @eq(ap bp)
+    #I: λ_ 0
+    #E: 0
+  }
+  #I: λap ~b{
+    #O: λ_ 0
+    #I: λbp @eq(ap bp)
+    #E: 0
+  }
+}
+
+// Increments a Bin
+@inc(a) = ~a{
+  #O: λp #I{p}
+  #I: λp #O{@inc(p)}
+  #E: #E
+}
+
+// Decrements a Bin
+@dec(a) = ~a{
+  #O: λp #O{@dec(p)}
+  #I: λp #I{p}
+  #E: #E
+}
+
+// Adds two Bins
+@add(a b) = ~a {
+  #O: λap ~b {
+    #O: λbp #O{@add(ap bp)}
+    #I: λbp #I{@add(ap bp)}
+    #E: #E
+  }
+  #I: λap ~b {
+    #O: λbp #I{@add(ap bp)}
+    #I: λbp #O{@inc(@add(ap bp))}
+    #E: #E
+  }
+  #E: #E
+}
+
+// Muls two Bins
+@mul(a b) = ~b {
+  #E: #E
+  #O: λbp #O{@mul(a bp)}
+  #I: λbp !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
+}
+
+// Concatenates two Bins
+@cat(a b) = ~a {
+  #O: λap #O{@cat(ap b)}
+  #I: λap #I{@cat(ap b)}
+  #E: b
+}
+
+// Enums all Bins of given size (label 1)
+@all1(s) = ~s{
+  0: #E
+  p: !&1{p0 p1}=p &1{ #O{@all1(p0)} #I{@all1(p1)} }
+}
+
+// Enums all Bins of given size (label 2)
+@all2(s) = ~s{
+  0: #E
+  p: !&2{p0 p1}=p &2{ #O{@all2(p0)} #I{@all2(p1)} }
+}
+
+// 20:
+//@K = 9
+//@H = 10
+//@S = 20
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@P = #1{#1{#1{#1{#0{#1{#1{#0{#1{#1{#0{#0{#1{#0{#1{#0{#0{#0{#1{#1{#2}}}}}}}}}}}}}}}}}}}}
+
+//// 30:
+@K = 14
+@H = 15
+@S = 30
+@X = @cat(@all1(@H) @bin(@H 0))
+@Y = @cat(@all2(@H) @bin(@H 0))
+@P = #1{#1{#1{#0{#0{#0{#1{#1{#0{#1{#0{#1{#0{#0{#0{#0{#1{#0{#1{#1{#0{#0{#1{#0{#0{#1{#0{#1{#0{#1{#2}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+
+//INJECT//
+
+@main = 
+  ! cond = @eq(@mul(@X @Y) @P)
+  ! not1 = @not(@eq(@X @bin(@S 1)))
+  @if(@and(cond not1) λt(t @u32(@X) @u32(@Y)) *)

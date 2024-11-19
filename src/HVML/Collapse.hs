@@ -268,11 +268,12 @@ pqPut (k,v) = pqUnion (PQNode (k,v) PQLeaf PQLeaf)
 
 flatten :: Collapse a -> [a]
 flatten term = go term (PQLeaf :: PQ (Collapse a)) where
-  go (CSup k a b) pq = go CEra (pqPut (k,a) $ pqPut (k,b) $ pq)
+  go (CSup k a b) pq = go CEra (pqPut (k,b) $ pqPut (k,a) $ pq)
   go (CVal x)     pq = x : go CEra pq
   go CEra         pq = case pqPop pq of
     Just ((k,v),pq) -> go v pq
     Nothing         -> []
+
 
 -- Core Collapser
 -- --------------
