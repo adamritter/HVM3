@@ -191,6 +191,7 @@ static void interact_duplam(Loc a_loc, Loc b_loc) {
   Loc  dp1 = port(1, a_loc);
   Loc  dp2 = port(2, a_loc);
   Loc  var = port(1, b_loc);
+  // TODO(enricozb): why is this the only take?
   Term bod = take(port(2, b_loc));
   Loc  co1 = alloc_node(2);
   Loc  co2 = alloc_node(2);
@@ -273,7 +274,6 @@ static int normal_step() {
     return 0;
   }
 
-  // TODO(enricozb): change to take(..) instead of get(..) / set(.., 0)
   Term neg = take(loc + 0);
   Term pos = take(loc + 1);
 
