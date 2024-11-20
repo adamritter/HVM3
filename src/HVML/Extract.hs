@@ -112,12 +112,13 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       return $ Ctr cid fds
     
     MAT -> do
+      print "AAA"
       let loc = termLoc term
       let len = termLab term
       val <- extractCoreAt state reduceAt book (loc + 0)
       css <- mapM (\i -> extractCoreAt state reduceAt book (loc + 1 + i)) [0..len-1]
-      css <- mapM (\c -> return (0, c)) css -- NOTE: case arity lost on extraction
-      return $ Mat val css
+      css <- mapM (\c -> return ("#", [], c)) css -- FIXME: recover names and fields on extraction (must store id)
+      return $ Mat val [] css
     
     W32 -> do
       let val = termLoc term
@@ -142,7 +143,8 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       let lab = termLab term
       let fid = u12v2X lab
       let ari = u12v2Y lab
-      arg <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) [0..ari-1]
+      let aux = if ari == 0 then [] else [0..ari-1]
+      arg <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) aux
       let name = MS.findWithDefault "?" fid (idToName book)
       return $ Ref name fid arg
     
@@ -186,12 +188,15 @@ liftDups (Dup lab dp0 dp1 val bod) = do
 liftDups (Ctr cid fds) = do
   fds <- mapM liftDups fds
   return $ Ctr cid fds
-liftDups (Mat val css) = do
+liftDups (Mat val mov css) = do
   val <- liftDups val
-  css <- mapM (\(ar, cs) -> do
-    cs <- liftDups cs
-    return (ar, cs)) css
-  return $ Mat val css
+  mov <- mapM (\(key, val) -> do
+    val <- liftDups val
+    return (key, val)) mov
+  css <- mapM (\(ctr, fds, bod) -> do
+    bod <- liftDups bod
+    return (ctr, fds, bod)) css
+  return $ Mat val mov css
 liftDups (U32 val) = return $ U32 val
 liftDups (Op2 opr nm0 nm1) = do
   nm0 <- liftDups nm0

@@ -20,25 +20,31 @@ data Nat { #Z #S{pred} }
 // Converts a Nat to an U32
 @u32(n) = ~n{
   #Z: 0
-  #S: λnp (+ 1 @u32(np))
+  #S{np}: (+ 1 @u32(np))
 }
 
 // Adds two Nats
-@add(a b) = ~a{
+@add(a b) = ~a !b {
   #Z: b
-  #S: λap #S{@add(ap b)}
+  #S{ap}: #S{@add(ap b)}
 }
 
 // Muls two Nats
-@mul(a b) = ~a{
+@mul(a b) = ~a !b {
   #Z: #Z
-  #S: λap !&1{b0 b1}=b @add(b0 @mul(ap b1))
+  #S{ap}: !&1{b0 b1}=b @add(b0 @mul(ap b1))
 }
 
 // Compares two Nats for equality
-@eq(a b) = ~a{
-  #Z: ~b{ #Z: 1 #S: λbp 0 }
-  #S: λap ~b{ #Z: 0 #S: λbp @eq(ap bp) }
+@eq(a b) = ~a !b {
+  #Z: ~b{
+    #Z: 1
+    #S{bp}: 0
+  }
+  #S{ap}: ~b{
+    #Z: 0
+    #S{bp}: @eq(ap bp)
+  }
 }
 
 // A superposition of all Nats (pseudo-metavar)

@@ -30,100 +30,100 @@ data Pair { #Pair{fst snd} }
 
 // Converts a Bin to an U32
 @u32(b) = ~b{
-  #O: λp (+ (* 2 @u32(p)) 0)
-  #I: λp (+ (* 2 @u32(p)) 1)
+  #O{p}: (+ (* 2 @u32(p)) 0)
+  #I{p}: (+ (* 2 @u32(p)) 1)
   #E: 0
 }
 
 // Converts an U32 to a Bin of given size
 @bin(s n) = ~s{
   0: #E
-  p: !&0{n0 n1}=n ~(% n0 2) {
+  p: !&0{n0 n1}=n ~(% n0 2) !p !n1 {
     0: #O{@bin(p (/ n1 2))}
     k: #I{@bin(p (/ n1 2))}
   }
 }
 
 // Bin Equality
-@eq(a b) = ~a{
+@eq(a b) = ~a !b {
   #E: ~b {
-    #O: λ_ 0
-    #I: λ_ 0
+    #O{bp}: 0
+    #I{bp}: 0
     #E: 1
   }
-  #O: λap ~b{
-    #O: λbp @eq(ap bp)
-    #I: λ_ 0
+  #O{ap}: ~b{
+    #O{bp}: @eq(ap bp)
+    #I{bp}: 0
     #E: 0
   }
-  #I: λap ~b{
-    #O: λ_ 0
-    #I: λbp @eq(ap bp)
+  #I{ap}: ~b{
+    #O{bp}: 0
+    #I{bp}: @eq(ap bp)
     #E: 0
   }
 }
 
 // Increments a Bin
 @inc(a) = ~a{
-  #O: λp #I{p}
-  #I: λp #O{@inc(p)}
+  #O{p}: #I{p}
+  #I{p}: #O{@inc(p)}
   #E: #E
 }
 
 // Decrements a Bin
 @dec(a) = ~a{
-  #O: λp #O{@dec(p)}
-  #I: λp #I{p}
+  #O{p}: #O{@dec(p)}
+  #I{p}: #I{p}
   #E: #E
 }
 
 // Adds two Bins
-@add(a b) = ~a {
-  #O: λap ~b {
-    #O: λbp #O{@add(ap bp)}
-    #I: λbp #I{@add(ap bp)}
+@add(a b) = ~a !b {
+  #O{ap}: ~b !ap {
+    #O{bp}: #O{@add(ap bp)}
+    #I{bp}: #I{@add(ap bp)}
     #E: #O{ap}
   }
-  #I: λap ~b {
-    #O: λbp #I{@add(ap bp)}
-    #I: λbp #O{@inc(@add(ap bp))}
+  #I{ap}: ~b !ap {
+    #O{bp}: #I{@add(ap bp)}
+    #I{bp}: #O{@inc(@add(ap bp))}
     #E: #I{ap}
   }
   #E: #E
 }
 
 // Muls two Bins
-@mul(a b) = ~b {
+@mul(a b) = ~b !a {
   #E: #E
-  #O: λbp #O{@mul(a bp)}
-  #I: λbp !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
+  #O{bp}: #O{@mul(a bp)}
+  #I{bp}: !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
 }
 
 // Concatenates two Bins
-@cat(a b) = ~a {
-  #O: λap #O{@cat(ap b)}
-  #I: λap #I{@cat(ap b)}
+@cat(a b) = ~a !b {
+  #O{ap}: #O{@cat(ap b)}
+  #I{ap}: #I{@cat(ap b)}
   #E: b
 }
 
 // Lt two Bins (a < b)
 @lt(a b) = @lt_go(0 a b)
 
-@lt_go(k a b) = ~a {
+@lt_go(k a b) = ~a !b {
   #E: ~b {
     #E: k
-    #O: λ_ 1
-    #I: λ_ 1
+    #O{bp}: 1
+    #I{bp}: 1
   }
   #O: λap ~b {
     #E: 0
-    #O: λbp @lt_go(k ap bp)
-    #I: λbp @lt_go(1 ap bp)
+    #O{bp}: @lt_go(k ap bp)
+    #I{bp}: @lt_go(1 ap bp)
   }
   #I: λap ~b {
     #E: 0
-    #O: λbp @lt_go(0 ap bp)
-    #I: λbp @lt_go(k ap bp)
+    #O{bp}: @lt_go(0 ap bp)
+    #I{bp}: @lt_go(k ap bp)
   }
 }
 
@@ -131,8 +131,8 @@ data Pair { #Pair{fst snd} }
 @take(n b) = ~n {
   0: #E
   p: ~b {
-    #O: λbp #O{@take(p bp)}
-    #I: λbp #I{@take(p bp)}
+    #O{bp}: #O{@take(p bp)}
+    #I{bp}: #I{@take(p bp)}
     #E: #E
   }
 }
@@ -140,11 +140,10 @@ data Pair { #Pair{fst snd} }
 // Enums all Bins of given size (label 1)
 @all1(s) = ~s{
   0: #E
-  p: !&1{p0 p1}=p 
-      &1{
-        #O{@all1(p0)}
-        #I{@all1(p1)}
-      }
+  p: !&1{p0 p1}=p &1{
+    #O{@all1(p0)}
+    #I{@all1(p1)}
+  }
 }
 
 // Enums all Bins of given size (label 2)
@@ -305,9 +304,6 @@ data Pair { #Pair{fst snd} }
 @A = @cat(@bin(@K 47791) @bin(@H 0))
 @B = @cat(@bin(@H 54881) @bin(@H 0))
 @P = @bin(@S 2622817871)
-
-//  21536832
-//4294967296
 
 @main = 
   ! cond = @eq(@mul(@X @Y) @P)

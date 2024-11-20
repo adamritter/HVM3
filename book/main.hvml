@@ -1,3 +1,32 @@
+@count(n k) = ~n !k {
+  0: k
+  p: @count(p (+ k 2))
+}
+
+@main = @count(2_000_000_000 0)
+
+
+//data L { #N #C{h t} }
+
+//@foo = λx λa λb λc ~x !a !b !c {
+  //#N: λt(t a b c)
+  //#C{H T}: λt(t a b c H T)
+//}
+
+//@bar = λx ~x {
+  //0: 10
+  //1+p: p
+//}
+
+////@main = (+ (+ 2 3) 4)
+////@main = (@bar 10)
+////@main = (@foo #C{1 #C{2 #C{3 #N}}} 10 20 30)
+////@main = λx ~x { #N: 0 #C{h t}: λK(K h t) }
+
+////@main = λt(t (+ 1 (+ 2 (+ 3 4))) (+ 1 (+ 2 (+ 3 4))))
+//@main = (+ 1 2)
+
+
 //@true = λt λf t
 //@false = λt λf f
 //@not = λb ((b @false) @true)
@@ -29,4 +58,4 @@
   //!list = #Cons{0 #Cons{1 #Cons{&0{10 20} #Cons{3 #Cons{4 #Cons{5 #Cons{6 #Cons{7 #Cons{8 #Cons{9 #Nil}}}}}}}}}}
   //@sum(list 0)
 
-@main = !&0{a b}=(+ 1 2) λt(t a b)
+//@main = !&0{a b}=(+ 1 2) λt(t a b)

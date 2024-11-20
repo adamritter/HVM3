@@ -11,23 +11,20 @@ import HVML.Type
 import System.Exit
 import qualified Data.Map.Strict as MS
 
-reduceAt :: ReduceAt
-reduceAt book host = do 
-  let debug = False
+reduceAt :: Bool -> ReduceAt
+reduceAt debug book host = do 
   term <- got host
   let tag = termTag term
   let lab = termLab term
   let loc = termLoc term
   when debug $ do
-    root <- doExtractCoreAt reduceAt book 0
-    core <- doExtractCoreAt reduceAt book host
-    -- putStrLn $ "---------------- CORE: "
-    -- putStrLn $ coreToString core
+    root <- doExtractCoreAt (const got) book 0
+    core <- doExtractCoreAt (const got) book host
+    putStrLn $ "reduce: " ++ termToString term
+    putStrLn $ "---------------- CORE: "
+    putStrLn $ coreToString core
     putStrLn $ "---------------- ROOT: "
     putStrLn $ coreToString root
-    putStrLn $ "reduce " ++ termToString term
-    val <- got (loc + 2)
-    putStrLn $ "TERM: " ++ termToString term ++ " || VAL " ++ termToString val ++ " !!"
   case tagT tag of
     LET -> do
       case modeT lab of
@@ -35,12 +32,12 @@ reduceAt book host = do
           val <- got (loc + 1)
           cont host (reduceLet term val)
         STRI -> do
-          val <- reduceAt book (loc + 1)
+          val <- reduceAt debug book (loc + 1)
           cont host (reduceLet term val)
         PARA -> do
           error "TODO"
     APP -> do
-      fun <- reduceAt book (loc + 0)
+      fun <- reduceAt debug book (loc + 0)
       case tagT (termTag fun) of
         ERA -> cont host (reduceAppEra term fun)
         LAM -> cont host (reduceAppLam term fun)
@@ -53,7 +50,7 @@ reduceAt book host = do
       sb1 <- got (loc + 1)
       if termTag sb1 == _SUB_
         then do
-          val <- reduceAt book (loc + 0)
+          val <- reduceAt debug book (loc + 0)
           case tagT (termTag val) of
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
@@ -63,13 +60,13 @@ reduceAt book host = do
             _   -> set (loc + 0) val >> return term
         else do
           set host sb0
-          reduceAt book host
+          reduceAt debug book host
     DP1 -> do
       sb0 <- got (loc + 0)
       sb1 <- got (loc + 1)
       if termTag sb1 == _SUB_
         then do
-          val <- reduceAt book (loc + 0)
+          val <- reduceAt debug book (loc + 0)
           case tagT (termTag val) of
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
@@ -79,9 +76,9 @@ reduceAt book host = do
             _   -> set (loc + 0) val >> return term
         else do
           set host sb1
-          reduceAt book host
+          reduceAt debug book host
     MAT -> do
-      val <- reduceAt book (loc + 0)
+      val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
         ERA -> cont host (reduceMatEra term val)
         LAM -> cont host (reduceMatLam term val)
@@ -90,7 +87,7 @@ reduceAt book host = do
         W32 -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
     OPX -> do
-      val <- reduceAt book (loc + 0)
+      val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
         ERA -> cont host (reduceOpxEra term val)
         LAM -> cont host (reduceOpxLam term val)
@@ -99,7 +96,7 @@ reduceAt book host = do
         W32 -> cont host (reduceOpxW32 term val)
         _   -> set (loc + 0) val >> return term
     OPY -> do
-      val <- reduceAt book (loc + 1)
+      val <- reduceAt debug book (loc + 1)
       case tagT (termTag val) of
         ERA -> cont host (reduceOpyEra term val)
         LAM -> cont host (reduceOpyLam term val)
@@ -113,7 +110,7 @@ reduceAt book host = do
         then return term
         else do
           set host sub
-          reduceAt book host
+          reduceAt debug book host
     REF -> do
       let fid = u12v2X lab
       let ari = u12v2Y lab
@@ -127,7 +124,7 @@ reduceAt book host = do
             then return []
             else mapM (\i -> got (loc + i)) [0 .. ari - 1]
           doInjectCoreAt book core host $ zip nams args
-          reduceAt book host
+          reduceAt debug book host
         Nothing -> return term
     otherwise -> do
       return term
@@ -135,59 +132,59 @@ reduceAt book host = do
     cont host action = do
       ret <- action
       set host ret
-      reduceAt book host
+      reduceAt debug book host
 
-reduceCAt :: ReduceAt
-reduceCAt = \ _ host -> do
+reduceCAt :: Bool -> ReduceAt
+reduceCAt = \ _ _ host -> do
   term <- got host
   whnf <- reduceC term
   set host whnf
   return $ whnf
 
-normalAtWith :: (Book -> Term -> HVM Term) -> Book -> Loc -> HVM Term
-normalAtWith reduceAt book host = do
-  term <- got host
-  if termBit term == 1 then do
-    return term
-  else do
-    whnf <- reduceAt book host
-    set host $ termSetBit whnf
-    let tag = termTag whnf
-    let lab = termLab whnf
-    let loc = termLoc whnf
-    case tagT tag of
-      APP -> do
-        normalAtWith reduceAt book (loc + 0)
-        normalAtWith reduceAt book (loc + 1)
-        return whnf
-      LAM -> do
-        normalAtWith reduceAt book (loc + 1)
-        return whnf
-      SUP -> do
-        normalAtWith reduceAt book (loc + 0)
-        normalAtWith reduceAt book (loc + 1)
-        return whnf
-      DP0 -> do
-        normalAtWith reduceAt book (loc + 0)
-        return whnf
-      DP1 -> do
-        normalAtWith reduceAt book (loc + 0)
-        return whnf
-      CTR -> do
-        let ari = u12v2Y lab
-        let ars = (if ari == 0 then [] else [0 .. ari - 1]) :: [Word64]
-        mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
-        return whnf
-      MAT -> do
-        let ari = lab
-        let ars = [0 .. ari] :: [Word64]
-        mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
-        return whnf
-      _ -> do
-        return whnf
+-- normalAtWith :: (Book -> Term -> HVM Term) -> Book -> Loc -> HVM Term
+-- normalAtWith reduceAt book host = do
+  -- term <- got host
+  -- if termBit term == 1 then do
+    -- return term
+  -- else do
+    -- whnf <- reduceAt book host
+    -- set host $ termSetBit whnf
+    -- let tag = termTag whnf
+    -- let lab = termLab whnf
+    -- let loc = termLoc whnf
+    -- case tagT tag of
+      -- APP -> do
+        -- normalAtWith reduceAt book (loc + 0)
+        -- normalAtWith reduceAt book (loc + 1)
+        -- return whnf
+      -- LAM -> do
+        -- normalAtWith reduceAt book (loc + 1)
+        -- return whnf
+      -- SUP -> do
+        -- normalAtWith reduceAt book (loc + 0)
+        -- normalAtWith reduceAt book (loc + 1)
+        -- return whnf
+      -- DP0 -> do
+        -- normalAtWith reduceAt book (loc + 0)
+        -- return whnf
+      -- DP1 -> do
+        -- normalAtWith reduceAt book (loc + 0)
+        -- return whnf
+      -- CTR -> do
+        -- let ari = u12v2Y lab
+        -- let ars = (if ari == 0 then [] else [0 .. ari - 1]) :: [Word64]
+        -- mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+        -- return whnf
+      -- MAT -> do
+        -- let ari = lab
+        -- let ars = [0 .. ari] :: [Word64]
+        -- mapM_ (\i -> normalAtWith reduceAt book (loc + i)) ars
+        -- return whnf
+      -- _ -> do
+        -- return whnf
 
-normalAt :: Book -> Loc -> HVM Term
-normalAt = normalAtWith reduceAt
+-- normalAt :: Book -> Loc -> HVM Term
+-- normalAt = normalAtWith (reduceAt False)
 
-normalCAt :: Book -> Loc -> HVM Term
-normalCAt = normalAtWith reduceCAt
+-- normalCAt :: Book -> Loc -> HVM Term
+-- normalCAt = normalAtWith (reduceCAt False)

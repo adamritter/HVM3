@@ -9,16 +9,6 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
--- NOTE TO AI: we're now implementing the notion of unordered Sup and Dup nodes (USp and UDp).
--- These work like Sup/Dup, except that the order of the elements / variables isn't relevant.
--- That is, swapping the elements of an unordered superposition has no observable effect.
--- Because of that, in the UDp case, both variables it binds are observationally equivalent.
--- As such, we store it as just a single variable. Below are the syntaxes:
--- UDp: `! %L{x} = value`
--- USp: `%L{a b}`
--- And it holds that `∀ a b . %L{a b} == %L{b a}`.
--- Your goal is to help implementing the cases of the USp and UDp nodes.
-
 data Core
   = Var String
   | Ref String Word64 [Core]
@@ -28,7 +18,7 @@ data Core
   | Sup Word64 Core Core
   | Dup Word64 String String Core Core
   | Ctr Word64 [Core]
-  | Mat Core [(Int,Core)]
+  | Mat Core [(String,Core)] [(String,[String],Core)]
   | U32 Word32
   | Op2 Oper Core Core
   | Let Mode String Core Core

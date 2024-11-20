@@ -1,9 +1,10 @@
-@mut(ref fn) = !!new=(fn (ref new)) 0
+@mut(ref fn) = !!$new=(fn (ref $new)) 0
 
-@main = #0{@mut(λret(0) λx(+ x 2)) ret}
+@main = #0{@mut(λ$ret(0) λx(+ x 2)) $ret}
 
 // The '!! x = val' notation represents a seq operator.
 // It reduces 'val' to whnf and assigns the result to 'x'.
+// The $var notation is for non-lexical scoped variables.
 
 //#0{(λref λfn (λnew(0) (fn (ref new))) λret(0) λx(+ x 2)) ret}
 //-------------------------------------------------------------

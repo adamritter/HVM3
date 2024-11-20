@@ -9,81 +9,81 @@ data Bin { #O{pred} #I{pred} #E }
 
 // Converts a Bin to an U32
 @u32(b) = ~b{
-  #O: λp (+ (* 2 @u32(p)) 0)
-  #I: λp (+ (* 2 @u32(p)) 1)
+  #O{p}: (+ (* 2 @u32(p)) 0)
+  #I{p}: (+ (* 2 @u32(p)) 1)
   #E: 0
 }
 
 // Converts an U32 to a Bin of given size
 @bin(s n) = ~s{
   0: #E
-  p: !&0{n0 n1}=n (~(% n0 2) {
-    0: λp λn1 #O{@bin(p (/ n1 2))}
-    k: λp λn1 #I{@bin(p (/ n1 2))}
-  } p n1)
+  p: !&0{n0 n1}=n ~(% n0 2) !p !n1 {
+    0: #O{@bin(p (/ n1 2))}
+    k: #I{@bin(p (/ n1 2))}
+  }
 }
 
 // Bin Equality
-@eq(a b) = (~a{
-  #E: λb ~b {
-    #O: λ_ 0
-    #I: λ_ 0
+@eq(a b) = ~a !b {
+  #E: ~b {
+    #O{bp}: 0
+    #I{bp}: 0
     #E: 1
   }
-  #O: λap λb ~b{
-    #O: λbp @eq(ap bp)
-    #I: λ_ 0
+  #O{ap}: ~b{
+    #O{bp}: @eq(ap bp)
+    #I{bp}: 0
     #E: 0
   }
-  #I: λap λb ~b{
-    #O: λ_ 0
-    #I: λbp @eq(ap bp)
+  #I{ap}: ~b{
+    #O{bp}: 0
+    #I{bp}: @eq(ap bp)
     #E: 0
   }
-} b)
+}
 
 // Increments a Bin
 @inc(a) = ~a{
-  #O: λp #I{p}
-  #I: λp #O{@inc(p)}
+  #O{p}: #I{p}
+  #I{p}: #O{@inc(p)}
   #E: #E
 }
 
 // Decrements a Bin
 @dec(a) = ~a{
-  #O: λp #O{@dec(p)}
-  #I: λp #I{p}
+  #O{p}: #O{@dec(p)}
+  #I{p}: #I{p}
   #E: #E
 }
 
 // Adds two Bins
-@add(a b) = (~a {
-  #O: λap λb (~b {
-    #O: λbp λap #O{@add(ap bp)}
-    #I: λbp λap #I{@add(ap bp)}
-    #E: λap #E
-  } ap)
-  #I: λap λb (~b {
-    #O: λbp λap #I{@add(ap bp)}
-    #I: λbp λap #O{@inc(@add(ap bp))}
-    #E: λap #E
-  } ap)
-  #E: λb #E
-} b)
+@add(a b) = ~a !b {
+  #O{ap}: ~b !ap {
+    #O{bp}: #O{@add(ap bp)}
+    #I{bp}: #I{@add(ap bp)}
+    #E: #E
+  }
+  #I{ap}: ~b !ap {
+    #O{bp}: #I{@add(ap bp)}
+    #I{bp}: #O{@inc(@add(ap bp))}
+    #E: #E
+  }
+  #E: #E
+}
 
 // Muls two Bins
-@mul(a b) = (~b {
-  #E: λa #E
-  #O: λbp λa #O{@mul(a bp)}
-  #I: λbp λa !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
-} a)
+@mul(a b) = ~b !a {
+  #O{bp}: #O{@mul(a bp)}
+  #I{bp}: !&0{a0 a1}=a @add(a0 #O{@mul(a1 bp)})
+  #E: #E
+}
 
 // Concatenates two Bins
-@cat(a b) = (~a {
-  #O: λap λb #O{@cat(ap b)}
-  #I: λap λb #I{@cat(ap b)}
-  #E: λb b
-} b)
+@cat(a b) = ~a !b {
+  #O{ap}: #O{@cat(ap b)}
+  #I{ap}: #I{@cat(ap b)}
+  #E: b
+}
 
 // Enums all Bins of given size (label 1)
 @all1(s) = ~s{
@@ -98,12 +98,12 @@ data Bin { #O{pred} #I{pred} #E }
 }
 
 // 8:
-@K = 3
-@H = 4
-@S = 8
-@X = @cat(@all1(@H) @bin(@H 0))
-@Y = @cat(@all2(@H) @bin(@H 0))
-@P = #1{#0{#0{#1{#0{#1{#0{#1{#2}}}}}}}}
+//@K = 3
+//@H = 4
+//@S = 8
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@P = #1{#0{#0{#1{#0{#1{#0{#1{#2}}}}}}}}
 
 // 20:
 //@K = 9
@@ -114,12 +114,12 @@ data Bin { #O{pred} #I{pred} #E }
 //@P = #1{#1{#1{#1{#0{#1{#1{#0{#1{#1{#0{#0{#1{#0{#1{#0{#0{#0{#1{#1{#2}}}}}}}}}}}}}}}}}}}}
 
 // 30:
-//@K = 14
-//@H = 15
-//@S = 30
-//@X = @cat(@all1(@H) @bin(@H 0))
-//@Y = @cat(@all2(@H) @bin(@H 0))
-//@P = #1{#1{#1{#0{#0{#0{#1{#1{#0{#1{#0{#1{#0{#0{#0{#0{#1{#0{#1{#1{#0{#0{#1{#0{#0{#1{#0{#1{#0{#1{#2}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+@K = 14
+@H = 15
+@S = 30
+@X = @cat(@all1(@H) @bin(@H 0))
+@Y = @cat(@all2(@H) @bin(@H 0))
+@P = #1{#1{#1{#0{#0{#0{#1{#1{#0{#1{#0{#1{#0{#0{#0{#0{#1{#0{#1{#1{#0{#0{#1{#0{#0{#1{#0{#1{#0{#1{#2}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
 
 ////INJECT//
 

@@ -1,8 +1,8 @@
 -- //./Type.hs//
--- //./Show.hs//
 
 module HVML.Parse where
 
+import Control.Monad (foldM, forM)
 import Control.Monad.State
 import Data.List
 import Data.Maybe
@@ -170,43 +170,56 @@ parseMat :: ParserM Core
 parseMat = do
   consume "~"
   val <- parseCore
+  -- Parse mov (external variables)
+  mov <- many $ do
+    try $ do
+      skip
+      consume "!"
+    key <- parseName
+    val <- optionMaybe $ do
+      try $ consume "="
+      parseCore
+    case val of
+      Just v  -> return (key, v)
+      Nothing -> return (key, Var key)
   consume "{"
   css <- many $ do
     closeWith "}"
     next <- lookAhead anyChar
-    case next of
-      '#' -> do
-        -- Parse ADT constructor case
-        consume "#"
-        name <- parseName
-        cids <- parsedCtrToCid <$> getState
-        aris <- parsedCtrToAri <$> getState
-        ari  <- case MS.lookup name aris of
-          Just ari -> return ari
-          Nothing  -> return (-1)
-        cid  <- case MS.lookup name cids of
-          Just id -> return id
-          Nothing -> fail $ "Unknown constructor: " ++ name
-        consume ":"
-        cas <- parseCore
-        return (cid, (ari, cas))
-      _ -> do
-        -- Parse U32 or named case
-        name <- parseName
-        cid <- case reads name of
-          [(num, "")] -> return (fromIntegral (num :: Integer))
-          otherwise   -> return 0xFFFFFFFF
-        consume ":"
-        cas <- if cid == 0xFFFFFFFF
-          then do
-            body <- parseCore
-            return $ Lam name body
-          else do
-            parseCore
-        return (cid, (-1, cas))
+    -- Parse constructor case
+    if next == '#' then do
+      consume "#"
+      ctr <- parseName
+      fds <- option [] $ do
+        try $ consume "{"
+        fds <- many $ do
+          closeWith "}"
+          parseName
+        consume "}"
+        return fds
+      consume ":"
+      bod <- parseCore
+      return (ctr, fds, bod)
+    -- Parse numeric case
+    else do
+      num <- parseName
+      case reads num of
+        [(n :: Word64, "")] -> do
+          consume ":"
+          bod <- parseCore
+          return (num, [], bod)
+        otherwise -> do
+          consume ":"
+          bod <- parseCore
+          return ("+", [num], bod)
   consume "}"
-  let sortedCss = map snd $ sortOn fst css
-  return $ Mat val sortedCss
+  css <- forM css $ \(ctr, fds, bod) -> do
+    cid <- case reads ctr of
+      [(num, "")]  -> return $ Left (read num :: Word64)
+      _            -> do st <- getState; return $ Right $ fromMaybe maxBound $ MS.lookup ctr (parsedCtrToCid st)
+    return (cid, (ctr, fds, bod))
+  css <- return $ map snd $ sortOn fst css
+  return $ Mat val mov css
 
 parseOper :: Oper -> ParserM Core
 parseOper op = do
@@ -223,7 +236,6 @@ parseName = skip >> many (alphaNum <|> char '_' <|> char '$')
 parseName1 :: ParserM String
 parseName1 = skip >> many1 (alphaNum <|> char '_')
 
--- TODO: update the syntax of definitions, from '@foo x y z = body' to '@foo(x,y,z) = body'. update the trace too
 parseDef :: ParserM (String, ([String], Core))
 parseDef = do
   try $ do
@@ -285,7 +297,8 @@ parseBook = do
 
 doParseCore :: String -> IO Core
 doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty) "" code of
-  Right core -> return $ core
+  Right core -> do
+    return $ core
   Left  err  -> do
     showParseError "" code err
     return $ Ref "⊥" 0 []
@@ -348,7 +361,7 @@ setRefIds fids term = case term of
   Sup l x y     -> Sup l (setRefIds fids x) (setRefIds fids y)
   Dup l x y v b -> Dup l x y (setRefIds fids v) (setRefIds fids b)
   Ctr cid fds   -> Ctr cid (map (setRefIds fids) fds)
-  Mat x css     -> Mat (setRefIds fids x) (map (\ (ar,cs) -> (ar, setRefIds fids cs)) css)
+  Mat x mov css -> Mat (setRefIds fids x) (map (\ (k,v) -> (k, setRefIds fids v)) mov) (map (\ (ctr,fds,cs) -> (ctr, fds, setRefIds fids cs)) css)
   Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
   U32 n         -> U32 n
   Era           -> Era
@@ -402,12 +415,19 @@ lexify term = evalState (go term MS.empty) 0 where
     Ctr cid fds -> do
       fds <- mapM (\x -> go x ctx) fds
       return $ Ctr cid fds
-    Mat val css -> do
-      val <- go val ctx
-      css <- mapM (\(ar, cs) -> do
-        cs <- go cs ctx
-        return (ar, cs)) css
-      return $ Mat val css
+    Mat val mov css -> do
+      val' <- go val ctx
+      mov' <- forM mov $ \ (k,v) -> do
+        k' <- fresh k
+        v  <- go v ctx
+        return $ (k', v)
+      css' <- forM css $ \ (ctr,fds,bod) -> do
+        fds' <- mapM fresh fds
+        ctx  <- foldM (\ ctx (fd,fd') -> extend fd fd' ctx) ctx (zip fds fds')
+        ctx  <- foldM (\ ctx ((k,_),(k',_)) -> extend k k' ctx) ctx (zip mov mov')
+        bod <- go bod ctx
+        return (ctr, fds', bod)
+      return $ Mat val' mov' css'
     Op2 op nm0 nm1 -> do
       nm0 <- go nm0 ctx
       nm1 <- go nm1 ctx

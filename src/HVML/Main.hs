@@ -51,8 +51,9 @@ main = do
       let collapse  = "-C" `elem` args
       let search    = "-S" `elem` args
       let showStats = "-s" `elem` args
+      let debug     = "-d" `elem` args
       let mode = if collapse then Collapse else if search then Search else Normalize
-      cliRun file compiled mode showStats
+      cliRun file debug compiled mode showStats
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -71,13 +72,14 @@ printHelp = do
   putStrLn "    -C # Collapse the result to a list of λ-Terms"
   putStrLn "    -S # Search (collapse, then print the 1st λ-Term)"
   putStrLn "    -s # Show statistics"
+  putStrLn "    -d # Print execution steps (debug mode)"
   return $ Right ()
 
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> RunMode -> Bool -> IO (Either String ())
-cliRun filePath compiled mode showStats = do
+cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
+cliRun filePath debug compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -122,8 +124,8 @@ cliRun filePath compiled mode showStats = do
   init <- getCPUTime
   root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
   rxAt <- if compiled
-    then return reduceCAt
-    else return reduceAt
+    then return (reduceCAt debug)
+    else return (reduceAt debug)
   vals <- if mode == Collapse || mode == Search
     then doCollapseAt rxAt book 0
     else do

@@ -82,11 +82,25 @@ injectCore book (Ctr cid fds) loc = do
   sequence_ [injectCore book fd (ctr + ix) | (ix,fd) <- zip [0..] fds]
   lift $ set loc (termNew _CTR_ (u12v2New cid (fromIntegral arity)) ctr)
 
-injectCore book (Mat val css) loc = do
+injectCore book (Mat val mov css) loc = do
+  -- Allocate space for the Mat term
   mat <- lift $ allocNode (1 + fromIntegral (length css))
+  -- Inject the value being matched
   injectCore book val (mat + 0)
-  sequence_ [injectCore book (snd bod) (mat + 1 + ix) | (ix,bod) <- zip [0..] css]
-  lift $ set loc (termNew _MAT_ (fromIntegral (length css)) mat)
+  -- Process each case
+  forM_ (zip [0..] css) $ \ (idx, (ctr, fds, bod)) -> do
+    -- Inject the case body into memory
+    injectCore book (foldr Lam (foldr Lam bod (map fst mov)) fds) (mat + 1 + idx)
+  -- After processing all cases, create the Mat term
+  trm <- return $ termNew _MAT_ (fromIntegral (length css)) mat
+  ret <- foldM (\mat (_, val) -> do
+      app <- lift $ allocNode 2
+      lift $ set (app + 0) mat
+      injectCore book val (app + 1)
+      return $ termNew _APP_ 0 app)
+    trm
+    mov
+  lift $ set loc ret
 
 injectCore book (U32 val) loc = do
   lift $ set loc (termNew _W32_ 0 (fromIntegral val))
@@ -101,7 +115,6 @@ doInjectCoreAt :: Book -> Core -> Loc -> [(String, Term)] -> HVM Term
 doInjectCoreAt book core host argList = do
   (_, state) <- runStateT (injectCore book core host) (emptyState { args = Map.fromList argList })
   foldM (\m (name, loc) -> do
-    print $ "GOT " ++ name
     case Map.lookup name (args state) of
       Just term -> do
         set loc term

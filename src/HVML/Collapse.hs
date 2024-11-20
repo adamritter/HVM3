@@ -2,7 +2,7 @@
 
 module HVML.Collapse where
 
-import Control.Monad (ap, forM_)
+import Control.Monad (ap, forM, forM_)
 import Control.Monad.IO.Class
 import Data.Char (chr, ord)
 import Data.IORef
@@ -144,17 +144,19 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       let lab = termLab term
       let cid = u12v2X lab
       let ari = u12v2Y lab
-      let ars = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]
-      fds0 <- mapM (collapseDupsAt state reduceAt book) ars
+      let aux = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]
+      fds0 <- forM aux (collapseDupsAt state reduceAt book)
       return $ Ctr cid fds0
 
     MAT -> do
       let loc = termLoc term
       let len = termLab term
+      let aux = if len == 0 then [] else [loc + 1 + i | i <- [0..len-1]]
       val0 <- collapseDupsAt state reduceAt book (loc + 0)
-      css0 <- mapM (collapseDupsAt state reduceAt book) [loc + 1 + i | i <- [0..len-1]]
-      css1 <- mapM (\ cs -> return (0, cs)) css0
-      return $ Mat val0 css1
+      css0 <- forM aux $ \h -> do
+        bod <- collapseDupsAt state reduceAt book h
+        return $ ("#", [], bod) -- TODO: recover constructor and fields
+      return $ Mat val0 [] css0
 
     W32 -> do
       let val = termLoc term
@@ -222,12 +224,15 @@ collapseSups book core = case core of
   Ctr cid fields -> do
     fields <- mapM (collapseSups book) fields
     return $ Ctr cid fields
-  Mat val cases -> do
+  Mat val mov css -> do
     val <- collapseSups book val
-    cases <- mapM (\ (arity, expr) -> do
+    mov <- mapM (\(key, expr) -> do
       expr <- collapseSups book expr
-      return (arity, expr)) cases
-    return $ Mat val cases
+      return (key, expr)) mov
+    css <- mapM (\(ctr, fds, bod) -> do
+      bod <- collapseSups book bod
+      return (ctr, fds, bod)) css
+    return $ Mat val mov css
   U32 val -> return $ U32 val
   Op2 op x y -> do
     x <- collapseSups book x
@@ -273,7 +278,6 @@ flatten term = go term (PQLeaf :: PQ (Collapse a)) where
   go CEra         pq = case pqPop pq of
     Just ((k,v),pq) -> go v pq
     Nothing         -> []
-
 
 -- Core Collapser
 -- --------------

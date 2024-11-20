@@ -3,7 +3,7 @@
 
 module HVML.Compile where
 
-import Control.Monad (forM_, forM)
+import Control.Monad (forM_, forM, foldM)
 import Control.Monad.State
 import Data.List
 import Data.Word
@@ -146,15 +146,28 @@ compileFullCore book fid (Ctr cid fds) host = do
   fdsT <- mapM (\ (i,fd) -> compileFullCore book fid fd (ctrNam ++ " + " ++ show i)) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
   return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
-compileFullCore book fid (Mat val css) host = do
+compileFullCore book fid (Mat val mov css) host = do
   matNam <- fresh "mat"
   let arity = length css
   emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + arity) ++ ");"
   valT <- compileFullCore book fid val (matNam ++ " + 0")
   emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
-  cssT <- mapM (\ (i,(_,cs)) -> compileFullCore book fid cs (matNam ++ " + " ++ show (i+1))) (zip [0..] css)
-  sequence_ [emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ csT ++ ");" | (i,csT) <- zip [0..] cssT]
-  return $ "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
+    -- Create a chain of lambdas for fields and moved vars
+    let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
+    bodT <- compileFullCore book fid bod' (matNam ++ " + " ++ show (i+1))
+    emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
+  -- Create the base Mat term
+  let mat = "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  -- Apply moved values
+  foldM (\term (key, val) -> do
+    appNam <- fresh "app"
+    emit $ "Loc " ++ appNam ++ " = alloc_node(2);"
+    valT <- compileFullCore book fid val (appNam ++ " + 1")
+    emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
+    emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
+    return $ "term_new(APP, 0, " ++ appNam ++ ")"
+    ) mat mov
 compileFullCore book fid (U32 val) _ =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
 compileFullCore book fid (Op2 opr nu0 nu1) host = do
@@ -202,12 +215,12 @@ compileFastArgs book fid body ctx = do
 
 -- Compiles a fast function body (pattern-matching)
 compileFastBody :: Book -> Word64 -> Core -> [String] -> Int -> Compile ()
-compileFastBody book fid term@(Mat val css) ctx itr = do
+compileFastBody book fid term@(Mat val mov css) ctx itr = do
   valT   <- compileFastCore book fid val
   valNam <- fresh "val"
   numNam <- fresh "num"
   emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
-  let isNumeric = length css > 0 && fst (css !! 0) == -1
+  let isNumeric = length css > 0 && (let (ctr,fds,bod) = css !! 0 in ctr == "0")
   -- Numeric Pattern-Matching
   if isNumeric then do
     emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
@@ -215,11 +228,14 @@ compileFastBody book fid term@(Mat val css) ctx itr = do
     emit $ "u32 " ++ numNam ++ " = term_loc(" ++ valNam ++ ");"
     emit $ "switch (" ++ numNam ++ ") {"
     tabInc
-    forM_ (zip [0..] css) $ \ (i, (_,cs)) -> do
+    forM_ (zip [0..] css) $ \ (i, (ctr,fds,bod)) -> do
       if i < length css - 1 then do
         emit $ "case " ++ show i ++ ": {"
         tabInc
-        compileFastBody book fid cs ctx (itr + 1)
+        forM_ mov $ \ (key,val) -> do
+          valT <- compileFastCore book fid val
+          bind key valT
+        compileFastBody book fid bod ctx (itr + 1 + length mov)
         emit $ "break;"
         tabDec
         emit $ "}"
@@ -228,7 +244,12 @@ compileFastBody book fid term@(Mat val css) ctx itr = do
         tabInc
         preNam <- fresh "pre"
         emit $ "Term " ++ preNam ++ " = " ++ "term_new(W32, 0, "++numNam++" - "++show (length css - 1)++");"
-        compileFastApps book fid cs [preNam] ctx (itr + 1 + 1)
+        forM_ fds $ \ fd -> do
+          bind fd preNam
+        forM_ mov $ \ (key,val) -> do
+          valT <- compileFastCore book fid val
+          bind key valT
+        compileFastBody book fid bod ctx (itr + 1 + length fds + length mov)
         emit $ "break;"
         tabDec
         emit $ "}"
@@ -242,16 +263,18 @@ compileFastBody book fid term@(Mat val css) ctx itr = do
     tabInc
     emit $ "switch (u12v2_x(term_lab(" ++ valNam ++ "))) {"
     tabInc
-    forM_ (zip [0..] css) $ \ (i, (ar,cs)) -> do
+    forM_ (zip [0..] css) $ \ (i, (ctr,fds,bod)) -> do
       emit $ "case " ++ show i ++ ": {"
       tabInc
-      args <- if ar == 0
-        then return []
-        else forM [0..ar-1] $ \k -> do
-          ctrNam <- fresh "ctr"
-          emit $ "Term " ++ ctrNam ++ " = got(term_loc(" ++ valNam ++ ") + " ++ show k ++ ");"
-          return ctrNam
-      compileFastApps book fid cs args ctx (itr + 1 + fromIntegral ar)
+      forM_ (zip [0..] fds) $ \ (k,fd) -> do
+        fdNam <- fresh "fd"
+        emit $ "Term " ++ fdNam ++ " = got(term_loc(" ++ valNam ++ ") + " ++ show k ++ ");"
+        bind fd fdNam
+      forM_ mov $ \ (key,val) -> do
+        valT <- compileFastCore book fid val
+        bind key valT
+      compileFastBody book fid bod ctx (itr + 1 + length fds + length mov)
+      -- compileFastApps book fid bod args ctx (itr + 1 + fromIntegral ar)
       emit $ "break;"
       tabDec
       emit $ "}"
@@ -271,16 +294,6 @@ compileFastBody book fid term ctx itr = do
   body <- compileFastCore book fid term
   compileFastSave book fid term ctx itr
   emit $ "return " ++ body ++ ";"
-
--- ...
-compileFastApps :: Book -> Word64 -> Core -> [String] -> [String] -> Int -> Compile ()
-compileFastApps book fid (Lam pvar pbod) (arg : args) ctx itr = do
-  bind pvar $ arg
-  compileFastApps book fid pbod args ctx itr
-compileFastApps book fid term [] ctx itr =
-  compileFastBody book fid term ctx itr
-compileFastApps book fid term args ctx itr =
-  error "TODO"
 
 -- Falls back from fast mode to full mode
 compileFastUndo :: Book -> Word64 -> Core -> [String] -> Int -> Compile ()
@@ -372,15 +385,30 @@ compileFastCore book fid (Ctr cid fds) = do
   fdsT <- mapM (\ (i,fd) -> compileFastCore book fid fd) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
   return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
-compileFastCore book fid (Mat val css) = do
+compileFastCore book fid (Mat val mov css) = do
   matNam <- fresh "mat"
   let arity = length css
   emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + arity) ++ ");"
   valT <- compileFastCore book fid val
   emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
-  cssT <- mapM (\ (i,(_,cs)) -> compileFastCore book fid cs) (zip [0..] css)
-  sequence_ [emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ csT ++ ");" | (i,csT) <- zip [0..] cssT]
-  return $ "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
+    let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
+    bodT <- compileFastCore book fid bod'
+    emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
+  -- Create the base Mat term
+  let mat = "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  -- Apply moved values
+  foldM (\term (key, val) -> do
+    appNam <- fresh "app"
+    emit $ "Loc " ++ appNam ++ " = alloc_node(2);"
+    valT <- compileFastCore book fid val
+    emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
+    emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
+    return $ "term_new(APP, 0, " ++ appNam ++ ")"
+    ) mat mov
+
+
+
 compileFastCore book fid (U32 val) =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
 compileFastCore book fid (Op2 opr nu0 nu1) = do
