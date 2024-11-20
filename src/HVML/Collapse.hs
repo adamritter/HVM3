@@ -106,38 +106,38 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
           return $ Sup lab tm00 tm11
 
     VAR -> do
-      let key = termKey term
-      sub <- got key
+      let loc = termLoc term
+      sub <- got loc
       if termTag sub /= _SUB_
       then do
         error "Internal Error: VAR does not point to SUB"
       else do
-        name <- genName namesRef key
+        name <- genName namesRef loc
         return $ Var name
 
     DP0 -> do
       let loc = termLoc term
       let lab = termLab term
-      let key = termKey term
-      sub <- got key
-      if termTag sub /= _SUB_
+      sb0 <- got (loc+0)
+      sb1 <- got (loc+1)
+      if termTag sb1 /= _SUB_
       then do
         error "Internal Error: DP0 does not point to SUB"
       else do
         let newPaths = IM.alter (Just . maybe [0] (0:)) (fromIntegral lab) paths
-        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 2)
+        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)
 
     DP1 -> do
       let loc = termLoc term
       let lab = termLab term
-      let key = termKey term
-      sub <- got key
-      if termTag sub /= _SUB_
+      sb0 <- got (loc+0)
+      sb1 <- got (loc+1)
+      if termTag sb1 /= _SUB_
       then do
         error "Internal Error: DP1 does not point to SUB"
       else do
         let newPaths = IM.alter (Just . maybe [1] (1:)) (fromIntegral lab) paths
-        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 2)
+        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)
 
     CTR -> do
       let loc = termLoc term

@@ -49,36 +49,36 @@ reduceAt book host = do
         W32 -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
     DP0 -> do
-      let key = termKey term
-      sub <- got key
-      if termTag sub == _SUB_
+      sb0 <- got (loc + 0)
+      sb1 <- got (loc + 1)
+      if termTag sb1 == _SUB_
         then do
-          val <- reduceAt book (loc + 2)
+          val <- reduceAt book (loc + 0)
           case tagT (termTag val) of
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
-            _   -> set (loc + 2) val >> return term
+            _   -> set (loc + 0) val >> return term
         else do
-          set host sub
+          set host sb0
           reduceAt book host
     DP1 -> do
-      let key = termKey term
-      sub <- got key
-      if termTag sub == _SUB_
+      sb0 <- got (loc + 0)
+      sb1 <- got (loc + 1)
+      if termTag sb1 == _SUB_
         then do
-          val <- reduceAt book (loc + 2)
+          val <- reduceAt book (loc + 0)
           case tagT (termTag val) of
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
-            _   -> set (loc + 2) val >> return term
+            _   -> set (loc + 0) val >> return term
         else do
-          set host sub
+          set host sb1
           reduceAt book host
     MAT -> do
       val <- reduceAt book (loc + 0)
@@ -168,10 +168,10 @@ normalAtWith reduceAt book host = do
         normalAtWith reduceAt book (loc + 1)
         return whnf
       DP0 -> do
-        normalAtWith reduceAt book (loc + 2)
+        normalAtWith reduceAt book (loc + 0)
         return whnf
       DP1 -> do
-        normalAtWith reduceAt book (loc + 2)
+        normalAtWith reduceAt book (loc + 0)
         return whnf
       CTR -> do
         let ari = u12v2Y lab

@@ -68,8 +68,8 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       return $ Sup lab tm0 tm1
     
     VAR -> do
-      let key = termKey term
-      name <- genName state key
+      let loc = termLoc term
+      name <- genName state loc
       return $ Var name
     
     DP0 -> do
@@ -78,12 +78,12 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- genName state (termKey term)
+        name <- genName state (loc + 0)
         return $ Var name
       else do
         dp0 <- genName state (loc + 0)
         dp1 <- genName state (loc + 1)
-        val <- extractCoreAt state reduceAt book (loc + 2)
+        val <- extractCoreAt state reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp0)
     
@@ -93,12 +93,12 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- genName state (termKey term)
+        name <- genName state (loc + 1)
         return $ Var name
       else do
         dp0 <- genName state (loc + 0)
         dp1 <- genName state (loc + 1)
-        val <- extractCoreAt state reduceAt book (loc + 2)
+        val <- extractCoreAt state reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp1)
 

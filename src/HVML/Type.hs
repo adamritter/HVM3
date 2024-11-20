@@ -126,9 +126,6 @@ foreign import ccall unsafe "Runtime.c term_lab"
 foreign import ccall unsafe "Runtime.c term_loc"
   termLoc :: Term -> Loc
 
-foreign import ccall unsafe "Runtime.c term_key"
-  termKey :: Term -> Loc
-
 foreign import ccall unsafe "Runtime.c term_set_bit"
   termSetBit :: Term -> Tag
 

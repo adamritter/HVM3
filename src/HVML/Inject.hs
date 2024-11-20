@@ -56,14 +56,14 @@ injectCore book (Sup lab tm0 tm1) loc = do
   lift $ set loc (termNew _SUP_ lab sup)
 
 injectCore book (Dup lab dp0 dp1 val bod) loc = do
-  dup <- lift $ allocNode 3
-  lift $ set (dup + 0) (termNew _SUB_ 0 0)
+  dup <- lift $ allocNode 2
+  -- lift $ set (dup + 0) (termNew _SUB_ 0 0)
   lift $ set (dup + 1) (termNew _SUB_ 0 0)
   modify $ \s -> s 
     { args = Map.insert dp0 (termNew _DP0_ lab dup) 
            $ Map.insert dp1 (termNew _DP1_ lab dup) (args s) 
     }
-  injectCore book val (dup + 2)
+  injectCore book val (dup + 0)
   injectCore book bod loc
 
 injectCore book (Ref nam fid arg) loc = do
