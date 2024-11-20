@@ -23,10 +23,13 @@ injectCore _ Era loc = do
   lift $ set loc (termNew _ERA_ 0 0)
 
 injectCore _ (Var nam) loc = do
-  args <- gets args
-  case Map.lookup nam args of
-    Just term -> lift $ set loc term
-    Nothing   -> modify $ \s -> s { vars = (nam, loc) : vars s }
+  argsMap <- gets args
+  case Map.lookup nam argsMap of
+    Just term -> do
+      lift $ set loc term
+      modify $ \s -> s { args = Map.delete nam (args s) }
+    Nothing -> do
+      modify $ \s -> s { vars = (nam, loc) : vars s }
 
 injectCore book (Let mod nam val bod) loc = do
   let_node <- lift $ allocNode 3
@@ -97,8 +100,14 @@ injectCore book (Op2 opr nm0 nm1) loc = do
 doInjectCoreAt :: Book -> Core -> Loc -> [(String, Term)] -> HVM Term
 doInjectCoreAt book core host argList = do
   (_, state) <- runStateT (injectCore book core host) (emptyState { args = Map.fromList argList })
-  forM_ (vars state) $ \(name, loc) -> 
+  foldM (\m (name, loc) -> do
+    print $ "GOT " ++ name
     case Map.lookup name (args state) of
-      Just term -> set loc term
-      Nothing   -> error $ "Unbound variable: " ++ name
+      Just term -> do
+        set loc term
+        return $ Map.delete name m
+      Nothing -> do
+        error $ "Unbound variable: " ++ name)
+    (args state)
+    (vars state)
   got host
