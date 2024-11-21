@@ -22,24 +22,25 @@ HVM3 is a work-in-progress. Its features are being actively implemented.
 Install
 -------
 
-1. Install Haskell.
+1. Install Cabal.
 
 3. Clone this repository.
 
-3. Install it with `cabal install`.
+3. Run `cabal install`.
 
 Usage
 -----
 
 ```bash
-hvml run   file.hvml  # runs lazy-mode, interpreted
-hvml run-c file.hvml  # runs lazy-mode, compiled
-hvms run   file.hvms  # runs strict-mode, interpreted (TODO)
-hvms run-c file.hvms  # runs strict-mode, compiled (TODO)
+cabal run hvml -- run file.hvml     # runs lazy-mode, interpreted
+cabal run hvml -- run file.hvml -c  # runs lazy-mode, compiled
+
+cabal run hvml -- run file.hvms     # runs strict-mode, interpreted (TODO)
+cabal run hvml -- run file.hvms -c  # runs strict-mode, compiled (TODO)
 ```
 
-Note that `run-c` will also generate a standalone `.main.c` file, which you
-can compile and run independently. See examples on the [book/](book/) directory.
+Note: the `-c` flag will also generate a standalone `.main.c` file, which if you
+want, you can compile and run it independently. See examples on the [book/](book/) directory.
 
 Performance
 -----------
