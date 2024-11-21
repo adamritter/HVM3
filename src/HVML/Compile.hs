@@ -219,7 +219,7 @@ compileFastBody book fid term@(Mat val mov css) ctx itr = do
   valT   <- compileFastCore book fid val
   valNam <- fresh "val"
   numNam <- fresh "num"
-  emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
+  emit $ "Term " ++ valNam ++ " = (" ++ valT ++ ");"
   let isNumeric = length css > 0 && (let (ctr,fds,bod) = css !! 0 in ctr == "0")
   -- Numeric Pattern-Matching
   if isNumeric then do

@@ -509,10 +509,11 @@ Term reduce_mat_sup(Term mat, Term sup) {
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
   Lab mat_len = term_lab(mat);
-  Loc sup0    = alloc_node(2);
-  Loc mat0    = alloc_node(1 + mat_len);
-  //Loc mat0    = mat_loc;
   Loc mat1    = alloc_node(1 + mat_len);
+  //Loc mat0    = alloc_node(1 + mat_len);
+  //Loc sup0    = alloc_node(2);
+  Loc mat0    = mat_loc;
+  Loc sup0    = sup_loc;
   set(mat0 + 0, tm0);
   set(mat1 + 0, tm1);
   for (u64 i = 0; i < mat_len; i++) {
@@ -723,7 +724,7 @@ Term reduce_opy_w32(Term opy, Term w32) {
 }
 
 Term reduce(Term term) {
-  if (term_tag(term) >= ERA) return term;
+  //if (term_tag(term) >= ERA) return term;
   Term next = term;
   u64  stop = *HVM.spos;
   u64* spos = HVM.spos;

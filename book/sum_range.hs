@@ -11,4 +11,6 @@ sum' Nil              r = r
 sum' (Cons head tail) r = sum' tail (head + r)
 
 main :: IO ()
-main = print $ sum' (range 50_000_000 Nil) 0
+main = do
+  let !a = range 50_000_000 Nil
+  print $ sum' a 0
