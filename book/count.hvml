@@ -5,7 +5,7 @@
 
 @main = @count(2_000_000_000 0)
 
-//WORK: 10000000003 interactions
-//TIME: 2.479 seconds
+//WORK: 12000000004 interactions
+//TIME: 1.1376750 seconds
 //SIZE: 3 nodes
-//PERF: 4034.456 MIPS
+//PERF: 10547.828 MIPS
