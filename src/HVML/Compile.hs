@@ -1,5 +1,4 @@
 -- //./Type.hs//
--- //./Inject.hs//
 
 module HVML.Compile where
 
@@ -283,15 +282,49 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
     tabDec
     emit $ "}"
   compileFastUndo book fid term ctx itr reuse
+compileFastBody book fid term@(Dup lab dp0 dp1 val bod) ctx stop itr reuse = do
+  valT <- compileFastCore book fid val reuse
+  valNam <- fresh "val"
+  dp0Nam <- fresh "dp0"
+  dp1Nam <- fresh "dp1"
+  emit $ "Term " ++ valNam ++ " = (" ++ valT ++ ");"
+  emit $ "Term " ++ dp0Nam ++ ";"
+  emit $ "Term " ++ dp1Nam ++ ";"
+  emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
+  tabInc
+  emit $ "itrs += 1;"
+  emit $ dp0Nam ++ " = " ++ valNam ++ ";"
+  emit $ dp1Nam ++ " = " ++ valNam ++ ";"
+  tabDec
+  emit $ "} else {"
+  tabInc
+  dupNam <- fresh "dup"
+  dupLoc <- compileFastAlloc 2 reuse
+  emit $ "Loc " ++ dupNam ++ " = " ++ dupLoc ++ ";"
+  emit $ "set(" ++ dupNam ++ " + 0, " ++ valNam ++ ");"
+  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
+  emit $ dp0Nam ++ " = term_new(DP0, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
+  emit $ dp1Nam ++ " = term_new(DP1, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
+  tabDec
+  emit $ "}"
+  bind dp0 dp0Nam
+  bind dp1 dp1Nam
+  compileFastBody book fid bod ctx stop itr reuse
 compileFastBody book fid term@(Let mode var val bod) ctx stop itr reuse = do
   valT <- compileFastCore book fid val reuse
   case mode of
     LAZY -> do
       bind var valT
     STRI -> do
-      valNam <- fresh "val"
-      emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
-      bind var valNam
+      case val of
+        Ref _ rFid _ -> do
+          valNam <- fresh "val"
+          emit $ "Term " ++ valNam ++ " = reduce(" ++ idToName book MS.! rFid ++ "_f(" ++ valT ++ "));"
+          bind var valNam
+        _ -> do
+          valNam <- fresh "val" 
+          emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
+          bind var valNam
     PARA -> do -- TODO: implement parallel evaluation
       valNam <- fresh "val"
       emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
