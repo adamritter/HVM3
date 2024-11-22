@@ -97,6 +97,15 @@ data Bin { #O{pred} #I{pred} #E }
   p: !&2{p0 p1}=p &2{ #O{@all2(p0)} #I{@all2(p1)} }
 }
 
+
+//X = superpose [0 .. 65k]
+//Y = superpose [0 .. 65k]
+//if X * Y == Z:
+  //return (X, Y)
+//else:
+  //return *
+  
+
 // 8:
 //@K = 3
 //@H = 4
@@ -124,3 +133,27 @@ data Bin { #O{pred} #I{pred} #E }
 ////INJECT//
 
 @main = @if(@eq(@mul(@X @Y) @P) λt(t @u32(@X) @u32(@Y)) *)
+
+
+//λa ((a 25997) 27299)
+//-- FACT: 25997 27299
+//-- TIME: 17.0888260 seconds
+
+//WORK: 74411113 interactions
+//TIME: 0.7577590 seconds
+//SIZE: 401899325 nodes
+//PERF: 98.199 MIPS
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -26,10 +26,7 @@ typedef struct {
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
-  Loc*   free2_ini; // freelist
-  Loc*   free2_end; // freelist
   Term (*book[1024])(Term); // functions
-  u64*   adts; // ADT Info
 } State;
 
 // Global State Value
@@ -724,7 +721,7 @@ Term reduce_opy_w32(Term opy, Term w32) {
 }
 
 Term reduce(Term term) {
-  //if (term_tag(term) >= ERA) return term;
+  if (term_tag(term) >= ERA) return term;
   Term next = term;
   u64  stop = *HVM.spos;
   u64* spos = HVM.spos;
