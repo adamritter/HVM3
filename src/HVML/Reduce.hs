@@ -124,7 +124,7 @@ reduceAt debug book host = do
         Just (nams, core) -> do
           incItr
           when (length nams /= fromIntegral ari) $ do
-            putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ idToName book MS.! fid ++ "'."
+            putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
             exitFailure
           args <- if ari == 0
             then return []

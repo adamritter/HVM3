@@ -112,7 +112,6 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       return $ Ctr cid fds
     
     MAT -> do
-      print "AAA"
       let loc = termLoc term
       let len = termLab term
       val <- extractCoreAt state reduceAt book (loc + 0)

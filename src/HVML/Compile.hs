@@ -37,8 +37,8 @@ compile book fid =
 -- Compiles a function using either Fast-Mode or Full-Mode
 compileWith :: (Book -> Word64 -> Core -> [String] -> Compile ()) -> Book -> Word64 -> String
 compileWith cmp book fid = 
-  let args   = fst (idToFunc book MS.! fid) in
-  let core   = snd (idToFunc book MS.! fid) in
+  let args   = fst (mget (idToFunc book) fid) in
+  let core   = snd (mget (idToFunc book) fid) in
   let state  = CompileState 0 0 MS.empty [] [] in
   let result = runState (cmp book fid core args) state in
   unlines $ reverse $ code (snd result)
@@ -66,7 +66,7 @@ fresh name = do
 
 compileFull :: Book -> Word64 -> Core -> [String] -> Compile ()
 compileFull book fid core args = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_t(Term ref) {"
+  emit $ "Term " ++ mget (idToName book) fid ++ "_t(Term ref) {"
   tabInc
   forM_ (zip [0..] args) $ \(i, arg) -> do
     bind arg $ "got(term_loc(ref) + " ++ show i ++ ")"
@@ -193,7 +193,7 @@ compileFullCore book fid (Ref rNam rFid rArg) host = do
 -- Compiles a function using Fast-Mode
 compileFast :: Book -> Word64 -> Core -> [String] -> Compile ()
 compileFast book fid core args = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
+  emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
   tabInc
   emit "u64 itrs = 0;"
   args <- forM (zip [0..] args) $ \ (i, arg) -> do
@@ -321,7 +321,7 @@ compileFastBody book fid term@(Let mode var val bod) ctx stop itr reuse = do
       case val of
         Ref _ rFid _ -> do
           valNam <- fresh "val"
-          emit $ "Term " ++ valNam ++ " = reduce(" ++ idToName book MS.! rFid ++ "_f(" ++ valT ++ "));"
+          emit $ "Term " ++ valNam ++ " = reduce(" ++ mget (idToName book) rFid ++ "_f(" ++ valT ++ "));"
           bind var valNam
         _ -> do
           valNam <- fresh "val" 
@@ -349,7 +349,7 @@ compileFastUndo :: Book -> Word64 -> Core -> [String] -> Int -> MS.Map Int [Stri
 compileFastUndo book fid term ctx itr reuse = do
   forM_ (zip [0..] ctx) $ \ (i, arg) -> do
     emit $ "set(term_loc(ref) + "++show i++", " ++ arg ++ ");"
-  emit $ "return " ++ idToName book MS.! fid ++ "_t(ref);"
+  emit $ "return " ++ mget (idToName book) fid ++ "_t(ref);"
 
 -- Completes a fast mode call
 compileFastSave :: Book -> Word64 -> Core -> [String] -> Int -> MS.Map Int [String] -> Compile ()
@@ -531,6 +531,6 @@ compileFastVar var = do
 -- Compiles a function using Fast-Mode
 compileSlow :: Book -> Word64 -> Core -> [String] -> Compile ()
 compileSlow book fid core args = do
-  emit $ "Term " ++ idToName book MS.! fid ++ "_f(Term ref) {"
-  emit $ "  return " ++ idToName book MS.! fid ++ "_t(ref);"
+  emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
+  emit $ "  return " ++ mget (idToName book) fid ++ "_t(ref);"
   emit $ "}"

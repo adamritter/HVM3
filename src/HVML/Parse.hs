@@ -12,6 +12,8 @@ import HVML.Show
 import HVML.Type
 import Highlight (highlightError)
 import System.Console.ANSI
+import System.Exit (exitFailure)
+import System.IO.Unsafe (unsafePerformIO)
 import Text.Parsec hiding (State)
 import Text.Parsec.Error
 import Text.Parsec.Pos
@@ -398,14 +400,13 @@ createBook :: [(String, ([String], Core))] -> MS.Map String Word64 -> MS.Map Str
 createBook defs ctrToCid ctrToAri =
   let nameToId' = MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (nameToId' MS.! name, (args, lexify (setRefIds nameToId' core)))) defs
+      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (mget nameToId' name, (args, lexify (setRefIds nameToId' core)))) defs
   in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid
 
 -- Adds the function id to Ref constructors
 setRefIds :: MS.Map String Word64 -> Core -> Core
 setRefIds fids term = case term of
   Var nam       -> Var nam
-  Ref nam _ arg -> Ref nam (fids MS.! nam) (map (setRefIds fids) arg)
   Let m x v b   -> Let m x (setRefIds fids v) (setRefIds fids b)
   Lam x bod     -> Lam x (setRefIds fids bod)
   App f x       -> App (setRefIds fids f) (setRefIds fids x)
@@ -417,6 +418,11 @@ setRefIds fids term = case term of
   U32 n         -> U32 n
   Chr c         -> Chr c
   Era           -> Era
+  Ref nam _ arg -> case MS.lookup nam fids of
+    Just fid -> Ref nam fid (map (setRefIds fids) arg)
+    Nothing  -> unsafePerformIO $ do
+      putStrLn $ "error:unbound-ref @" ++ nam
+      exitFailure
 
 -- Gives unique names to lexically scoped vars, unless they start with '$'.
 -- Example: `λx λt (t λx(x) x)` will read as `λx0 λt1 (t1 λx2(x2) x0)`.

@@ -107,7 +107,7 @@ cliRun filePath debug compiled mode showStats = do
     
     -- Register compiled functions
     forM_ (MS.keys (idToFunc book)) $ \ fid -> do
-      funPtr <- dlsym bookLib (idToName book MS.! fid ++ "_f")
+      funPtr <- dlsym bookLib (mget (idToName book) fid ++ "_f")
       hvmDefine fid funPtr
 
     -- Link compiled state
@@ -122,7 +122,7 @@ cliRun filePath debug compiled mode showStats = do
 
   -- Normalize main
   init <- getCPUTime
-  root <- doInjectCoreAt book (Ref "main" (nameToId book MS.! "main") []) 0 []
+  root <- doInjectCoreAt book (Ref "main" (mget (nameToId book) "main") []) 0 []
   rxAt <- if compiled
     then return (reduceCAt debug)
     else return (reduceAt debug)
@@ -162,8 +162,8 @@ cliRun filePath debug compiled mode showStats = do
 
 genMain :: Book -> String
 genMain book =
-  let mainFid = nameToId book MS.! "main"
-      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ idToName book MS.! fid ++ "_f);" | fid <- MS.keys (idToFunc book)]
+  let mainFid = mget (nameToId book) "main"
+      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ mget (idToName book) fid ++ "_f);" | fid <- MS.keys (idToFunc book)]
   in unlines
     [ "int main() {"
     , "  hvm_init();"

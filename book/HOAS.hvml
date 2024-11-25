@@ -1,0 +1,56 @@
+data List {
+  #Nil
+  #Cons{head tail}
+}
+
+data Term {
+  #Var{nam}
+  #Lam{nam bod}
+  #App{fun arg}
+  #Sub{val}
+}
+
+@cat(xs ys) = ~xs !ys {
+  #Nil: ys
+  #Cons{h t}: #Cons{h @cat(t ys)}
+}
+
+@join(xs) = ~xs {
+  #Nil: #Nil
+  #Cons{h t}: @cat(h @join(t))
+}
+
+@show(term) = ~term {
+  #Var{nam}: nam
+  #Lam{nam bod}: !&0{n0 n1}=nam @join(["λ" n0 " " @show((bod #Var{n1}))])
+  #App{fun arg}: @join(["(" @show(fun) " " @show(arg) ")"])
+  #Sub{val}: @show(val)
+}
+
+@wnf(term) = ~term {
+  #Var{nam}: #Var{nam}
+  #Lam{nam bod}: #Lam{nam bod}
+  #App{fun arg}: @app(@wnf(fun) arg)
+  #Sub{val}: @wnf(val)
+}
+
+@nf(term) = ~ @wnf(term) {
+  #Var{nam}: #Var{nam}
+  #Lam{nam bod}: #Lam{nam λx @nf((bod #Sub{x}))}
+  #App{fun arg}: #App{@nf(fun) @nf(arg)}
+  #Sub{val}: val
+}
+
+@app(f x) = ~f !x {
+  #Var{nam}: #App{#Var{nam} x}
+  #Lam{nam bod}: @wnf((bod @wnf(x)))
+  #App{fun arg}: #App{#App{fun arg} x}
+  #Sub{val}: #Var{"TODO"}
+}
+
+@id = #Lam{"x" λx(x)}
+@c2 = #Lam{"f" λf #Lam{"x" λx !&1{f0 f1}=f #App{f0 #App{f1 x}}}}
+@k2 = #Lam{"g" λf #Lam{"y" λx !&2{f0 f1}=f #App{f0 #App{f1 x}}}}
+@fn = #App{@c2 @k2}
+
+@main = @show(@nf(@fn))

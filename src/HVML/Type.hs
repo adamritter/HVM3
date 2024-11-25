@@ -274,3 +274,8 @@ modeT 0x00 = LAZY
 modeT 0x01 = STRI
 modeT 0x02 = PARA
 modeT mode = error $ "unknown mode: " ++ show mode
+
+-- Getter function for maps
+mget map key = case MS.lookup key map of
+  Just val -> val
+  Nothing  -> error $ "key not found: " ++ show key
