@@ -125,6 +125,9 @@ parseCore = do
           return $ Let LAZY nam val bod
     '#' -> parseCtr
     '~' -> parseMat
+    '[' -> parseLst
+    '\'' -> parseChr
+    '"' -> parseStr
     _ -> do
       name <- parseName
       case reads (filter (/= '_') name) of
@@ -230,6 +233,55 @@ parseOper op = do
   consume ")"
   return $ Op2 op nm0 nm1
 
+parseEscapedChar :: ParserM Char
+parseEscapedChar = choice
+  [ try $ do
+      char '\\'
+      c <- oneOf "\\\"nrtbf0/\'"
+      return $ case c of
+        '\\' -> '\\'
+        '/'  -> '/'
+        '"'  -> '"'
+        '\'' -> '\''
+        'n'  -> '\n'
+        'r'  -> '\r'
+        't'  -> '\t'
+        'b'  -> '\b'
+        'f'  -> '\f'
+        '0'  -> '\0'
+  , try $ do
+      string "\\u"
+      code <- count 4 hexDigit
+      return $ toEnum (read ("0x" ++ code) :: Int)
+  , noneOf "\"\\"
+  ]
+
+parseChr :: ParserM Core
+parseChr = do
+  skip
+  char '\''
+  c <- parseEscapedChar
+  char '\''
+  return $ Chr c
+
+parseStr :: ParserM Core
+parseStr = do
+  skip
+  char '"'
+  str <- many (noneOf "\"")
+  char '"'
+  return $ foldr (\c acc -> Ctr 1 [Chr c, acc]) (Ctr 0 []) str
+
+parseLst :: ParserM Core
+parseLst = do
+  skip
+  char '['
+  elems <- many $ do
+    closeWith "]"
+    parseCore
+  char ']'
+  return $ foldr (\x acc -> Ctr 1 [x, acc]) (Ctr 0 []) elems
+
 parseName :: ParserM String
 parseName = skip >> many (alphaNum <|> char '_' <|> char '$')
 
@@ -317,7 +369,6 @@ doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.em
       st   <- getState
       return (defs, st)
 
-
 -- Helper Parsers
 -- --------------
 
@@ -364,6 +415,7 @@ setRefIds fids term = case term of
   Mat x mov css -> Mat (setRefIds fids x) (map (\ (k,v) -> (k, setRefIds fids v)) mov) (map (\ (ctr,fds,cs) -> (ctr, fds, setRefIds fids cs)) css)
   Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
   U32 n         -> U32 n
+  Chr c         -> Chr c
   Era           -> Era
 
 -- Gives unique names to lexically scoped vars, unless they start with '$'.
@@ -434,6 +486,8 @@ lexify term = evalState (go term MS.empty) 0 where
       return $ Op2 op nm0 nm1
     U32 n -> 
       return $ U32 n
+    Chr c ->
+      return $ Chr c
     Era -> 
       return Era
 

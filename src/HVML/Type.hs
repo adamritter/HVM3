@@ -20,6 +20,7 @@ data Core
   | Ctr Word64 [Core]
   | Mat Core [(String,Core)] [(String,[String],Core)]
   | U32 Word32
+  | Chr Char
   | Op2 Oper Core Core
   | Let Mode String Core Core
   deriving (Show, Eq)
@@ -69,6 +70,7 @@ data TAG
   | CTR
   | MAT
   | W32
+  | CHR
   | OPX
   | OPY
   deriving (Eq, Show)
@@ -246,9 +248,10 @@ tagT 0x0B = LAM
 tagT 0x0C = SUP
 tagT 0x0D = CTR
 tagT 0x0E = W32
+tagT 0x0F = CHR
 tagT tag  = error $ "unknown tag: " ++ show tag
 
-_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_ :: Tag
+_DP0_, _DP1_, _VAR_, _SUB_, _REF_, _LET_, _APP_, _MAT_, _OPX_, _OPY_, _ERA_, _LAM_, _SUP_, _CTR_, _W32_, _CHR_ :: Tag
 _DP0_ = 0x00
 _DP1_ = 0x01
 _VAR_ = 0x02
@@ -264,6 +267,7 @@ _LAM_ = 0x0B
 _SUP_ = 0x0C
 _CTR_ = 0x0D
 _W32_ = 0x0E
+_CHR_ = 0x0F
 
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY

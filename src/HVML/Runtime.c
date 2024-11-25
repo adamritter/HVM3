@@ -57,6 +57,7 @@ static State HVM = {
 #define SUP 0x0C
 #define CTR 0x0D
 #define W32 0x0E
+#define CHR 0x0F
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -207,6 +208,7 @@ void print_tag(Tag tag) {
     case CTR: printf("CTR"); break;
     case MAT: printf("MAT"); break;
     case W32: printf("W32"); break;
+    case CHR: printf("CHR"); break;
     case OPX: printf("OPX"); break;
     case OPY: printf("OPY"); break;
     default : printf("???"); break;
@@ -553,6 +555,7 @@ Term reduce_mat_ctr(Term mat, Term ctr) {
 Term reduce_mat_w32(Term mat, Term w32) {
   //printf("reduce_mat_w32 "); print_term(mat); printf("\n");
   inc_itr();
+  Lab mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
   Lab mat_len = term_lab(mat);
   u64 w32_val = term_loc(w32);
@@ -561,7 +564,7 @@ Term reduce_mat_w32(Term mat, Term w32) {
   } else {
     Loc app = alloc_node(2);
     set(app + 0, got(mat_loc + mat_len));
-    set(app + 1, term_new(W32, 0, w32_val - (mat_len - 1)));
+    set(app + 1, term_new(mat_tag, 0, w32_val - (mat_len - 1)));
     return term_new(APP, 0, app);
   }
 }
@@ -695,6 +698,7 @@ Term reduce_opy_w32(Term opy, Term w32) {
   //printf("reduce_opy_w32 "); print_term(opy); printf("\n");
   inc_itr();
   Loc opy_loc = term_loc(opy);
+  u32 t = term_tag(w32);
   u32 x = term_loc(got(opy_loc + 0));
   u32 y = term_loc(w32);
   u32 result;
@@ -717,7 +721,7 @@ Term reduce_opy_w32(Term opy, Term w32) {
     case OP_RSH: result = x >> y; break;
     default: result = 0;
   }
-  return term_new(W32, 0, result);
+  return term_new(t, 0, result);
 }
 
 Term reduce(Term term) {
@@ -832,6 +836,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_app_sup(prev, next); continue;
                 case CTR: next = reduce_app_ctr(prev, next); continue;
                 case W32: next = reduce_app_w32(prev, next); continue;
+                case CHR: next = reduce_app_w32(prev, next); continue;
                 default: break;
               }
               break;
@@ -844,6 +849,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_dup_sup(prev, next); continue;
                 case CTR: next = reduce_dup_ctr(prev, next); continue;
                 case W32: next = reduce_dup_w32(prev, next); continue;
+                case CHR: next = reduce_dup_w32(prev, next); continue;
                 default: break;
               }
               break;
@@ -855,6 +861,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_mat_sup(prev, next); continue;
                 case CTR: next = reduce_mat_ctr(prev, next); continue;
                 case W32: next = reduce_mat_w32(prev, next); continue;
+                case CHR: next = reduce_mat_w32(prev, next); continue;
                 default: break;
               }
             }
@@ -865,6 +872,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opx_sup(prev, next); continue;
                 case CTR: next = reduce_opx_ctr(prev, next); continue;
                 case W32: next = reduce_opx_w32(prev, next); continue;
+                case CHR: next = reduce_opx_w32(prev, next); continue;
                 default: break;
               }
             }
@@ -875,6 +883,7 @@ Term reduce(Term term) {
                 case SUP: next = reduce_opy_sup(prev, next); continue;
                 case CTR: next = reduce_opy_ctr(prev, next); continue;
                 case W32: next = reduce_opy_w32(prev, next); continue;
+                case CHR: next = reduce_opy_w32(prev, next); continue;
                 default: break;
               }
             } 

@@ -169,6 +169,8 @@ compileFullCore book fid (Mat val mov css) host = do
     ) mat mov
 compileFullCore book fid (U32 val) _ =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
+compileFullCore book fid (Chr val) _ =
+  return $ "term_new(CHR, 0, " ++ show (fromEnum val) ++ ")"
 compileFullCore book fid (Op2 opr nu0 nu1) host = do
   opxNam <- fresh "opx"
   emit $ "Loc " ++ opxNam ++ " = alloc_node(2);"
@@ -222,7 +224,7 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
   let isNumeric = length css > 0 && (let (ctr,fds,bod) = css !! 0 in ctr == "0")
   -- Numeric Pattern-Matching
   if isNumeric then do
-    emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
+    emit $ "if (term_tag("++valNam++") == W32) {"
     tabInc
     emit $ "u32 " ++ numNam ++ " = term_loc(" ++ valNam ++ ");"
     emit $ "switch (" ++ numNam ++ ") {"
@@ -417,7 +419,7 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) reuse = do
   emit $ "Term " ++ valNam ++ " = (" ++ valT ++ ");"
   emit $ "Term " ++ dp0Nam ++ ";"
   emit $ "Term " ++ dp1Nam ++ ";"
-  emit $ "if (term_tag(" ++ valNam ++ ") == W32) {"
+  emit $ "if (term_tag("++valNam++") == W32 || term_tag("++valNam++") == CHR) {"
   tabInc
   emit $ "itrs += 1;"
   emit $ dp0Nam ++ " = " ++ valNam ++ ";"
@@ -467,6 +469,8 @@ compileFastCore book fid (Mat val mov css) reuse = do
     ) mat mov
 compileFastCore book fid (U32 val) reuse =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
+compileFastCore book fid (Chr val) reuse =
+  return $ "term_new(CHR, 0, " ++ show (fromEnum val) ++ ")"
 compileFastCore book fid (Op2 opr nu0 nu1) reuse = do
   opxNam <- fresh "opx"
   retNam <- fresh "ret"

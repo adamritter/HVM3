@@ -162,6 +162,10 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       let val = termLoc term
       return $ U32 (fromIntegral val)
 
+    CHR -> do
+      let val = termLoc term
+      return $ Chr (chr (fromIntegral val))
+
     OPX -> do
       let loc = termLoc term
       let opr = toEnum (fromIntegral (termLab term))
@@ -234,6 +238,7 @@ collapseSups book core = case core of
       return (ctr, fds, bod)) css
     return $ Mat val mov css
   U32 val -> return $ U32 val
+  Chr val -> return $ Chr val
   Op2 op x y -> do
     x <- collapseSups book x
     y <- collapseSups book y

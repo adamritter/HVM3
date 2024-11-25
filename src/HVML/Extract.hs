@@ -123,6 +123,10 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
     W32 -> do
       let val = termLoc term
       return $ U32 (fromIntegral val)
+
+    CHR -> do
+      let val = termLoc term
+      return $ Chr (chr (fromIntegral val))
     
     OPX -> do
       let loc = termLoc term

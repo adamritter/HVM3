@@ -44,6 +44,7 @@ reduceAt debug book host = do
         SUP -> cont host (reduceAppSup term fun)
         CTR -> cont host (reduceAppCtr term fun)
         W32 -> cont host (reduceAppW32 term fun)
+        CHR -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
     DP0 -> do
       sb0 <- got (loc + 0)
@@ -57,6 +58,7 @@ reduceAt debug book host = do
             SUP -> cont host (reduceDupSup term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
+            CHR -> cont host (reduceDupW32 term val)
             _   -> set (loc + 0) val >> return term
         else do
           set host sb0
@@ -73,6 +75,7 @@ reduceAt debug book host = do
             SUP -> cont host (reduceDupSup term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
+            CHR -> cont host (reduceDupW32 term val)
             _   -> set (loc + 0) val >> return term
         else do
           set host sb1
@@ -85,6 +88,7 @@ reduceAt debug book host = do
         SUP -> cont host (reduceMatSup term val)
         CTR -> cont host (reduceMatCtr term val)
         W32 -> cont host (reduceMatW32 term val)
+        CHR -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
     OPX -> do
       val <- reduceAt debug book (loc + 0)
@@ -94,6 +98,7 @@ reduceAt debug book host = do
         SUP -> cont host (reduceOpxSup term val)
         CTR -> cont host (reduceOpxCtr term val)
         W32 -> cont host (reduceOpxW32 term val)
+        CHR -> cont host (reduceOpxW32 term val)
         _   -> set (loc + 0) val >> return term
     OPY -> do
       val <- reduceAt debug book (loc + 1)
@@ -103,6 +108,7 @@ reduceAt debug book host = do
         SUP -> cont host (reduceOpySup term val)
         CTR -> cont host (reduceOpyCtr term val)
         W32 -> cont host (reduceOpyW32 term val)
+        CHR -> cont host (reduceOpyW32 term val)
         _   -> set (loc + 1) val >> return term
     VAR -> do
       sub <- got (loc + 0)

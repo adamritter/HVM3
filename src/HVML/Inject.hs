@@ -3,6 +3,7 @@ module HVML.Inject where
 import Control.Monad (foldM)
 import Control.Monad (forM_)
 import Control.Monad.State
+import Data.Char (ord)
 import Data.Word
 import HVML.Show
 import HVML.Type
@@ -104,6 +105,9 @@ injectCore book (Mat val mov css) loc = do
 
 injectCore book (U32 val) loc = do
   lift $ set loc (termNew _W32_ 0 (fromIntegral val))
+
+injectCore book (Chr val) loc = do
+  lift $ set loc (termNew _CHR_ 0 (fromIntegral $ ord val))
 
 injectCore book (Op2 opr nm0 nm1) loc = do
   opx <- lift $ allocNode 2
