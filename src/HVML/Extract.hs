@@ -201,6 +201,7 @@ liftDups (Mat val mov css) = do
     return (ctr, fds, bod)) css
   return $ Mat val mov css
 liftDups (U32 val) = return $ U32 val
+liftDups (Chr val) = return $ Chr val
 liftDups (Op2 opr nm0 nm1) = do
   nm0 <- liftDups nm0
   nm1 <- liftDups nm1
