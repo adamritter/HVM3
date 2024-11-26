@@ -359,9 +359,20 @@ compileFastSave book fid term ctx itr reuse = do
 -- Helper function to allocate nodes with reuse
 compileFastAlloc :: Int -> MS.Map Int [String] -> Compile String
 compileFastAlloc arity reuse = do
-  case MS.lookup arity reuse of
-    Just (loc:locs) -> return loc
-    _ -> return $ "alloc_node(" ++ show arity ++ ")"
+  return $ "alloc_node(" ++ show arity ++ ")"
+  -- FIXME: temporarily disabled, caused bug in:
+  -- data List {
+    -- #Nil
+    -- #Cons{head tail}
+  -- }
+  -- @cat(xs ys) = ~xs !ys {
+    -- #Nil: ys
+    -- #Cons{h t}: #Cons{h @cat(t ys)}
+  -- }
+  -- @main = @cat(#Cons{1 #Nil} #Nil)
+  -- case MS.lookup arity reuse of
+    -- Just (loc:locs) -> return loc
+    -- _ -> return $ "alloc_node(" ++ show arity ++ ")"
 
 -- Compiles a core term in fast mode
 compileFastCore :: Book -> Word64 -> Core -> MS.Map Int [String] -> Compile String

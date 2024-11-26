@@ -564,7 +564,7 @@ Term reduce_mat_w32(Term mat, Term w32) {
   } else {
     Loc app = alloc_node(2);
     set(app + 0, got(mat_loc + mat_len));
-    set(app + 1, term_new(mat_tag, 0, w32_val - (mat_len - 1)));
+    set(app + 1, term_new(W32, 0, w32_val - (mat_len - 1)));
     return term_new(APP, 0, app);
   }
 }
