@@ -7,11 +7,13 @@ import Control.Monad.IO.Class
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
-import HVML.Type
 import HVML.Show
+import HVML.Type
+import System.Exit (exitFailure)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
+
 
 -- The Collapse Monad
 -- ------------------
@@ -188,6 +190,10 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       arg0 <- mapM (collapseDupsAt state reduceAt book) [loc + i | i <- [0..ari-1]]
       let name = MS.findWithDefault "?" fid (idToName book)
       return $ Ref name fid arg0
+
+    tag -> do
+      putStrLn ("unexpected-tag:" ++ show tag)
+      exitFailure
 
 genName :: IORef (MS.Map Loc String) -> Loc -> HVM String
 genName namesRef loc = do
