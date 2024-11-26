@@ -17,12 +17,13 @@ executable hvml
     import:           warnings
     main-is:          HVML/Main.hs
     other-modules:    HVML.Type
-                    , HVML.Compile
-                    , HVML.Extract
                     , HVML.Collapse
+                    , HVML.Compile
+                    , HVML.Equal
+                    , HVML.Extract
                     , HVML.Inject
-                    , HVML.Reduce
                     , HVML.Parse
+                    , HVML.Reduce
                     , HVML.Show
     build-depends:    base ^>=4.20.0.0,
                       mtl ^>=2.3.1,

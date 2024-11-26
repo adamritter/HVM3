@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Collapse where
 
@@ -13,7 +14,6 @@ import System.Exit (exitFailure)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
-
 
 -- The Collapse Monad
 -- ------------------
@@ -73,7 +73,8 @@ collapseDupsAt :: CollapseDupsState -> ReduceAt -> Book -> Loc -> HVM Core
 collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
-    ERA -> return Era
+    ERA -> do
+      return Era
 
     LET -> do
       let loc = termLoc term
@@ -106,6 +107,18 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
           tm00 <- collapseDupsAt state reduceAt book (loc + 0)
           tm11 <- collapseDupsAt state reduceAt book (loc + 1)
           return $ Sup lab tm00 tm11
+
+    TYP -> do
+      let loc = termLoc term
+      name <- genName namesRef (loc + 0)
+      bod0 <- collapseDupsAt state reduceAt book (loc + 1)
+      return $ Typ name bod0
+
+    ANN -> do
+      let loc = termLoc term
+      val0 <- collapseDupsAt state reduceAt book (loc + 0)
+      typ0 <- collapseDupsAt state reduceAt book (loc + 1)
+      return $ Ann val0 typ0
 
     VAR -> do
       let loc = termLoc term
@@ -231,6 +244,13 @@ collapseSups book core = case core of
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Dup lab x y val body
+  Typ nam bod -> do
+    body <- collapseSups book bod
+    return $ Typ nam body
+  Ann val typ -> do
+    val <- collapseSups book val
+    typ <- collapseSups book typ
+    return $ Ann val typ
   Ctr cid fields -> do
     fields <- mapM (collapseSups book) fields
     return $ Ctr cid fields
@@ -243,8 +263,10 @@ collapseSups book core = case core of
       bod <- collapseSups book bod
       return (ctr, fds, bod)) css
     return $ Mat val mov css
-  U32 val -> return $ U32 val
-  Chr val -> return $ Chr val
+  U32 val -> do
+    return $ U32 val
+  Chr val -> do
+    return $ Chr val
   Op2 op x y -> do
     x <- collapseSups book x
     y <- collapseSups book y
@@ -259,6 +281,16 @@ collapseSups book core = case core of
     let tm0' = collapseSups book tm0
     let tm1' = collapseSups book tm1
     CSup lab tm0' tm1'
+
+-- Tree Collapser
+-- --------------
+
+doCollapseAt :: ReduceAt -> Book -> Loc -> HVM (Collapse Core)
+doCollapseAt reduceAt book host = do
+  namesRef <- newIORef MS.empty
+  let state = (IM.empty, namesRef)
+  core <- collapseDupsAt state reduceAt book host
+  return $ collapseSups book core
 
 -- Flattener
 -- ---------
@@ -290,12 +322,10 @@ flatten term = go term (PQLeaf :: PQ (Collapse a)) where
     Just ((k,v),pq) -> go v pq
     Nothing         -> []
 
--- Core Collapser
+-- Flat Collapser
 -- --------------
 
-doCollapseAt :: ReduceAt -> Book -> Loc -> HVM [Core]
-doCollapseAt reduceAt book host = do
-  namesRef <- newIORef MS.empty
-  let state = (IM.empty, namesRef)
-  core <- collapseDupsAt state reduceAt book host
-  return $ flatten (collapseSups book core)
+doCollapseFlatAt :: ReduceAt -> Book -> Loc -> HVM [Core]
+doCollapseFlatAt reduceAt book host = do
+  coll <- doCollapseAt reduceAt book host
+  return $ flatten coll

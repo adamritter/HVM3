@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Extract where
 
@@ -66,6 +67,18 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       tm0 <- extractCoreAt state reduceAt book (loc + 0)
       tm1 <- extractCoreAt state reduceAt book (loc + 1)
       return $ Sup lab tm0 tm1
+
+    TYP -> do
+      let loc = termLoc term
+      name <- genName state (loc + 0)
+      bod  <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Typ name bod
+    
+    ANN -> do
+      let loc = termLoc term
+      val <- extractCoreAt state reduceAt book (loc + 0)
+      typ <- extractCoreAt state reduceAt book (loc + 1)
+      return $ Ann val typ
     
     VAR -> do
       let loc = termLoc term
@@ -188,6 +201,13 @@ liftDups (Dup lab dp0 dp1 val bod) = do
   bod <- liftDups bod
   modify (\oldState k -> oldState (Dup lab dp0 dp1 val k))
   return bod
+liftDups (Typ nam bod) = do
+  bod <- liftDups bod
+  return $ Typ nam bod
+liftDups (Ann val typ) = do
+  val <- liftDups val
+  typ <- liftDups typ
+  return $ Ann val typ
 liftDups (Ctr cid fds) = do
   fds <- mapM liftDups fds
   return $ Ctr cid fds
@@ -200,8 +220,10 @@ liftDups (Mat val mov css) = do
     bod <- liftDups bod
     return (ctr, fds, bod)) css
   return $ Mat val mov css
-liftDups (U32 val) = return $ U32 val
-liftDups (Chr val) = return $ Chr val
+liftDups (U32 val) = do
+  return $ U32 val
+liftDups (Chr val) = do
+  return $ Chr val
 liftDups (Op2 opr nm0 nm1) = do
   nm0 <- liftDups nm0
   nm1 <- liftDups nm1

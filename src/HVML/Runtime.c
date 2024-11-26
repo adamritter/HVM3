@@ -49,15 +49,17 @@ static State HVM = {
 #define REF 0x04
 #define LET 0x05
 #define APP 0x06
-#define MAT 0x07
-#define OPX 0x08
-#define OPY 0x09
-#define ERA 0x0A
-#define LAM 0x0B
-#define SUP 0x0C
-#define CTR 0x0D
-#define W32 0x0E
-#define CHR 0x0F
+#define ANN 0x07
+#define MAT 0x08
+#define OPX 0x09
+#define OPY 0x0A
+#define ERA 0x0B
+#define LAM 0x0C
+#define SUP 0x0D
+#define TYP 0x0E
+#define CTR 0x0F
+#define W32 0x10
+#define CHR 0x11
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -200,8 +202,10 @@ void print_tag(Tag tag) {
     case DP0: printf("DP0"); break;
     case DP1: printf("DP1"); break;
     case APP: printf("APP"); break;
-    case ERA: printf("ERA"); break;
     case LAM: printf("LAM"); break;
+    case TYP: printf("TYP"); break;
+    case ANN: printf("ANN"); break;
+    case ERA: printf("ERA"); break;
     case SUP: printf("SUP"); break;
     case REF: printf("REF"); break;
     case LET: printf("LET"); break;
@@ -314,6 +318,33 @@ Term reduce_app_sup(Term app, Term sup) {
   return term_new(SUP, sup_lab, su0);
 }
 
+// (%x(F) a)
+// ----------- APP-TYP
+// x <- λk(y)
+// %y(F <k:a>)
+Term reduce_app_typ(Term app, Term typ) {
+  //printf("reduce_app_typ "); print_term(app); printf("\n");
+  inc_itr();
+  Loc app_loc = term_loc(app);
+  Loc typ_loc = term_loc(typ);
+  Term arg    = got(app_loc + 1);
+  Term bod    = got(typ_loc + 1);
+  Loc ap0     = app_loc;
+  Loc lm0     = alloc_node(2);
+  Loc an0     = alloc_node(2);
+  Loc ty0     = alloc_node(2);
+  set(lm0 + 0, term_new(SUB, 0, 0));
+  set(lm0 + 1, term_new(VAR, 0, ty0));
+  set(an0 + 0, term_new(VAR, 0, lm0));
+  set(an0 + 1, arg);
+  set(ty0 + 0, term_new(SUB, 0, 0));
+  set(ty0 + 1, term_new(APP, 0, ap0));
+  set(ap0 + 0, bod);
+  set(ap0 + 1, term_new(ANN, 0, an0));
+  set(typ_loc + 0, term_new(LAM, 0, lm0));
+  return term_new(TYP, 0, ty0);
+}
+
 // (#{x y z ...} a)
 // ---------------- APP-CTR
 // ⊥
@@ -424,6 +455,38 @@ Term reduce_dup_sup(Term dup, Term sup) {
   }
 }
 
+// ! &L{a b} = %x(T)
+// ----------------- DUP-TYP
+// a <- %x0(t0)
+// b <- %x1(t1)
+// x <- &L{x0 x1}
+// ! &L{t0 t1} = T
+Term reduce_dup_typ(Term dup, Term typ) {
+  //printf("reduce_dup_typ "); print_term(dup); printf("\n");
+  inc_itr();
+  Loc dup_loc = term_loc(dup);
+  Lab dup_lab = term_lab(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Loc typ_loc = term_loc(typ);
+  Term bod    = got(typ_loc + 1);
+  Loc du0     = alloc_node(2);
+  Loc ty0     = alloc_node(2);
+  Loc ty1     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  set(du0 + 0, bod);
+  set(du0 + 1, term_new(SUB, 0, 0));
+  set(ty0 + 0, term_new(SUB, 0, 0));
+  set(ty0 + 1, term_new(DP0, dup_lab, du0));
+  set(ty1 + 0, term_new(SUB, 0, 0));
+  set(ty1 + 1, term_new(DP1, dup_lab, du0));
+  set(su0 + 0, term_new(VAR, 0, ty0));
+  set(su0 + 1, term_new(VAR, 0, ty1));
+  set(dup_loc + 0, term_new(TYP, 0, ty0));
+  set(dup_loc + 1, term_new(TYP, 0, ty1));
+  set(typ_loc + 0, term_new(SUP, dup_lab, su0));
+  return got(dup_loc + dup_num);
+}
+
 // ! &L{x y} = #{a b c ...}
 // ------------------------ DUP-CTR
 // ! &L{a0 a1} = a
@@ -490,7 +553,6 @@ Term reduce_mat_lam(Term mat, Term lam) {
   exit(0);
 }
 
-// TODO: treat SUP label
 // ~ &L{x y} {K0 K1 K2 ...}
 // ------------------------ MAT-SUP
 // ! &L{k0a k0b} = K0
@@ -525,6 +587,14 @@ Term reduce_mat_sup(Term mat, Term sup) {
   set(sup0 + 0, term_new(MAT, mat_len, mat0));
   set(sup0 + 1, term_new(MAT, mat_len, mat1));
   return term_new(SUP, sup_lab, sup0);
+}
+
+// ~ %x(T) {K0 K1 K2 ...}
+// ---------------------- MAT-TYP
+// ⊥
+Term reduce_mat_typ(Term mat, Term sup) {
+  printf("invalid:mat-typ\n");
+  exit(0);
 }
 
 // ~ #N{x y z ...} {K0 K1 K2 ...} 
@@ -570,7 +640,7 @@ Term reduce_mat_w32(Term mat, Term w32) {
 }
 
 // <op(* b)
-// --------- OPX-ERA
+// -------- OPX-ERA
 // *
 Term reduce_opx_era(Term opx, Term era) {
   //printf("reduce_opx_era "); print_term(opx); printf("\n");
@@ -579,7 +649,7 @@ Term reduce_opx_era(Term opx, Term era) {
 }
 
 // <op(λx(B) y)
-// ------------- OPX-LAM
+// ------------ OPX-LAM
 // ⊥
 Term reduce_opx_lam(Term opx, Term lam) {
   //printf("reduce_opx_lam "); print_term(opx); printf("\n");
@@ -617,8 +687,16 @@ Term reduce_opx_sup(Term opx, Term sup) {
   return term_new(SUP, sup_lab, su0);
 }
 
+// <op(%x(T) y)
+// ------------ OPX-TYP
+// ⊥
+Term reduce_opx_typ(Term opx, Term typ) {
+  printf("invalid:opx-typ");
+  exit(0);
+}
+
 // <op(#{x0 x1 x2...} y)
-// ---------------------- OPX-CTR
+// --------------------- OPX-CTR
 // ⊥
 Term reduce_opx_ctr(Term opx, Term ctr) {
   //printf("reduce_opx_ctr "); print_term(opx); printf("\n");
@@ -627,7 +705,7 @@ Term reduce_opx_ctr(Term opx, Term ctr) {
 }
 
 // <op(x0 x1)
-// ----------- OPX-W32
+// ---------- OPX-W32
 // <op(x0 x1)
 Term reduce_opx_w32(Term opx, Term w32) {
   //printf("reduce_opx_w32 "); print_term(opx); printf("\n");
@@ -639,7 +717,7 @@ Term reduce_opx_w32(Term opx, Term w32) {
 }
 
 // >op(a *)
-// --------- OPY-ERA
+// -------- OPY-ERA
 // *
 Term reduce_opy_era(Term opy, Term era) {
   //printf("reduce_opy_era "); print_term(opy); printf("\n");
@@ -648,7 +726,7 @@ Term reduce_opy_era(Term opy, Term era) {
 }
 
 // >op(a λx(B))
-// ------------- OPY-LAM
+// ------------ OPY-LAM
 // *
 Term reduce_opy_lam(Term opy, Term era) {
   //printf("reduce_opy_lam "); print_term(opy); printf("\n");
@@ -657,7 +735,7 @@ Term reduce_opy_lam(Term opy, Term era) {
 }
 
 // >op(a &L{x y})
-// ------------------------- OPY-SUP
+// --------------------- OPY-SUP
 // &L{>op(a x) >op(a y)}
 Term reduce_opy_sup(Term opy, Term sup) {
   //printf("reduce_opy_sup "); print_term(opy); printf("\n");
@@ -680,6 +758,14 @@ Term reduce_opy_sup(Term opy, Term sup) {
   set(su0 + 0, term_new(OPY, term_lab(opy), op0));
   set(su0 + 1, term_new(OPY, term_lab(opy), op1));
   return term_new(SUP, sup_lab, su0);
+}
+
+// >op(%x(T) y)
+// ------------ OPY-TYP
+// ⊥
+Term reduce_opy_typ(Term opy, Term typ) {
+  printf("invalid:opy-typ");
+  exit(0);
 }
 
 // >op(#{x y z ...} b)
@@ -724,6 +810,100 @@ Term reduce_opy_w32(Term opy, Term w32) {
   return term_new(t, 0, result);
 }
 
+// <v : *>
+// -------------- ANN-ERA
+// *
+Term reduce_ann_era(Term ann, Term era) {
+  inc_itr();
+  return era;
+}
+
+// <v : λx(T)>
+// -------------- ANN-LAM
+// x <- %k(y)
+// λy <(v k) : T>
+Term reduce_ann_lam(Term ann, Term lam) {
+  //printf("reduce_ann_lam "); print_term(ann); printf("\n");
+  inc_itr();
+  Loc ann_loc = term_loc(ann);
+  Loc lam_loc = term_loc(lam);
+  Term val    = got(ann_loc + 0);
+  Term typ    = got(lam_loc + 1);
+  Loc lm0     = alloc_node(2);
+  Loc ty0     = alloc_node(2);
+  Loc ap0     = alloc_node(2);
+  Loc an0     = ann_loc;
+  set(lm0 + 0, term_new(SUB, 0, 0));
+  set(lm0 + 1, term_new(ANN, 0, an0));
+  set(ty0 + 0, term_new(SUB, 0, 0));
+  set(ty0 + 1, term_new(VAR, 0, lm0));
+  set(ap0 + 0, val);
+  set(ap0 + 1, term_new(VAR, 0, ty0));
+  set(an0 + 0, term_new(APP, 0, ap0));
+  set(an0 + 1, typ);
+  set(lam_loc + 0, term_new(TYP, 0, ty0));
+  return term_new(LAM, 0, lm0);
+}
+
+// <v : &L{a b}>
+// -------------- ANN-SUP
+// ! &L{v0 v1} = v
+// &L{<v0:a> <v1:b>}
+Term reduce_ann_sup(Term ann, Term sup) {
+  //printf("reduce_ann_sup "); print_term(ann); printf("\n");
+  inc_itr();
+  Loc ann_loc = term_loc(ann);
+  Loc sup_loc = term_loc(sup);
+  Lab sup_lab = term_lab(sup);
+  Term val    = got(ann_loc + 0);
+  Term tm0    = got(sup_loc + 0);
+  Term tm1    = got(sup_loc + 1);
+  Loc du0     = alloc_node(2);
+  Loc an0     = alloc_node(2);
+  Loc su0     = alloc_node(2);
+  Loc an1     = ann_loc;
+  set(du0 + 0, val);
+  set(du0 + 1, term_new(SUB, 0, 0));
+  set(an0 + 0, term_new(DP0, sup_lab, du0));
+  set(an0 + 1, tm0);
+  set(an1 + 0, term_new(DP1, sup_lab, du0));
+  set(an1 + 1, tm1);
+  set(su0 + 0, term_new(ANN, 0, an0));
+  set(su0 + 1, term_new(ANN, 0, an1));
+  return term_new(SUP, sup_lab, su0);
+}
+
+// <v : %x(T)>
+// ----------- ANN-TYP
+// x <- v
+// T
+Term reduce_ann_typ(Term ann, Term typ) {
+  //printf("reduce_ann_typ "); print_term(ann); printf("\n");
+  inc_itr();
+  Loc ann_loc = term_loc(ann);
+  Loc typ_loc = term_loc(typ);
+  Term val    = got(ann_loc + 0);
+  Term bod    = got(typ_loc + 1);
+  set(typ_loc + 0, val);
+  return bod;
+}
+
+// <v : #{x y z ...}>
+// ------------------ ANN-CTR
+// ⊥
+Term reduce_ann_ctr(Term ann, Term ctr) {
+  printf("invalid:ann-ctr");
+  exit(0);
+}
+
+// <v : 123>
+// --------- ANN-U32
+// ⊥
+Term reduce_ann_w32(Term ann, Term w32) {
+  printf("invalid:ann-w32");
+  exit(0);
+}
+
 Term reduce(Term term) {
   if (term_tag(term) >= ERA) return term;
   Term next = term;
@@ -762,6 +942,11 @@ Term reduce(Term term) {
       case APP: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
+        continue;
+      }
+      case ANN: {
+        HVM.sbuf[(*spos)++] = next;
+        next = got(loc + 1);
         continue;
       }
       case DP0: {
@@ -834,9 +1019,23 @@ Term reduce(Term term) {
                 case ERA: next = reduce_app_era(prev, next); continue;
                 case LAM: next = reduce_app_lam(prev, next); continue;
                 case SUP: next = reduce_app_sup(prev, next); continue;
+                case TYP: next = reduce_app_typ(prev, next); continue;
                 case CTR: next = reduce_app_ctr(prev, next); continue;
                 case W32: next = reduce_app_w32(prev, next); continue;
                 case CHR: next = reduce_app_w32(prev, next); continue;
+                default: break;
+              }
+              break;
+            }
+            case ANN: {
+              switch (tag) {
+                case ERA: next = reduce_ann_era(prev, next); continue;
+                case LAM: next = reduce_ann_lam(prev, next); continue;
+                case SUP: next = reduce_ann_sup(prev, next); continue;
+                case TYP: next = reduce_ann_typ(prev, next); continue;
+                case CTR: next = reduce_ann_ctr(prev, next); continue;
+                case W32: next = reduce_ann_w32(prev, next); continue;
+                case CHR: next = reduce_ann_w32(prev, next); continue;
                 default: break;
               }
               break;
@@ -847,6 +1046,7 @@ Term reduce(Term term) {
                 case ERA: next = reduce_dup_era(prev, next); continue;
                 case LAM: next = reduce_dup_lam(prev, next); continue;
                 case SUP: next = reduce_dup_sup(prev, next); continue;
+                case TYP: next = reduce_dup_typ(prev, next); continue;
                 case CTR: next = reduce_dup_ctr(prev, next); continue;
                 case W32: next = reduce_dup_w32(prev, next); continue;
                 case CHR: next = reduce_dup_w32(prev, next); continue;
@@ -859,6 +1059,7 @@ Term reduce(Term term) {
                 case ERA: next = reduce_mat_era(prev, next); continue;
                 case LAM: next = reduce_mat_lam(prev, next); continue;
                 case SUP: next = reduce_mat_sup(prev, next); continue;
+                case TYP: next = reduce_mat_typ(prev, next); continue;
                 case CTR: next = reduce_mat_ctr(prev, next); continue;
                 case W32: next = reduce_mat_w32(prev, next); continue;
                 case CHR: next = reduce_mat_w32(prev, next); continue;
@@ -870,6 +1071,7 @@ Term reduce(Term term) {
                 case ERA: next = reduce_opx_era(prev, next); continue;
                 case LAM: next = reduce_opx_lam(prev, next); continue;
                 case SUP: next = reduce_opx_sup(prev, next); continue;
+                case TYP: next = reduce_opx_typ(prev, next); continue;
                 case CTR: next = reduce_opx_ctr(prev, next); continue;
                 case W32: next = reduce_opx_w32(prev, next); continue;
                 case CHR: next = reduce_opx_w32(prev, next); continue;
@@ -881,6 +1083,7 @@ Term reduce(Term term) {
                 case ERA: next = reduce_opy_era(prev, next); continue;
                 case LAM: next = reduce_opy_lam(prev, next); continue;
                 case SUP: next = reduce_opy_sup(prev, next); continue;
+                case TYP: next = reduce_opy_typ(prev, next); continue;
                 case CTR: next = reduce_opy_ctr(prev, next); continue;
                 case W32: next = reduce_opy_w32(prev, next); continue;
                 case CHR: next = reduce_opy_w32(prev, next); continue;
@@ -920,6 +1123,12 @@ Term normal(Term term) {
   Lab lab = term_lab(wnf);
   Loc loc = term_loc(wnf);
   switch (tag) {
+    case LAM: {
+      Term bod = got(loc + 1);
+      bod = normal(bod);
+      set(loc + 1, bod);
+      return wnf;
+    }
     case APP: {
       Term fun = got(loc + 0);
       Term arg = got(loc + 1);
@@ -927,12 +1136,6 @@ Term normal(Term term) {
       arg = normal(arg);
       set(loc + 0, fun);
       set(loc + 1, arg);
-      return wnf;
-    }
-    case LAM: {
-      Term bod = got(loc + 1);
-      bod = normal(bod);
-      set(loc + 1, bod);
       return wnf;
     }
     case SUP: {
@@ -949,6 +1152,21 @@ Term normal(Term term) {
       Term val = got(loc + 0);
       val = normal(val);
       set(loc + 0, val);
+      return wnf;
+    }
+    case TYP: {
+      Term bod = got(loc + 1);
+      bod = normal(bod);
+      set(loc + 1, bod);
+      return wnf;
+    }
+    case ANN: {
+      Term val = got(loc + 0);
+      Term typ = got(loc + 1);
+      val = normal(val);
+      typ = normal(typ);
+      set(loc + 0, val);
+      set(loc + 1, typ);
       return wnf;
     }
     case CTR: {

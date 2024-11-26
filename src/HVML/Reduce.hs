@@ -42,6 +42,7 @@ reduceAt debug book host = do
         ERA -> cont host (reduceAppEra term fun)
         LAM -> cont host (reduceAppLam term fun)
         SUP -> cont host (reduceAppSup term fun)
+        TYP -> cont host (reduceAppTyp term fun)
         CTR -> cont host (reduceAppCtr term fun)
         W32 -> cont host (reduceAppW32 term fun)
         CHR -> cont host (reduceAppW32 term fun)
@@ -56,6 +57,7 @@ reduceAt debug book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
+            TYP -> cont host (reduceDupTyp term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
             CHR -> cont host (reduceDupW32 term val)
@@ -73,6 +75,7 @@ reduceAt debug book host = do
             ERA -> cont host (reduceDupEra term val)
             LAM -> cont host (reduceDupLam term val)
             SUP -> cont host (reduceDupSup term val)
+            TYP -> cont host (reduceDupTyp term val)
             CTR -> cont host (reduceDupCtr term val)
             W32 -> cont host (reduceDupW32 term val)
             CHR -> cont host (reduceDupW32 term val)
@@ -80,12 +83,24 @@ reduceAt debug book host = do
         else do
           set host sb1
           reduceAt debug book host
+    ANN -> do
+      typ <- reduceAt debug book (loc + 1)
+      case tagT (termTag typ) of
+        ERA -> cont host (reduceAnnEra term typ)
+        LAM -> cont host (reduceAnnLam term typ)
+        SUP -> cont host (reduceAnnSup term typ)
+        TYP -> cont host (reduceAnnTyp term typ)
+        CTR -> cont host (reduceAnnCtr term typ)
+        W32 -> cont host (reduceAnnW32 term typ)
+        CHR -> cont host (reduceAnnW32 term typ)
+        _   -> set (loc + 1) typ >> return term
     MAT -> do
       val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
         ERA -> cont host (reduceMatEra term val)
         LAM -> cont host (reduceMatLam term val)
         SUP -> cont host (reduceMatSup term val)
+        TYP -> cont host (reduceMatTyp term val)
         CTR -> cont host (reduceMatCtr term val)
         W32 -> cont host (reduceMatW32 term val)
         CHR -> cont host (reduceMatW32 term val)
@@ -96,6 +111,7 @@ reduceAt debug book host = do
         ERA -> cont host (reduceOpxEra term val)
         LAM -> cont host (reduceOpxLam term val)
         SUP -> cont host (reduceOpxSup term val)
+        TYP -> cont host (reduceOpxTyp term val)
         CTR -> cont host (reduceOpxCtr term val)
         W32 -> cont host (reduceOpxW32 term val)
         CHR -> cont host (reduceOpxW32 term val)
@@ -106,6 +122,7 @@ reduceAt debug book host = do
         ERA -> cont host (reduceOpyEra term val)
         LAM -> cont host (reduceOpyLam term val)
         SUP -> cont host (reduceOpySup term val)
+        TYP -> cont host (reduceOpyTyp term val)
         CTR -> cont host (reduceOpyCtr term val)
         W32 -> cont host (reduceOpyW32 term val)
         CHR -> cont host (reduceOpyW32 term val)
@@ -118,20 +135,23 @@ reduceAt debug book host = do
           set host sub
           reduceAt debug book host
     REF -> do
-      let fid = u12v2X lab
-      let ari = u12v2Y lab
-      case MS.lookup fid (idToFunc book) of
-        Just (nams, core) -> do
-          incItr
-          when (length nams /= fromIntegral ari) $ do
-            putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
-            exitFailure
-          args <- if ari == 0
-            then return []
-            else mapM (\i -> got (loc + i)) [0 .. ari - 1]
-          doInjectCoreAt book core host $ zip nams args
-          reduceAt debug book host
-        Nothing -> return term
+      reduceRefAt book host
+      reduceAt debug book host
+    -- REF -> do
+      -- let fid = u12v2X lab
+      -- let ari = u12v2Y lab
+      -- case MS.lookup fid (idToFunc book) of
+        -- Just (nams, core) -> do
+          -- incItr
+          -- when (length nams /= fromIntegral ari) $ do
+            -- putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
+            -- exitFailure
+          -- args <- if ari == 0
+            -- then return []
+            -- else mapM (\i -> got (loc + i)) [0 .. ari - 1]
+          -- doInjectCoreAt book core host $ zip nams args
+          -- reduceAt debug book host
+        -- Nothing -> return term
     otherwise -> do
       return term
   where
@@ -139,6 +159,27 @@ reduceAt debug book host = do
       ret <- action
       set host ret
       reduceAt debug book host
+
+-- TODO: move REf logic to this fn
+reduceRefAt :: Book -> Loc -> HVM Term
+reduceRefAt book host = do
+  term <- got host
+  let lab = termLab term
+  let loc = termLoc term
+  let fid = u12v2X lab
+  let ari = u12v2Y lab
+  case MS.lookup fid (idToFunc book) of
+    Just (nams, core) -> do
+      incItr
+      when (length nams /= fromIntegral ari) $ do
+        putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
+        exitFailure
+      args <- if ari == 0
+        then return []
+        else mapM (\i -> got (loc + i)) [0 .. ari - 1]
+      doInjectCoreAt book core host $ zip nams args
+    Nothing -> do
+      error $ "unbound-function-id:" ++ show fid
 
 reduceCAt :: Bool -> ReduceAt
 reduceCAt = \ _ _ host -> do

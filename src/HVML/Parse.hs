@@ -77,7 +77,8 @@ parseCore = do
             parseCore
           char ')'
           return $ foldl App fun args
-    '@' -> parseRef
+    '@' -> do
+      parseRef
     '&' -> do
       consume "&"
       lab <- read <$> many1 digit
@@ -86,6 +87,18 @@ parseCore = do
       tm1 <- parseCore
       consume "}"
       return $ Sup lab tm0 tm1
+    '%' -> do
+      consume "%"
+      nam <- parseName
+      typ <- parseCore
+      return $ Typ nam typ
+    '{' -> do
+      consume "{"
+      val <- parseCore
+      consume "::"
+      typ <- parseCore
+      consume "}"
+      return $ Ann val typ
     '!' -> do
       consume "!"
       skip
@@ -103,7 +116,6 @@ parseCore = do
           bod <- parseCore
           return $ Dup lab dp0 dp1 val bod
         '!' -> do
-          -- parsing strict 'let'
           consume "!"
           nam <- parseName
           consume "="
@@ -111,7 +123,6 @@ parseCore = do
           bod <- parseCore
           return $ Let STRI nam val bod
         '^' -> do
-          -- parsing parallel 'let'
           consume "^"
           nam <- parseName
           consume "="
@@ -119,7 +130,6 @@ parseCore = do
           bod <- parseCore
           return $ Let PARA nam val bod
         _ -> do
-          -- parsing lazy 'let'
           nam <- parseName
           consume "="
           val <- parseCore
@@ -412,6 +422,8 @@ setRefIds fids term = case term of
   App f x       -> App (setRefIds fids f) (setRefIds fids x)
   Sup l x y     -> Sup l (setRefIds fids x) (setRefIds fids y)
   Dup l x y v b -> Dup l x y (setRefIds fids v) (setRefIds fids b)
+  Typ x t       -> Typ x (setRefIds fids t)
+  Ann x t       -> Ann (setRefIds fids x) (setRefIds fids t)
   Ctr cid fds   -> Ctr cid (map (setRefIds fids) fds)
   Mat x mov css -> Mat (setRefIds fids x) (map (\ (k,v) -> (k, setRefIds fids v)) mov) (map (\ (ctr,fds,cs) -> (ctr, fds, setRefIds fids cs)) css)
   Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
@@ -470,6 +482,13 @@ lexify term = evalState (go term MS.empty) 0 where
       ctx  <- extend dp1 dp1' ctx
       bod  <- go bod ctx
       return $ Dup lab dp0' dp1' val bod
+    Typ nam typ -> do
+      typ <- go typ ctx
+      return $ Typ nam typ
+    Ann val typ -> do
+      val <- go val ctx
+      typ <- go typ ctx
+      return $ Ann val typ
     Ctr cid fds -> do
       fds <- mapM (\x -> go x ctx) fds
       return $ Ctr cid fds

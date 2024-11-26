@@ -23,6 +23,7 @@ import qualified Data.Map.Strict as MS
 
 import HVML.Collapse
 import HVML.Compile
+import HVML.Equal
 import HVML.Extract
 import HVML.Inject
 import HVML.Parse
@@ -47,13 +48,16 @@ main = do
   args <- getArgs
   result <- case args of
     ("run" : file : args) -> do
-      let compiled  = "-c" `elem` args
-      let collapse  = "-C" `elem` args
-      let search    = "-S" `elem` args
-      let showStats = "-s" `elem` args
-      let debug     = "-d" `elem` args
-      let mode = if collapse then Collapse else if search then Search else Normalize
-      cliRun file debug compiled mode showStats
+      let compiled = "-c" `elem` args
+      let collapse = "-C" `elem` args
+      let typed    = "-t" `elem` args
+      let search   = "-S" `elem` args
+      let stats    = "-s" `elem` args
+      let debug    = "-d" `elem` args
+      let mode | collapse  = Collapse
+               | search    = Search
+               | otherwise = Normalize
+      cliRun file typed debug compiled mode stats
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -66,8 +70,9 @@ main = do
 printHelp :: IO (Either String ())
 printHelp = do
   putStrLn "HVM-Lazy usage:"
-  putStrLn "  hvml help # Shows this help message"
-  putStrLn "  hvml run <file> [-c] [-C] [-s] # Normalizes the file's main"
+  putStrLn "  hvml help       # Shows this help message"
+  putStrLn "  hvml run <file> # Evals main"
+  putStrLn "    -t # Returns the type (experimental)"
   putStrLn "    -c # Runs with compiled mode (fast)"
   putStrLn "    -C # Collapse the result to a list of λ-Terms"
   putStrLn "    -S # Search (collapse, then print the 1st λ-Term)"
@@ -78,8 +83,8 @@ printHelp = do
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
-cliRun filePath debug compiled mode showStats = do
+cliRun :: FilePath -> Bool -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
+cliRun filePath typed debug compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -127,15 +132,21 @@ cliRun filePath debug compiled mode showStats = do
     then return (reduceCAt debug)
     else return (reduceAt debug)
   vals <- if mode == Collapse || mode == Search
-    then doCollapseAt rxAt book 0
+    then doCollapseFlatAt rxAt book 0
     else do
       core <- doExtractCoreAt rxAt book 0
       return [(doLiftDups core)]
 
   -- Print all collapsed results
   when (mode == Collapse) $ do
-    forM_ vals $ \ term ->
+    forM_ vals $ \ term -> do
       putStrLn $ coreToString term
+      when typed $ do
+        chk <- check term
+        if chk then do
+          putStrLn "✓ check"
+        else do
+          putStrLn "✗ error"
 
   -- Prints just the first collapsed result
   when (mode == Search || mode == Normalize) $ do

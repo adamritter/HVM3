@@ -1,9 +1,40 @@
-@count(n k) = ~n !k {
-  0: k
-  p: @count(p (+ k 2))
-}
+// A -> B
+@Fun(A B) = %f λx {(f {x::A}) :: B}
 
-@main = @count(2_000_000_000 0)
+@main = λA λB
+  ! &0{A A0} = A
+  ! &0{A A1} = A
+  ! &0{A A2} = A
+  ! &0{A A3} = A
+  ! typ = @Fun(@Fun(A0 A1) @Fun(A2 A3))
+  ! val = λf λx (f x)
+  { val :: typ }
+
+//@main = λA λB
+  //! &0{A A0} = A
+  //! &0{A A1} = A
+  //! &0{A A2} = A
+  //! &0{A A3} = A
+  //{  λf λx !&0{f0 f1}=f (f0 (f1 x))
+  //:: @Fun(@Fun(A0 A1) @Fun(A2 A3)) }
+
+
+
+//@main = λA λB {λx x :: @Fun(A B)}
+
+//@main = λA λB
+  //!&0{A0 A1}=A
+  //{λa λb (a b) :: %f λa λb {(f {a::A0} {b::B})::A1}}
+
+
+
+
+//@count(n k) = ~n !k {
+  //0: k
+  //p: @count(p (+ k 2))
+//}
+
+//@main = @count(2_000_000_000 0)
 
 
 //data L { #N #C{h t} }

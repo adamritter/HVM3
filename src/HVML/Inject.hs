@@ -1,3 +1,5 @@
+-- //./Type.hs//
+
 module HVML.Inject where
 
 import Control.Monad (foldM)
@@ -69,6 +71,19 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
     }
   injectCore book val (dup + 0)
   injectCore book bod loc
+
+injectCore book (Typ nam bod) loc = do
+  typ <- lift $ allocNode 2
+  lift $ set (typ + 0) (termNew _SUB_ 0 0)
+  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (typ + 0)) (args s) }
+  injectCore book bod (typ + 1)
+  lift $ set loc (termNew _TYP_ 0 typ)
+
+injectCore book (Ann val typ) loc = do
+  ann <- lift $ allocNode 2
+  injectCore book val (ann + 0)
+  injectCore book typ (ann + 1)
+  lift $ set loc (termNew _ANN_ 0 ann)
 
 injectCore book (Ref nam fid arg) loc = do
   -- lift $ set loc (termNew _REF_ 0 fid)

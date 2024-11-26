@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Compile where
 
@@ -138,6 +139,22 @@ compileFullCore book fid (Dup lab dp0 dp1 val bod) host = do
   emit $ "set(" ++ dupNam ++ " + 0, " ++ valT ++ ");"
   bodT <- compileFullCore book fid bod host
   return bodT
+compileFullCore book fid (Typ var bod) host = do
+  typNam <- fresh "typ"
+  emit $ "Loc " ++ typNam ++ " = alloc_node(2);"
+  emit $ "set(" ++ typNam ++ " + 0, term_new(SUB, 0, 0));"
+  bind var $ "term_new(VAR, 0, " ++ typNam ++ " + 0)"
+  bodT <- compileFullCore book fid bod (typNam ++ " + 1")
+  emit $ "set(" ++ typNam ++ " + 1, " ++ bodT ++ ");"
+  return $ "term_new(TYP, 0, " ++ typNam ++ ")"
+compileFullCore book fid (Ann val typ) host = do
+  annNam <- fresh "ann"
+  emit $ "Loc " ++ annNam ++ " = alloc_node(2);"
+  valT <- compileFullCore book fid val (annNam ++ " + 0")
+  typT <- compileFullCore book fid typ (annNam ++ " + 1")
+  emit $ "set(" ++ annNam ++ " + 0, " ++ valT ++ ");"
+  emit $ "set(" ++ annNam ++ " + 1, " ++ typT ++ ");"
+  return $ "term_new(ANN, 0, " ++ annNam ++ ")"
 compileFullCore book fid (Ctr cid fds) host = do
   ctrNam <- fresh "ctr"
   let arity = length fds
@@ -449,6 +466,24 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) reuse = do
   bind dp0 dp0Nam
   bind dp1 dp1Nam
   compileFastCore book fid bod reuse
+compileFastCore book fid (Typ var bod) reuse = do
+  typNam <- fresh "typ"
+  typLoc <- compileFastAlloc 2 reuse
+  emit $ "Loc " ++ typNam ++ " = " ++ typLoc ++ ";"
+  emit $ "set(" ++ typNam ++ " + 0, term_new(SUB, 0, 0));"
+  bind var $ "term_new(VAR, 0, " ++ typNam ++ " + 0)"
+  bodT <- compileFastCore book fid bod reuse
+  emit $ "set(" ++ typNam ++ " + 1, " ++ bodT ++ ");"
+  return $ "term_new(TYP, 0, " ++ typNam ++ ")"
+compileFastCore book fid (Ann val typ) reuse = do
+  annNam <- fresh "ann"
+  annLoc <- compileFastAlloc 2 reuse
+  emit $ "Loc " ++ annNam ++ " = " ++ annLoc ++ ";"
+  valT <- compileFastCore book fid val reuse
+  typT <- compileFastCore book fid typ reuse
+  emit $ "set(" ++ annNam ++ " + 0, " ++ valT ++ ");"
+  emit $ "set(" ++ annNam ++ " + 1, " ++ typT ++ ");"
+  return $ "term_new(ANN, 0, " ++ annNam ++ ")"
 compileFastCore book fid (Ctr cid fds) reuse = do
   ctrNam <- fresh "ctr"
   let arity = length fds
