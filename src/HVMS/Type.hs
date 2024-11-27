@@ -35,9 +35,9 @@ data Net = Net
 -- Runtime Types
 -- -------------
 
-type Tag  = Word64
-type Lab  = Word64
-type Loc  = Word64
+type Tag  = Word8
+type Lab  = Word32
+type Loc  = Word32
 type Term = Word64
 
 -- Runtime constants
@@ -52,10 +52,7 @@ _SUP_ = 0x07
 _DUP_ = 0x08
 
 _VOID_ :: Term
-_VOID_ = 0x00000000_000000_00
-
-_RBAG_ :: Word64
-_RBAG_ = 0x1_0000_0000
+_VOID_ = 0x0
 
 -- FFI imports
 foreign import ccall unsafe "Runtime.c hvm_init"
@@ -76,26 +73,38 @@ foreign import ccall unsafe "Runtime.c term_lab"
 foreign import ccall unsafe "Runtime.c term_loc"
   termLoc :: Term -> Loc
 
-foreign import ccall unsafe "Runtime.c term_key"
-  termKey :: Term -> Loc
+-- foreign import ccall unsafe "Runtime.c term_key"
+--   termKey :: Term -> Loc
 
 foreign import ccall unsafe "Runtime.c swap"
   swap :: Loc -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c got"
-  got :: Loc -> IO Term
+foreign import ccall unsafe "Runtime.c get"
+  get :: Loc -> IO Term
 
 foreign import ccall unsafe "Runtime.c set"
   set :: Loc -> Term -> IO ()
 
-foreign import ccall unsafe "Runtime.c take"
-  take :: Loc -> IO Term
+foreign import ccall unsafe "Runtime.c rbag_push"
+  rbagPush :: Term -> Term -> IO ()
+
+foreign import ccall unsafe "Runtime.c rbag_ini"
+  rbagIni :: IO Loc
+
+foreign import ccall unsafe "Runtime.c rbag_end"
+  rbagEnd :: IO Loc
+
+-- foreign import ccall unsafe "Runtime.c take"
+--   take :: Loc -> IO Term
 
 foreign import ccall unsafe "Runtime.c alloc_node"
-  allocNode :: Word64 -> IO Word64
+  allocNode :: Word64 -> IO Loc
 
 foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
 
 foreign import ccall unsafe "Runtime.c normal"
   normal :: Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c dump_buff"
+  dumpBuff :: IO ()
