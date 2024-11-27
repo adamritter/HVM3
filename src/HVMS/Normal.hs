@@ -9,19 +9,19 @@ normalize :: Net -> IO Net
 normalize net = do
   -- Initialize runtime
   hvmInit
-  
+
   -- Convert to runtime terms
   root <- doInjectNet net
-  
+
   -- Normalize using C runtime
   norm <- normal root
-  
+
   -- Convert back to core terms
-  result <- doExtractNet norm []
-  
+  result <- doExtractNet norm
+
   -- Cleanup runtime
   hvmFree
-  
+
   return result
 
 -- | Normalizes a term, returning Nothing if it fails
