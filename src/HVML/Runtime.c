@@ -1204,20 +1204,33 @@ Term normal(Term term) {
 // Allocates a new SUP node with given label.
 Term SUP_f(Term ref) {
   Loc ref_loc = term_loc(ref);
-  Term lab = got(ref_loc + 0);
+  Term lab = reduce(got(ref_loc + 0));
   Term tm0 = got(ref_loc + 1);
   Term tm1 = got(ref_loc + 2);
   Loc  sup = alloc_node(2);
-  Term ret = term_new(SUP, term_loc(reduce(lab)), sup);
+  Term ret = term_new(SUP, term_loc(lab), sup);
   set(sup + 0, tm0);
   set(sup + 1, tm1);
   return ret;
 }
 
-// TODO
+// Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
+// Creates a DUP node with given label.
 Term DUP_f(Term ref) {
-  printf("TODO: Dynamic Dups\n");
-  exit(0);
+  Loc ref_loc = term_loc(ref);
+  Term lab = reduce(got(ref_loc + 0));
+  Term val = got(ref_loc + 1);
+  Term bod = got(ref_loc + 2);
+  Loc dup = alloc_node(2);
+  set(dup + 0, val);
+  set(dup + 1, term_new(SUB, 0, 0));
+  Loc app1 = alloc_node(2);
+  set(app1 + 0, bod);
+  set(app1 + 1, term_new(DP0, term_loc(lab), dup));
+  Loc app2 = alloc_node(2);
+  set(app2 + 0, term_new(APP, 0, app1));
+  set(app2 + 1, term_new(DP1, term_loc(lab), dup));
+  return term_new(APP, 0, app2);
 }
 
 // Runtime Memory

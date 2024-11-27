@@ -1,4 +1,5 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Reduce where
 
@@ -160,62 +161,6 @@ reduceAt debug book host = do
       set host ret
       reduceAt debug book host
 
-
--- TODO: 
-
-
--- -- TODO: move REf logic to this fn
--- reduceRefAt :: Book -> Loc -> HVM Term
--- reduceRefAt book host = do
-  -- term <- got host
-  -- let lab = termLab term
-  -- let loc = termLoc term
-  -- let fid = u12v2X lab
-  -- let ari = u12v2Y lab
-  -- putStrLn $ ">> " ++ show fid
-  -- -- Primitive: Dynamic Sup `@SUP(lab tm0 tm1)`
-  -- if fid == _SUP_F_ then do
-    -- incItr
-    -- when (ari /= 3) $ do
-      -- putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@SUP'."
-      -- exitFailure
-    -- lab <- reduceAt False book (loc + 0)
-    -- tm0 <- got (loc + 1)
-    -- tm1 <- got (loc + 2)
-    -- sup <- allocNode 2
-    -- case tagT (termTag lab) of
-      -- W32 -> do
-        -- let ret = termNew _SUP_ (termLoc lab) sup
-        -- set (sup + 0) tm0
-        -- set (sup + 1) tm1
-        -- set host ret
-        -- return ret
-      -- _ -> do
-        -- error "RUNTIME_ERROR: dynamic SUP without numeric label."
-  -- -- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
-  -- else if fid == _DUP_F_ then do
-    -- error "TODO: dynamic dups"
-  -- -- User Function
-  -- else case MS.lookup fid (idToFunc book) of
-    -- Just (nams, core) -> do
-      -- incItr
-      -- when (length nams /= fromIntegral ari) $ do
-        -- putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
-        -- exitFailure
-      -- args <- if ari == 0
-        -- then return []
-        -- else mapM (\i -> got (loc + i)) [0 .. ari - 1]
-      -- doInjectCoreAt book core host $ zip nams args
-    -- Nothing -> do
-      -- error $ "unbound-function-id:" ++ show fid
-
--- TODO: clean up the function above by moving dynamic functions (SUP_F, DUP_F) to a separate call dedicated for them.
--- remember: SEPARATE these functions out of reduceRefAt. create aux fns for them 
--- call it: reduceRefAt_Sup / reduceRefAt_Dup
--- keep the user-defined function logic inside reduceRefAt
--- do not use 'if fid == ...'; use a case-of instead.
-
-
 reduceRefAt :: Book -> Loc -> HVM Term
 reduceRefAt book host = do
   term <- got host
@@ -224,12 +169,9 @@ reduceRefAt book host = do
   let fid = u12v2X lab
   let ari = u12v2Y lab
   case fid of
-    -- Dynamic Sup
     x | x == _SUP_F_ -> reduceRefAt_Sup book host loc ari
-    -- Dynamic Dup  
     x | x == _DUP_F_ -> reduceRefAt_Dup book host loc ari
-    -- User Function
-    _ -> case MS.lookup fid (idToFunc book) of
+    otherwise -> case MS.lookup fid (idToFunc book) of
       Just (nams, core) -> do
         incItr
         when (length nams /= fromIntegral ari) $ do
@@ -241,6 +183,7 @@ reduceRefAt book host = do
         doInjectCoreAt book core host $ zip nams args
       Nothing -> return term
 
+-- Primitive: Dynamic Sup `@SUP(lab tm0 tm1)`
 reduceRefAt_Sup :: Book -> Loc -> Loc -> Word64 -> HVM Term
 reduceRefAt_Sup book host loc ari = do
   incItr
@@ -260,14 +203,34 @@ reduceRefAt_Sup book host loc ari = do
       return ret
     _ -> error "RUNTIME_ERROR: dynamic SUP without numeric label."
 
+-- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
 reduceRefAt_Dup :: Book -> Loc -> Loc -> Word64 -> HVM Term  
 reduceRefAt_Dup book host loc ari = do
-  error "TODO: dynamic dups"
-
-
-
-
-
+  incItr
+  when (ari /= 3) $ do
+    putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@DUP'."
+    exitFailure
+  lab <- reduceAt False book (loc + 0)
+  val <- got (loc + 1)
+  bod <- got (loc + 2)
+  dup <- allocNode 2
+  case tagT (termTag lab) of
+    W32 -> do
+      -- Create the DUP node with value and SUB
+      set (dup + 0) val
+      set (dup + 1) (termNew _SUB_ 0 0)
+      -- Create first APP node for (APP bod DP0)
+      app1 <- allocNode 2
+      set (app1 + 0) bod
+      set (app1 + 1) (termNew _DP0_ (termLoc lab) dup)
+      -- Create second APP node for (APP (APP bod DP0) DP1)
+      app2 <- allocNode 2
+      set (app2 + 0) (termNew _APP_ 0 app1)
+      set (app2 + 1) (termNew _DP1_ (termLoc lab) dup)
+      let ret = termNew _APP_ 0 app2
+      set host ret
+      return ret
+    _ -> error "RUNTIME_ERROR: dynamic DUP without numeric label."
 
 reduceCAt :: Bool -> ReduceAt
 reduceCAt = \ _ _ host -> do

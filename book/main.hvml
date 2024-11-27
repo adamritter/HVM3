@@ -1,9 +1,53 @@
-@dyn(n lab) = ~n {
-  0: 0
-  p: !&0{l0 l1}=lab @SUP(l0 0 @dyn(p (+ l1 1)))
-}
+@main = λa
+  @DUP((+ 5 7) a λx λy [x y])
 
-@main = @dyn(8 0)
+  //@DUP(11 @SUP(10 50 60) λa λb [a b])
+
+
+
+
+
+
+
+//data Tree { #Leaf #Node{lft rgt} }
+
+//@all(s) = ~s {
+  //0: #Leaf
+  //p: &0{ #Leaf #Node{@all(p) @all(p)} }
+//}
+
+//@main = @all(4)
+
+
+//data Tree { #Leaf #Node{lft rgt} }
+
+//@all(s l) = ~s {
+  //0:
+    //#Leaf
+  //p:
+    //!&0{p p0}=p
+    //!&0{p p1}=p
+    //!&0{l l0}=l
+    //!&0{l l1}=l
+    //!&0{l l2}=l
+    //! lL = (+ (* l1 2) 0)
+    //! lR = (+ (* l2 2) 1)
+    //@SUP(l0 #Leaf #Node{ @all(p0 lL) @all(p1 lR) })
+//}
+
+//@main = @all(4 1)
+
+
+
+
+
+
+//@dyn(n lab) = ~n {
+  //0: 0
+  //p: !&0{l0 l1}=lab @SUP(l0 0 @dyn(p (+ l1 1)))
+//}
+
+//@main = @dyn(8 0)
 
 //// Simple Function, `A -> B`
 //@Fun(A B) = %f λx {(f {x::A}) :: B}
