@@ -1,14 +1,29 @@
-// A -> B
-@Fun(A B) = %f λx {(f {x::A}) :: B}
+@dyn(n lab) = ~n {
+  0: 0
+  p: !&0{l0 l1}=lab @SUP(l0 0 @dyn(p (+ l1 1)))
+}
 
-@main = λA λB
-  ! &0{A A0} = A
-  ! &0{A A1} = A
-  ! &0{A A2} = A
-  ! &0{A A3} = A
-  ! typ = @Fun(@Fun(A0 A1) @Fun(A2 A3))
-  ! val = λf λx (f x)
-  { val :: typ }
+@main = @dyn(8 0)
+
+//// Simple Function, `A -> B`
+//@Fun(A B) = %f λx {(f {x::A}) :: B}
+
+//// Dependent Function, `∀(x: A) -> (B x)`
+//@All(A B) = %f λx !&0{x0 x1}=x {(f {x0::A}) :: (B x)}
+
+//// main
+//// : ∀A (A -> A) -> (A -> A)
+//// = λf λx (f x)
+//@main = λA
+  //! &0{A A0} = A
+  //! &0{A A1} = A
+  //! &0{A A2} = A
+  //! &0{A A3} = A
+  //! typ = @Fun(@Fun(A0 A1) @Fun(A2 A3))
+  //! val = λf λx (f x)
+  //{ val :: typ }
+
+
 
 //@main = λA λB
   //! &0{A A0} = A

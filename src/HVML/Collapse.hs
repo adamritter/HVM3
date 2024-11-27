@@ -1,5 +1,4 @@
 -- //./Type.hs//
--- //./Inject.hs//
 
 module HVML.Collapse where
 
@@ -292,8 +291,8 @@ doCollapseAt reduceAt book host = do
   core <- collapseDupsAt state reduceAt book host
   return $ collapseSups book core
 
--- Flattener
--- ---------
+-- Priority Queue
+-- --------------
 
 data PQ a
   = PQLeaf
@@ -314,13 +313,24 @@ pqPop (PQNode x l r) = Just (x, pqUnion l r)
 pqPut :: (Word64,a) -> PQ a -> PQ a
 pqPut (k,v) = pqUnion (PQNode (k,v) PQLeaf PQLeaf)
 
-flatten :: Collapse a -> [a]
-flatten term = go term (PQLeaf :: PQ (Collapse a)) where
-  go (CSup k a b) pq = go CEra (pqPut (k,b) $ pqPut (k,a) $ pq)
+-- Flattener
+-- ---------
+
+flattenDFS :: Collapse a -> [a]
+flattenDFS (CSup k a b) = flatten a ++ flatten b
+flattenDFS (CVal x)     = [x]
+flattenDFS CEra         = []
+
+flattenPQ :: Collapse a -> [a]
+flattenPQ term = go term (PQLeaf :: PQ (Collapse a)) where
+  go (CSup k a b) pq = go CEra (pqPut (k,a) $ pqPut (k,b) $ pq)
   go (CVal x)     pq = x : go CEra pq
   go CEra         pq = case pqPop pq of
     Just ((k,v),pq) -> go v pq
     Nothing         -> []
+
+flatten :: Collapse a -> [a]
+flatten = flattenPQ
 
 -- Flat Collapser
 -- --------------

@@ -406,9 +406,15 @@ skip = skipMany (parseSpace <|> parseComment) where
 -- Adjusting
 -- ---------
 
+-- TODO: create a 'registerPrim' function that adds the following entries to the nameToId map:
+-- "SUP" -> 0xFFFFFE
+-- "DUP" -> 0xFFFFFF
+-- its type must receive/return a map
+
 createBook :: [(String, ([String], Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
 createBook defs ctrToCid ctrToAri =
-  let nameToId' = MS.fromList $ zip (map fst defs) [0..]
+  let withPrims = \ n2i -> MS.union n2i $ MS.fromList primitives
+      nameToId' = withPrims $ MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
       idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (mget nameToId' name, (args, lexify (setRefIds nameToId' core)))) defs
   in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid

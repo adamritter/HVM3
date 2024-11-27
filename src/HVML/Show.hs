@@ -109,7 +109,8 @@ termToString term =
 -- ---------------
 
 pretty :: Core -> Maybe String
-pretty core = prettyStr core <|> prettyLst core
+-- pretty core = prettyStr core <|> prettyLst core
+pretty core = prettyStr core
 
 prettyStr :: Core -> Maybe String
 prettyStr (Ctr 0 []) = Just "\"\""

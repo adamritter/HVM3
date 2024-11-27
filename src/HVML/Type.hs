@@ -352,3 +352,16 @@ modeT mode = error $ "unknown mode: " ++ show mode
 mget map key = case MS.lookup key map of
   Just val -> val
   Nothing  -> error $ "key not found: " ++ show key
+
+-- Primitive Functions
+_DUP_F_ :: Lab
+_DUP_F_ = 0xFFF
+
+_SUP_F_ :: Lab
+_SUP_F_ = 0xFFE
+
+primitives :: [(String, Lab)]
+primitives = 
+  [ ("SUP", _SUP_F_)
+  , ("DUP", _DUP_F_)
+  ]

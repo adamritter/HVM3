@@ -1,4 +1,5 @@
 //./Type.hs//
+//./Reduce.hs//
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -26,7 +27,7 @@ typedef struct {
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
-  Term (*book[1024])(Term); // functions
+  Term (*book[4096])(Term); // functions
 } State;
 
 // Global State Value
@@ -77,6 +78,9 @@ static State HVM = {
 #define OP_XOR 0x0D
 #define OP_LSH 0x0E
 #define OP_RSH 0x0F
+
+#define SUP_F 0xFFE
+#define DUP_F 0xFFF
 
 #define LAZY 0x0
 #define STRI 0x1
@@ -141,7 +145,7 @@ u64 u12v2_new(u64 x, u64 y) {
 }
 
 u64 u12v2_x(u64 u12v2) {
-  return u12v2 & 0x3FF;
+  return u12v2 & 0xFFF;
 }
 
 u64 u12v2_y(u64 u12v2) {
@@ -1193,6 +1197,29 @@ Term normal(Term term) {
   }
 }
 
+// Primitives
+// ----------
+
+// Primitive: Dynamic Sup `@SUP(lab tm0 tm1)`
+// Allocates a new SUP node with given label.
+Term SUP_f(Term ref) {
+  Loc ref_loc = term_loc(ref);
+  Term lab = got(ref_loc + 0);
+  Term tm0 = got(ref_loc + 1);
+  Term tm1 = got(ref_loc + 2);
+  Loc  sup = alloc_node(2);
+  Term ret = term_new(SUP, term_loc(reduce(lab)), sup);
+  set(sup + 0, tm0);
+  set(sup + 1, tm1);
+  return ret;
+}
+
+// TODO
+Term DUP_f(Term ref) {
+  printf("TODO: Dynamic Dups\n");
+  exit(0);
+}
+
 // Runtime Memory
 // --------------
 
@@ -1206,6 +1233,8 @@ void hvm_init() {
   HVM.itrs  = malloc(sizeof(u64));
   *HVM.size = 1;
   *HVM.itrs = 0;
+  HVM.book[SUP_F] = SUP_f;
+  HVM.book[DUP_F] = DUP_f;
 }
 
 void hvm_free() {
@@ -1226,7 +1255,7 @@ void hvm_set_state(State* hvm) {
   HVM.heap = hvm->heap;
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;
-  for (int i = 0; i < 1024; i++) {
+  for (int i = 0; i < 4096; i++) {
     HVM.book[i] = hvm->book[i];
   }
 }
