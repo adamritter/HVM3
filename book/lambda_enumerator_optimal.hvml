@@ -1,7 +1,7 @@
 // An Optimal λ-Calculus Enumerator for Program Search
 // ---------------------------------------------------
 // This file shows a template on how to enumerate superposed terms in a
-// higher-order language (here, the affine λ-Calculus) for the proof search.
+// higher-order language (here, the affine λ-Calculus) for proof search.
 // Instead of generating the source syntax (like superposing all binary strings
 // and parsing it as a binary λ-calculus), we create a superposition of all
 // λ-terms *directly*, in a way that head constructors are emitted as soon as
