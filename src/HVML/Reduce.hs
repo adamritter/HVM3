@@ -196,6 +196,8 @@ reduceRefAt_Sup book host loc ari = do
   sup <- allocNode 2
   case tagT (termTag lab) of
     W32 -> do
+      when (termLoc lab >= 0x1000000) $ do
+        error "RUNTIME_ERROR: dynamic SUP label too large"
       let ret = termNew _SUP_ (termLoc lab) sup
       set (sup + 0) tm0
       set (sup + 1) tm1
@@ -216,6 +218,8 @@ reduceRefAt_Dup book host loc ari = do
   dup <- allocNode 2
   case tagT (termTag lab) of
     W32 -> do
+      when (termLoc lab >= 0x1000000) $ do
+        error "RUNTIME_ERROR: dynamic DUP label too large"
       -- Create the DUP node with value and SUB
       set (dup + 0) val
       set (dup + 1) (termNew _SUB_ 0 0)
@@ -230,7 +234,7 @@ reduceRefAt_Dup book host loc ari = do
       let ret = termNew _APP_ 0 app2
       set host ret
       return ret
-    _ -> error "RUNTIME_ERROR: dynamic DUP without numeric label."
+    _ -> error $ "RUNTIME_ERROR: dynamic DUP without numeric label: " ++ termToString lab
 
 reduceCAt :: Bool -> ReduceAt
 reduceCAt = \ _ _ host -> do

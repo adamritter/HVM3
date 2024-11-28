@@ -9,6 +9,7 @@
 // https://gist.github.com/VictorTaelin/fb798a5bd182f8c57dd302380f69777a
 // We can bring this naive BLC enumerator down to 1.7m interactions. Not quite
 // as fast as 72k, but this makes it ~37x faster than the Haskell version.
+// UPDATE: somehow this needs only ~111k interactions after using a lazy @and...
 
 data List {
   #Nil
@@ -25,7 +26,6 @@ data Term {
   #Lam{bod}
   #App{fun arg}
   #Var{idx}
-  #Sub{val}
 }
 
 data pair {
@@ -53,6 +53,11 @@ data Maybe {
 @tail(xs) = ~ xs {
   #Nil: *
   #Cons{h t}: t
+}
+
+@and(a b) = ~ a !b {
+  0: 0
+  p: b
 }
 
 // Parsing
@@ -103,7 +108,6 @@ data Maybe {
     ! &0{ctx arg} = @bind_term(arg ctx)
     &0{ctx #App{fun arg}}
   #Var{idx}: @get(idx ctx)
-  #Sub{val}: *
 }
 
 @get(idx ctx) = ~ idx !ctx {
@@ -160,7 +164,6 @@ data Maybe {
     #Cons{'(' (@show_term(fun d0)
     #Cons{' ' (@show_term(arg d1)
     #Cons{')' k})})}
-  #Sub{val}: *
 }
 
 @do_show_term(term) = (@show_term(term 0) #Nil)
@@ -168,8 +171,8 @@ data Maybe {
 // Equality
 // --------
 
-@eq(a b dep) = ~ a !b !dep {
-  #Lam{a_bod}: ~ b !dep {
+@eq(a b dep) = ~ @wnf(a) !b !dep {
+  #Lam{a_bod}: ~ @wnf(b) !dep {
     #Lam{b_bod}:
       !&1{dep d0}=dep
       !&1{dep d1}=dep
@@ -177,24 +180,20 @@ data Maybe {
       @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ 1 d2))
     #App{b_fun b_arg}: 0
     #Var{b_idx}: 0
-    #Sub{b_val}: *
   }
   #App{a_fun a_arg}: ~ b !dep {
     #Lam{b_bod}: 0
     #App{b_fun b_arg}:
       !&1{dep d0}=dep
       !&1{dep d1}=dep
-      (& @eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
+      @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
     #Var{b_idx}: 0
-    #Sub{b_val}: *
   }
   #Var{a_idx}: ~ b !dep {
     #Lam{b_bod}: 0
     #App{b_fun b_arg}: 0
     #Var{b_idx}: (== a_idx b_idx)
-    #Sub{b_val}: *
   }
-  #Sub{a_val}: *
 }
 
 // Evaluation
@@ -204,24 +203,12 @@ data Maybe {
   #Lam{bod}: #Lam{bod}
   #App{fun arg}: @app(@wnf(fun) arg)
   #Var{idx}: #Var{idx}
-  #Sub{val}: #Sub{val}
 }
 
 @app(f x) = ~ f !x {
   #Lam{bod}: @wnf((bod @wnf(x)))
   #App{fun arg}: #App{#App{fun arg} x}
   #Var{idx}: #App{#Var{idx} x}
-  #Sub{val}: #App{#Sub{val} x}
-}
-
-// Normalization
-// -------------
-
-@nf(term) = ~ @wnf(term) {
-  #Lam{bod}: #Lam{λx @nf((bod #Sub{x}))}
-  #App{fun arg}: #App{@nf(fun) @nf(arg)}
-  #Var{idx}: #Var{idx}
-  #Sub{val}: val
 }
 
 // Enumeration
@@ -256,5 +243,5 @@ data Maybe {
 // Solve `?x` in `λaλb(?x λt(t a b)) == λaλbλt(t b a)`
 @main =
   ! &5{x0 x1} = @do_parse_term(@X)
-  ! solved    = @eq(@nf(#App{x0 @A}) @B 0) // (?x A) == B
+  ! solved    = @eq(#App{x0 @A} @B 0) // (?x A) == B
   @when(solved @do_show_term(x1))

@@ -103,6 +103,11 @@ data Maybe {
   #Cons{h t}: t
 }
 
+@and(a b) = ~ a !b {
+  0: 0
+  p: b
+}
+
 @tm0(x) = !&0{a b}=x a
 @tm1(x) = !&0{a b}=x b
 
@@ -168,7 +173,7 @@ data Maybe {
     #App{b_fun b_arg}:
       !&10000001{dep d0}=dep
       !&10000001{dep d1}=dep
-      (& @eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
+      @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
     #Var{b_idx}: 0
     #Sub{b_val}: *
   }
@@ -228,12 +233,12 @@ data Maybe {
     !&0{lab lab1}=lab
     !&0{lab lab2}=lab
     !&0{lab lab3}=lab
-    @DUP(lab0 lab λlabL λlabR
-    @DUP(lab1 lim λlimL λlimR
+    !&0{labL labR}=lab
+    !&0{limL limR}=lim
     @DUP(lab2 ctx λctxL λctxR
     @SUP(lab3
       @lam(limL labL ctxL)
-      @ret((+ limR 1) labR ctxR λk(k))))))
+      @ret((+ limR 1) labR ctxR λk(k))))
 }
 
 // Generate a fresh lambda and extend the context with its variable.
@@ -255,14 +260,14 @@ data Maybe {
     !&0{lab lab3}=lab
     !&0{lab lab4}=lab
     !&0{lab lab5}=lab
-    @DUP(lab0 lab λlabL λlabR
-    @DUP(lab1 lim λlimL λlimR
+    !&0{labL labR}=lab
+    !&0{limL limR}=lim
     @DUP(lab2 rem λremL λremR
     @DUP(lab3 ent λentL λentR
     @DUP(lab4 ctx λctxL λctxR
     @SUP(lab5
       @app(limL labL (remL ctxL) entL)
-      @ret(limR labR ctxR λk(remR #Cons{entR k}))))))))
+      @ret(limR labR ctxR λk(remR #Cons{entR k}))))))
 }
 
 // To apply a value to things, we will make a triple choice.
@@ -280,29 +285,23 @@ data Maybe {
   !&0{lab labF}=lab
   !&0{lab labG}=lab
   !&0{lab labH}=lab
-  !&0{lab labI}=lab
-  !&0{lab labJ}=lab
-  !&0{lab labK}=lab
-  !&0{lab labL}=lab
-  !&0{lab labM}=lab
-  !&0{lab labN}=lab
-  @DUP(labA lab λlab λlab0
-  @DUP(labB lab λlab λlab1
-  @DUP(labC lab λlab λlab2
-  @DUP(labD lim λlim λlim0
-  @DUP(labE lim λlim λlim1
-  @DUP(labF lim λlim λlim2
-  @DUP(labG ent λent λent0
-  @DUP(labH ent λent λent1
-  @DUP(labI ent λent λent2
-  @DUP(labJ ctx λctx λctx0
-  @DUP(labK ctx λctx λctx1
-  @DUP(labL ctx λctx λctx2
-  @SUP(labM
+  !&0{lab lab0}=lab
+  !&0{lab lab1}=lab
+  !&0{lab lab2}=lab
+  !&0{lim lim0}=lim
+  !&0{lim lim1}=lim
+  !&0{lim lim2}=lim
+  @DUP(labA ent λent λent0
+  @DUP(labB ent λent λent1
+  @DUP(labC ent λent λent2
+  @DUP(labD ctx λctx λctx0
+  @DUP(labE ctx λctx λctx1
+  @DUP(labF ctx λctx λctx2
+  @SUP(labG
     // Arity 0
     !&0{typ0 val0} = ent0
     &0{ctx0 val0}
-  @SUP(labN
+    @SUP(labH
       // Arity 1
       !&0{typ1 val1} = ent1
       !&0{ctx1 argX} = @all(lim1 lab1 ctx1)
@@ -311,11 +310,9 @@ data Maybe {
       !&0{typ2 val2} = ent2
       !&0{limX limY} = lim2
       !&0{labX labY} = lab2
-      ! labX         = (+ (* labX 2) 0)
-      ! labY         = (+ (* labY 2) 1)
-      !&0{ctx2 argX} = @all(limX labX ctx2)
-      !&0{ctx2 argY} = @all(limY labY ctx2)
-      &0{ctx2 #App{#App{val2 argX} argY}}))))))))))))))
+      !&0{ctx2 argX} = @all(limX (+ (* labX 2) 0) ctx2)
+      !&0{ctx2 argY} = @all(limY (+ (* labY 2) 1) ctx2)
+      &0{ctx2 #App{#App{val2 argX} argY}}))))))))
 
 // Tests
 // -----
@@ -340,3 +337,5 @@ data Maybe {
 @main =
   ! solved = @eq(@nf(#App{@X @A}) @B 0)
   @when(solved @do_show_term(@X))
+
+//@main = @X

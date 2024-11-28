@@ -1,5 +1,4 @@
 //./Type.hs//
-//./Reduce.hs//
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -497,7 +496,8 @@ Term reduce_dup_typ(Term dup, Term typ) {
 // ! &L{b0 b1} = b
 // ! &L{c0 c1} = c
 // ...
-// &L{#{a0 b0 c0 ...} #{a1 b1 c1 ...}}
+// x <- #{a0 b0 c0 ...} 
+// y <- #{a1 b1 c1 ...}
 Term reduce_dup_ctr(Term dup, Term ctr) {
   //printf("reduce_dup_ctr "); print_term(dup); printf("\n");
   inc_itr();
@@ -517,9 +517,6 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
     set(ctr0 + i, term_new(DP0, dup_lab, du0));
     set(ctr1 + i, term_new(DP1, dup_lab, du0));
   }
-  Loc sup = alloc_node(2);
-  set(sup + 0, term_new(CTR, ctr_lab, ctr0));
-  set(sup + 1, term_new(CTR, ctr_lab, ctr1));
   set(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
   set(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
   return got(dup_loc + dup_num);
@@ -1277,5 +1274,3 @@ void hvm_define(u64 fid, Term (*func)()) {
   //printf("defined %llu %p\n", fid, func);
   HVM.book[fid] = func;
 }
-
-
