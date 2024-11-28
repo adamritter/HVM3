@@ -106,42 +106,6 @@ data Maybe {
 @tm0(x) = !&0{a b}=x a
 @tm1(x) = !&0{a b}=x b
 
-// Binding
-// -------
-
-@do_bind_term(term) = ~ @bind_term(term #Nil) {
-  #Result{ctx term}: term
-}
-
-@bind_term(term ctx) = ~term !ctx {
-  #Lam{bod}: ~ @bind_term(bod #Cons{#Some{$x} ctx}) {
-    #Result{ctx bod}: #Result{@tail(ctx) #Lam{λ$x bod}}
-  }
-  #App{fun arg}: ~ @bind_term(fun ctx) {
-    #Result{ctx fun}: ~ @bind_term(arg ctx) {
-      #Result{ctx arg}: #Result{ctx #App{fun arg}}
-    }
-  }
-  #Var{idx}: @get(idx ctx)
-  #Sub{val}: *
-}
-
-@get(idx ctx) = ~ idx !ctx {
-  0: ~ ctx {
-    #Nil: *
-    #Cons{h t}: ~ h {
-      #None: *
-      #Some{x}: #Result{ #Cons{#None t} x }
-    }
-  }
-  p: ~ ctx {
-    #Nil: *
-    #Cons{h t}: ~ @get(p t) {
-      #Result{t x}: #Result{#Cons{h t} x}
-    }
-  }
-}
-
 // Stringification
 // ---------------
 
