@@ -1,0 +1,118 @@
+// Optimal recursive context passing with HVM's "pure mutable references"
+// Article: https://gist.github.com/VictorTaelin/fb798a5bd182f8c57dd302380f69777a
+
+data Pair { #Pair{fst snd} }
+data List { #Nil #Cons{head tail} }
+data Tree { #Leaf #Node{lft rgt} }
+
+// Utils
+// -----
+
+@is_node(tree) = ~tree {
+  #Leaf: 0
+  #Node{lft rgt}: 1
+}
+
+@range(n r) = ~n !r {
+  0: r
+  p: !&0{p0 p1}=p @range(p0 #Cons{p1 r})
+}
+
+@fst(p) = ~p {
+  #Pair{fst snd}: fst
+}
+
+@snd(p) = ~p {
+  #Pair{fst snd}: snd
+}
+
+@tm0(sup) = !&0{tm0 tm1}=sup tm0
+@tm1(sup) = !&0{tm0 tm1}=sup tm1
+
+// Mutable references
+@mut(ref fn) = !! $new = (fn (ref $new)) *
+@spt(ref fn) = (fn λ$y(ref $z) λ$z($y))
+
+// Slow Version
+// ------------
+
+// The slow version passes a context monadically, with a pair state.
+@list_to_tree_slow(n ctx) = ~n !ctx {
+  // Base Case:
+  // - take the ctx's head
+  // - return the context's tail and '#Leaf{head}'
+  0: ~ctx {
+    #Nil: *
+    #Cons{head tail}: #Pair{tail #Leaf{head}}
+  }
+  // Step Case:
+  // - recurse to the lft, get the new ctx and 'lft' tree
+  // - recurse to the rgt, get the new ctx and 'rgt' tree
+  // - return the final context and a '#Node{lft rgt}'
+  p:
+    !&0{p0 p1}=p
+    ~ @list_to_tree_slow(p0 ctx) {
+      #Pair{ctx lft}: ~ @list_to_tree_slow(p1 ctx) {
+        #Pair{ctx rgt}: #Pair{ctx #Node{lft rgt}}
+      }
+    }
+}
+
+// Fast Version: parallel destructing
+// ----------------------------------
+
+// This version uses a superposition instead of a pair. It is faster because it
+// allows us to destruct in parallel (which isn't available for native ADTs),
+// preventing the sequential chaining issue.
+@list_to_tree_fast_par(n ctx) = ~n !ctx {
+  0: ~ctx {
+    #Nil: *
+    #Cons{head tail}: &0{tail #Leaf{head}}
+  }
+  p:
+    ! &0{p0 p1}   = p
+    ! &0{ctx lft} = @list_to_tree_fast_par(p0 ctx)
+    ! &0{ctx rgt} = @list_to_tree_fast_par(p1 ctx)
+    &0{ctx #Node{lft rgt}}
+}
+
+
+// Fast Version: mutable references
+// --------------------------------
+
+// This version passes the context as a mutable reference.
+// It avoids pair entirely.
+@list_to_tree_fast_mut(n ctx) = ~n !ctx {
+  // Base case:
+  // - mutably replace the context by its tail, and extract its head
+  // - return just '#Leaf{head}' (no pairs!)
+  0: 
+    !! @mut(ctx λctx ~ctx { #Nil:* #Cons{$head tail}:tail })
+    #Leaf{$head}
+  // Step Case:
+  // - split the mutable reference into two
+  // - recurse to the lft and rgt, passing the split mut refs
+  // - return just '#Node{lft rgt}' directly (no pairs!)
+  p:
+    !&0{pL pR}=p
+    !! @spt(ctx λ$ctxL λ$ctxR *)
+    #Node{
+      @list_to_tree_fast_mut(pL $ctxL)
+      @list_to_tree_fast_mut(pR $ctxR)
+    }
+}
+
+// Main
+// ----
+
+// Tree Depth
+@depth = 16
+
+// Tests slow version
+//@main = @is_node(@snd(@list_to_tree_slow(@depth (@range((<< 1 @depth) 0)))))
+
+// Tests fast version with parallel destruct
+@main = @is_node(@tm1(@list_to_tree_fast_par(@depth (@range((<< 1 @depth) 0)))))
+
+// Tests fast version with mutable refs
+//@main = @is_node(@list_to_tree_fast_mut(@depth λ$ctx(@range((<< 1 @depth) 0))))

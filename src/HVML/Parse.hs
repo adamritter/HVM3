@@ -117,11 +117,15 @@ parseCore = do
           return $ Dup lab dp0 dp1 val bod
         '!' -> do
           consume "!"
-          nam <- parseName
-          consume "="
+          nam <- optionMaybe $ try $ do
+            nam <- parseName
+            consume "="
+            return nam
           val <- parseCore
           bod <- parseCore
-          return $ Let STRI nam val bod
+          case nam of
+            Just nam -> return $ Let STRI nam val bod
+            Nothing  -> return $ Let STRI "_" val bod
         '^' -> do
           consume "^"
           nam <- parseName
