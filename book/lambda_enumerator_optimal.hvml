@@ -66,7 +66,7 @@ data Bits {
 }
 
 data Term {
-  #Lam{inp bod}
+  #Lam{bod}
   #App{fun arg}
   #Var{idx}
   #Sub{val}
@@ -114,8 +114,8 @@ data Maybe {
 }
 
 @bind_term(term ctx) = ~term !ctx {
-  #Lam{inp bod}: ~ @bind_term(bod #Cons{#Some{$x} ctx}) {
-    #Result{ctx bod}: #Result{@tail(ctx) #Lam{inp λ$x bod}}
+  #Lam{bod}: ~ @bind_term(bod #Cons{#Some{$x} ctx}) {
+    #Result{ctx bod}: #Result{@tail(ctx) #Lam{λ$x bod}}
   }
   #App{fun arg}: ~ @bind_term(fun ctx) {
     #Result{ctx fun}: ~ @bind_term(arg ctx) {
@@ -172,7 +172,7 @@ data Maybe {
 @show_term(term dep) = ~term !dep {
   #Var{idx}: λk
     @show_dec((- (- dep idx) 1) k)
-  #Lam{inp bod}: λk
+  #Lam{bod}: λk
     !&10000000{d0 d1}=dep
     #Cons{'λ' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
   #App{fun arg}: λk
@@ -189,8 +189,8 @@ data Maybe {
 // --------
 
 @eq(a b dep) = ~ a !b !dep {
-  #Lam{a_inp a_bod}: ~ b !dep {
-    #Lam{b_inp b_bod}:
+  #Lam{a_bod}: ~ b !dep {
+    #Lam{b_bod}:
       !&10000001{dep d0}=dep
       !&10000001{dep d1}=dep
       !&10000001{dep d2}=dep
@@ -200,7 +200,7 @@ data Maybe {
     #Sub{b_val}: *
   }
   #App{a_fun a_arg}: ~ b !dep {
-    #Lam{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
     #App{b_fun b_arg}:
       !&10000001{dep d0}=dep
       !&10000001{dep d1}=dep
@@ -209,7 +209,7 @@ data Maybe {
     #Sub{b_val}: *
   }
   #Var{a_idx}: ~ b !dep {
-    #Lam{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
     #App{b_fun b_arg}: 0
     #Var{b_idx}: (== a_idx b_idx)
     #Sub{b_val}: *
@@ -221,14 +221,14 @@ data Maybe {
 // ----------
 
 @wnf(term) = ~ term { 
-  #Lam{inp bod}: #Lam{inp bod}
+  #Lam{bod}: #Lam{bod}
   #App{fun arg}: @wnf_app(@wnf(fun) arg)
   #Var{idx}: #Var{idx}
   #Sub{val}: #Sub{val}
 }
 
 @wnf_app(f x) = ~ f !x {
-  #Lam{inp bod}: @wnf((bod @wnf(x)))
+  #Lam{bod}: @wnf((bod @wnf(x)))
   #App{fun arg}: #App{#App{fun arg} x}
   #Var{idx}: #App{#Var{idx} x}
   #Sub{val}: #App{#Sub{val} x}
@@ -238,7 +238,7 @@ data Maybe {
 // -------------
 
 @nf(term) = ~ @wnf(term) {
-  #Lam{inp bod}: #Lam{inp λx @nf((bod #Sub{x}))}
+  #Lam{bod}: #Lam{λx @nf((bod #Sub{x}))}
   #App{fun arg}: #App{@nf(fun) @nf(arg)}
   #Var{idx}: #Var{idx}
   #Sub{val}: val
@@ -275,7 +275,7 @@ data Maybe {
 // Generate a fresh lambda and extend the context with its variable.
 @lam(lim lab ctx) =
   !&0{ctx bod} = @all(lim lab #Cons{&0{0 $x} ctx})
-  &0{@tail(ctx) #Lam{0 λ$x(bod)}}
+  &0{@tail(ctx) #Lam{λ$x(bod)}}
 
 // Return a variable from the context.
 // If the context is empty, destroy this universe.
@@ -358,15 +358,15 @@ data Maybe {
 
 //A= λt (t ^1 ^2)
 //A= λ((Z SZ) SSZ)
-@A = #Lam{2 λt #App{#App{t #Var{1}} #Var{2}}}
+@A = #Lam{λt #App{#App{t #Var{1}} #Var{2}}}
 
 ////B= λt (t ^2 ^1)
 ////B= λ((Z SSZ) SZ)
-@B = #Lam{2 λt #App{#App{t #Var{2}} #Var{1}}}
+@B = #Lam{λt #App{#App{t #Var{2}} #Var{1}}}
 
 //R= λx (x λa λb λt (t b a))
 //R= λ(Z λλλ((SSSZ SSZ) SZ))
-@R = #Lam{1 λx #App{x #Lam{0 λa #Lam{0 λb #Lam{2 λt #App{#App{t b} a}}}}}}
+@R = #Lam{λx #App{x #Lam{λa #Lam{λb #Lam{λt #App{#App{t b} a}}}}}}
 
 //X= (all terms)
 @X = @tm1(@all(5 1 #Nil))
