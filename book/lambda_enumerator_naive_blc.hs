@@ -5,6 +5,7 @@
 
 import Control.Monad (forM_, when)
 import Data.Bits (testBit)
+import System.Exit (exitSuccess)
 
 data Bits = O Bits | I Bits | E deriving Show
 data Term = Lam Term | App Term Term | Var Int deriving Show
@@ -169,3 +170,5 @@ main = forM_ [0..2^25-1] $ \i -> do
       -- putStrLn $ "----------"
       when solved $ do
         putStrLn (doShowTerm x)
+        exitSuccess
+
