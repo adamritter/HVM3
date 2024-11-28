@@ -1,0 +1,251 @@
+// This is the HVM version of the naive λ-Calculus enumerator. It superposes all
+// binary λ-calculus strings, parses, and applies to the equation we want to
+// solve. Despite the use of superpositions, this performs about the same as the
+// Haskell version, since HVM is forced to enumerate all terms anyway, and not a
+// lot of sharing is possible. This takes about 32 million interactions. A
+// better approach is provided in the lambda_enumerator_optimal.hvml file, which
+// brings this number down to just 72k interactions.
+
+data List {
+  #Nil
+  #Cons{head tail}
+}
+
+data Bits {
+  #O{pred}
+  #I{pred}
+  #E
+}
+
+data Term {
+  #Lam{bod}
+  #App{fun arg}
+  #Var{idx}
+  #Sub{val}
+}
+
+data pair {
+  #Pair{fst snd}
+}
+
+data Result {
+  #Result{src val}
+}
+
+data Maybe {
+  #None
+  #Some{value}
+}
+
+// Prelude
+// -------
+
+@if(c t f) = ~ c {
+  0: f
+  p: t
+}
+
+@when(c t) = ~ c {
+  0: *
+  p: t
+}
+
+@tail(xs) = ~ xs {
+  #Nil: *
+  #Cons{h t}: t
+}
+
+// Parsing
+// -------
+
+@do_parse_term(src) = ~ @parse_term(src) {
+  #Result{src term}: @do_bind_term(term)
+}
+
+@parse_term(src) = ~src {
+  #O{src}: ~ @parse_nat(src) {
+    #Result{src nat}: #Result{src #Var{nat}}
+  }
+  #I{src}: ~src {
+    #O{src}: ~ @parse_term(src) {
+      #Result{src bod}: #Result{src #Lam{bod}}
+    }
+    #I{src}: ~ @parse_term(src) {
+      #Result{src fun}: ~ @parse_term(src) {
+        #Result{src arg}: #Result{src #App{fun arg}}
+      }
+    }
+    #E: * 
+  }
+  #E: *
+}
+
+@parse_nat(src) = ~src {
+  #O{src}: #Result{src 0}
+  #I{src}: ~ @parse_nat(src) {
+    #Result{src nat}: #Result{src (+ 1 nat)}
+  }
+  #E: #Result{#E 0}
+}
+
+// Binding
+// -------
+
+@do_bind_term(term) = ~ @bind_term(term #Nil) {
+  #Result{ctx term}: term
+}
+
+@bind_term(term ctx) = ~term !ctx {
+  #Lam{bod}: ~ @bind_term(bod #Cons{#Some{$x} ctx}) {
+    #Result{ctx bod}: #Result{@tail(ctx) #Lam{λ$x bod}}
+  }
+  #App{fun arg}: ~ @bind_term(fun ctx) {
+    #Result{ctx fun}: ~ @bind_term(arg ctx) {
+      #Result{ctx arg}: #Result{ctx #App{fun arg}}
+    }
+  }
+  #Var{idx}: @get(idx ctx)
+  #Sub{val}: *
+}
+
+@get(idx ctx) = ~ idx !ctx {
+  0: ~ ctx {
+    #Nil: *
+    #Cons{h t}: ~ h {
+      #None: *
+      #Some{x}: #Result{ #Cons{#None t} x }
+    }
+  }
+  p: ~ ctx {
+    #Nil: *
+    #Cons{h t}: ~ @get(p t) {
+      #Result{t x}: #Result{#Cons{h t} x}
+    }
+  }
+}
+
+// Stringification
+// ---------------
+
+@show_nat(nat) = ~nat { 
+  0: λk #Cons{'Z' k}
+  p: λk #Cons{'S' (@show_nat(p) k)}
+}
+
+@show_bits(bits) = ~bits {
+  #O{pred}: λk #Cons{'#' #Cons{'O' #Cons{'{' (@show_bits(pred) #Cons{'}' k})}}}
+  #I{pred}: λk #Cons{'#' #Cons{'I' #Cons{'{' (@show_bits(pred) #Cons{'}' k})}}}
+  #E: λk #Cons{'#' #Cons{'E' k}}
+}
+
+@do_show_bits(bits) = (@show_bits(bits) #Nil)
+
+@show_term(term dep) = ~term !dep {
+  #Var{idx}: λk
+    (@show_nat((- (- dep idx) 1)) k)
+  #Lam{bod}: λk
+    !&0{d0 d1}=dep
+    #Cons{'λ' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
+  #App{fun arg}: λk
+    !&0{d0 d1}=dep
+    #Cons{'(' (@show_term(fun d0)
+    #Cons{' ' (@show_term(arg d1)
+    #Cons{')' k})})}
+  #Sub{val}: *
+}
+
+@do_show_term(term) = (@show_term(term 0) #Nil)
+
+// Equality
+// --------
+
+@eq(a b dep) = ~ a !b !dep {
+  #Lam{a_bod}: ~ b !dep {
+    #Lam{b_bod}:
+      !&1{dep d0}=dep
+      !&1{dep d1}=dep
+      !&1{dep d2}=dep
+      @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ 1 d2))
+    #App{b_fun b_arg}: 0
+    #Var{b_idx}: 0
+    #Sub{b_val}: *
+  }
+  #App{a_fun a_arg}: ~ b !dep {
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}:
+      !&1{dep d0}=dep
+      !&1{dep d1}=dep
+      (& @eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
+    #Var{b_idx}: 0
+    #Sub{b_val}: *
+  }
+  #Var{a_idx}: ~ b !dep {
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #Var{b_idx}: (== a_idx b_idx)
+    #Sub{b_val}: *
+  }
+  #Sub{a_val}: *
+}
+
+// Evaluation
+// ----------
+
+@wnf(term) = ~ term { 
+  #Lam{bod}: #Lam{bod}
+  #App{fun arg}: @app(@wnf(fun) arg)
+  #Var{idx}: #Var{idx}
+  #Sub{val}: #Sub{val}
+}
+
+@app(f x) = ~ f !x {
+  #Lam{bod}: @wnf((bod @wnf(x)))
+  #App{fun arg}: #App{#App{fun arg} x}
+  #Var{idx}: #App{#Var{idx} x}
+  #Sub{val}: #App{#Sub{val} x}
+}
+
+// Normalization
+// -------------
+
+@nf(term) = ~ @wnf(term) {
+  #Lam{bod}: #Lam{λx @nf((bod #Sub{x}))}
+  #App{fun arg}: #App{@nf(fun) @nf(arg)}
+  #Var{idx}: #Var{idx}
+  #Sub{val}: val
+}
+
+// Enumeration
+// -----------
+
+// Enums all Bins of given size (label 1)
+@all1(s) = ~s{
+  0: #E
+  p: !&2{p0 p1}=p &2{
+    #O{@all1(p0)}
+    #I{@all1(p1)}
+  }
+}
+
+// Tests
+// -----
+
+//A= λt (t ^1 ^2)
+//A= λ((Z SZ) SSZ)
+@A = #Lam{λt #App{#App{t #Var{1}} #Var{2}}}
+
+//B= λt (t ^2 ^1)
+//B= λ((Z SSZ) SZ)
+@B = #Lam{λt #App{#App{t #Var{2}} #Var{1}}}
+
+//R= λx (x λa λb λt (t b a))
+//R= λ(Z λλλ((SSSZ SSZ) SZ))
+@R = #Lam{λx #App{x #Lam{λa #Lam{λb #Lam{λt #App{#App{t b} a}}}}}}
+
+@X = @all1(25)
+
+// Solve `?x` in `λaλb(?x λt(t a b)) == λaλbλt(t b a)`
+@main =
+  ! &5{x0 x1} = @do_parse_term(@X)
+  ! solved    = @eq(@nf(#App{x0 @A}) @B 0) // (?x A) == B
+  @when(solved @do_show_term(x1))
