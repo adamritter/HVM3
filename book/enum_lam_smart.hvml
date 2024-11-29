@@ -55,11 +55,6 @@
 // be studied and extended with more sophisticate approaches, like types.
 // EDIT: the dependently typed version has been pushed. It reduces the rewrite
 // count to 3k, and greatly improves the enumerator shape.
-// EDIT: I just realized this potentially has a bug on the Lam case, since it
-// takes the `tail()` of the returned context, which might not be correct, since
-// the linear enumerator will itself remove elements that it uses; i.e., calling
-// `tail()` might remove an unrelated element. I won't fix this since this file
-// is just for demo'ing, but keep it in mind.
 
 data List {
   #Nil
@@ -115,6 +110,11 @@ data Maybe {
   p: b
 }
 
+@unwrap(mb) = ~ mb {
+  #None: *
+  #Some{x}: x
+}
+
 @tm0(x) = !&0{a b}=x a
 @tm1(x) = !&0{a b}=x b
 
@@ -127,8 +127,8 @@ data Maybe {
 }
 
 @show_dec(n r) =
-  ! &10000002{n n0} = n
-  ! &10000002{n n1} = n
+  ! &{n n0} = n
+  ! &{n n1} = n
   ! chr = (+ (% n 10) '0')
   ~ (< n0 10) !chr !r {
     0: @show_dec((/ n1 10) #Cons{chr r})
@@ -149,10 +149,10 @@ data Maybe {
   #Var{idx}: λk
     @show_dec((- (- dep idx) 1) k)
   #Lam{bod}: λk
-    !&10000000{d0 d1}=dep
+    !&{d0 d1}=dep
     #Cons{'λ' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
   #App{fun arg}: λk
-    !&10000000{d0 d1}=dep
+    !&{d0 d1}=dep
     #Cons{'(' (@show_term(fun d0)
     #Cons{' ' (@show_term(arg d1)
     #Cons{')' k})})}
@@ -167,9 +167,9 @@ data Maybe {
 @eq(a b dep) = ~ a !b !dep {
   #Lam{a_bod}: ~ b !dep {
     #Lam{b_bod}:
-      !&10000001{dep d0}=dep
-      !&10000001{dep d1}=dep
-      !&10000001{dep d2}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
+      !&{dep d2}=dep
       @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ 1 d2))
     #App{b_fun b_arg}: 0
     #Var{b_idx}: 0
@@ -178,8 +178,8 @@ data Maybe {
   #App{a_fun a_arg}: ~ b !dep {
     #Lam{b_bod}: 0
     #App{b_fun b_arg}:
-      !&10000001{dep d0}=dep
-      !&10000001{dep d1}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
       @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
     #Var{b_idx}: 0
     #Sub{b_val}: *
@@ -233,24 +233,19 @@ data Maybe {
 // - B. We select a variable from context.
 // Note that, every time we make a choice, we "fork" the current context by
 // using DUP nodes with the same label that we used in the choice SUP node.
-@all(lim lab ctx) = ~lim {
+@all(&L &lim ctx) = ~&lim {
   0: *
-  lim:
-    !&0{lab lab0}=lab
-    !&0{lab lab1}=lab
-    !&0{lab lab2}=lab
-    !&0{lab lab3}=lab
-    !&0{labL labR}=lab
-    !&0{limL limR}=lim
-    @DUP(lab2 ctx λctxL λctxR
-    @SUP(lab3
-      @lam(limL labL ctxL)
-      @ret((+ limR 1) labR ctxR λk(k))))
+  &lim:
+    !&L{ctxL ctxR} = ctx
+    &L{
+      @lam(&L &lim ctxL)
+      @ret(&L (+ &lim 1) ctxR λk(k))
+    }
 }
 
 // Generate a fresh lambda and extend the context with its variable.
-@lam(lim lab ctx) =
-  !&0{ctx bod} = @all(lim lab #Cons{&0{0 $x} ctx})
+@lam(&L &lim ctx) =
+  !&0{ctx bod} = @all(&L &lim #Cons{#Some{$x} ctx})
   &0{@tail(ctx) #Lam{λ$x(bod)}}
 
 // Return a variable from the context.
@@ -258,68 +253,44 @@ data Maybe {
 // Otherwise, make a choice.
 // - A. We emit the head of the context, and apply it to things.
 // - B. We keep the head of the context, and go to the next element.
-@ret(lim lab ctx rem) = ~ctx {
+@ret(&L &lim ctx rem) = ~ctx {
   #Nil: *
-  #Cons{ent ctx}:
-    !&0{lab lab0}=lab
-    !&0{lab lab1}=lab
-    !&0{lab lab2}=lab
-    !&0{lab lab3}=lab
-    !&0{lab lab4}=lab
-    !&0{lab lab5}=lab
-    !&0{labL labR}=lab
-    !&0{limL limR}=lim
-    @DUP(lab2 rem λremL λremR
-    @DUP(lab3 ent λentL λentR
-    @DUP(lab4 ctx λctxL λctxR
-    @SUP(lab5
-      @app(limL labL (remL ctxL) entL)
-      @ret(limR labR ctxR λk(remR #Cons{entR k}))))))
+  #Cons{val ctx}:
+    !&L{remL remR} = rem
+    !&L{valL valR} = val
+    !&L{ctxL ctxR} = ctx
+    &L{
+      @app(&L &lim (remL #Cons{#None ctxL}) valL)
+      @ret(&L &lim ctxR λk(remR #Cons{valR k}))
+    }
 }
 
 // To apply a value to things, we will make a triple choice.
-// - A. Just return it directly (arity 0).
-// - B. Apply it to 1 argument (arity 1).
-// - C. Apply it to 2 arguments (arity 2).
+// - A. Just return it directly.
+// - B. Apply it to 1 argument.
+// - C. Apply it to 2 arguments.
 // When we apply it to 2 arguments, as in `(App ?A ?B)`, we need to fork the
 // label, so that DUPs/SUPs in `?A` and `?B` never use the same label.
-@app(lim lab ctx ent) =
-  !&0{lab labA}=lab
-  !&0{lab labB}=lab
-  !&0{lab labC}=lab
-  !&0{lab labD}=lab
-  !&0{lab labE}=lab
-  !&0{lab labF}=lab
-  !&0{lab labG}=lab
-  !&0{lab labH}=lab
-  !&0{lab lab0}=lab
-  !&0{lab lab1}=lab
-  !&0{lab lab2}=lab
-  !&0{lim lim0}=lim
-  !&0{lim lim1}=lim
-  !&0{lim lim2}=lim
-  @DUP(labA ent λent λent0
-  @DUP(labB ent λent λent1
-  @DUP(labC ent λent λent2
-  @DUP(labD ctx λctx λctx0
-  @DUP(labE ctx λctx λctx1
-  @DUP(labF ctx λctx λctx2
-  @SUP(labG
-    // Arity 0
-    !&0{typ0 val0} = ent0
-    &0{ctx0 val0}
-    @SUP(labH
-      // Arity 1
-      !&0{typ1 val1} = ent1
-      !&0{ctx1 argX} = @all(lim1 lab1 ctx1)
+@app(&L &lim ctx val) = ~ val {
+  #None: *
+  #Some{val}: 
+    !&L{val val0} = val
+    !&L{val val1} = val
+    !&L{val val2} = val
+    !&L{ctx ctx0} = ctx
+    !&L{ctx ctx1} = ctx
+    !&L{ctx ctx2} = ctx
+    ! arity_0 =
+      &0{ctx0 val0}
+    ! arity_1 = 
+      !&0{ctx1 argX} = @all(&L &lim ctx1)
       &0{ctx1 #App{val1 argX}}
-      // Arity 2
-      !&0{typ2 val2} = ent2
-      !&0{limX limY} = lim2
-      !&0{labX labY} = lab2
-      !&0{ctx2 argX} = @all(limX (+ (* labX 2) 0) ctx2)
-      !&0{ctx2 argY} = @all(limY (+ (* labY 2) 1) ctx2)
-      &0{ctx2 #App{#App{val2 argX} argY}}))))))))
+    ! arity_2 =
+      !&0{ctx2 argX} = @all((+(*&L 2) 0) &lim ctx2)
+      !&0{ctx2 argY} = @all((+(*&L 2) 1) &lim ctx2)
+      &0{ctx2 #App{#App{val2 argX} argY}}
+    &L{arity_0 &L{arity_1 arity_2}}
+}
 
 // Tests
 // -----
@@ -328,8 +299,8 @@ data Maybe {
 //A= λ((Z SZ) SSZ)
 @A = #Lam{λt #App{#App{t #Var{1}} #Var{2}}}
 
-////B= λt (t ^2 ^1)
-////B= λ((Z SSZ) SZ)
+//B= λt (t ^2 ^1)
+//B= λ((Z SSZ) SZ)
 @B = #Lam{λt #App{#App{t #Var{2}} #Var{1}}}
 
 //R= λx (x λa λb λt (t b a))
@@ -337,7 +308,7 @@ data Maybe {
 @R = #Lam{λx #App{x #Lam{λa #Lam{λb #Lam{λt #App{#App{t b} a}}}}}}
 
 //X= (all terms)
-@X = @tm1(@all(5 1 #Nil))
+@X = @tm1(@all(1 5 #Nil))
 
 // Solves for `?X` in `(?X λt(t A B)) == λt(t B A)`.
 // It finds `?X = λλ(1 λλ((2 0) 1))` in 76k interactions.
