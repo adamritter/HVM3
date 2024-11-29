@@ -53,6 +53,8 @@
 // The enumerator in this file is the simplest "template" enumerator that has
 // everything a higher order language needs and is structured in a way that can
 // be studied and extended with more sophisticate approaches, like types.
+// EDIT: the dependently typed version has been pushed. It reduces the rewrite
+// count to 3k, and greatly improves the enumerator shape.
 
 data List {
   #Nil

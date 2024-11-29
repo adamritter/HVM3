@@ -1,5 +1,6 @@
 -- //./Type.hs//
 -- //./Inject.hs//
+-- //./Extract.hs//
 
 module HVML.Reduce where
 
@@ -169,8 +170,10 @@ reduceRefAt book host = do
   let fid = u12v2X lab
   let ari = u12v2Y lab
   case fid of
-    x | x == _SUP_F_ -> reduceRefAt_Sup book host loc ari
-    x | x == _DUP_F_ -> reduceRefAt_Dup book host loc ari
+    x | x == _DUP_F_ -> reduceRefAt_DupF book host loc ari
+    x | x == _SUP_F_ -> reduceRefAt_SupF book host loc ari
+    x | x == _LOG_F_ -> reduceRefAt_LogF book host loc ari
+    x | x == _FRESH_F_ -> reduceRefAt_FreshF book host loc ari
     otherwise -> case MS.lookup fid (idToFunc book) of
       Just (nams, core) -> do
         incItr
@@ -183,31 +186,9 @@ reduceRefAt book host = do
         doInjectCoreAt book core host $ zip nams args
       Nothing -> return term
 
--- Primitive: Dynamic Sup `@SUP(lab tm0 tm1)`
-reduceRefAt_Sup :: Book -> Loc -> Loc -> Word64 -> HVM Term
-reduceRefAt_Sup book host loc ari = do
-  incItr
-  when (ari /= 3) $ do
-    putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@SUP'."
-    exitFailure
-  lab <- reduceAt False book (loc + 0)
-  tm0 <- got (loc + 1)
-  tm1 <- got (loc + 2)
-  sup <- allocNode 2
-  case tagT (termTag lab) of
-    W32 -> do
-      when (termLoc lab >= 0x1000000) $ do
-        error "RUNTIME_ERROR: dynamic SUP label too large"
-      let ret = termNew _SUP_ (termLoc lab) sup
-      set (sup + 0) tm0
-      set (sup + 1) tm1
-      set host ret
-      return ret
-    _ -> error "RUNTIME_ERROR: dynamic SUP without numeric label."
-
 -- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
-reduceRefAt_Dup :: Book -> Loc -> Loc -> Word64 -> HVM Term  
-reduceRefAt_Dup book host loc ari = do
+reduceRefAt_DupF :: Book -> Loc -> Loc -> Word64 -> HVM Term  
+reduceRefAt_DupF book host loc ari = do
   incItr
   when (ari /= 3) $ do
     putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@DUP'."
@@ -234,7 +215,61 @@ reduceRefAt_Dup book host loc ari = do
       let ret = termNew _APP_ 0 app2
       set host ret
       return ret
-    _ -> error $ "RUNTIME_ERROR: dynamic DUP without numeric label: " ++ termToString lab
+    _ -> do
+      core <- doExtractCoreAt (\ x -> got) book (loc + 0)
+      putStrLn $ "RUNTIME_ERROR: dynamic DUP without numeric label: " ++ termToString lab
+      putStrLn $ coreToString (doLiftDups core)
+      exitFailure
+
+-- Primitive: Dynamic Sup `@SUP(lab tm0 tm1)`
+reduceRefAt_SupF :: Book -> Loc -> Loc -> Word64 -> HVM Term
+reduceRefAt_SupF book host loc ari = do
+  incItr
+  when (ari /= 3) $ do
+    putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@SUP'."
+    exitFailure
+  lab <- reduceAt False book (loc + 0)
+  tm0 <- got (loc + 1)
+  tm1 <- got (loc + 2)
+  sup <- allocNode 2
+  case tagT (termTag lab) of
+    W32 -> do
+      when (termLoc lab >= 0x1000000) $ do
+        error "RUNTIME_ERROR: dynamic SUP label too large"
+      let ret = termNew _SUP_ (termLoc lab) sup
+      set (sup + 0) tm0
+      set (sup + 1) tm1
+      set host ret
+      return ret
+    _ -> error "RUNTIME_ERROR: dynamic SUP without numeric label."
+
+-- Primitive: Logger `@LOG(msg)`
+-- Will extract the term and log it. 
+-- Returns 0.
+reduceRefAt_LogF :: Book -> Loc -> Loc -> Word64 -> HVM Term
+reduceRefAt_LogF book host loc ari = do
+  incItr
+  when (ari /= 1) $ do
+    putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@LOG'."
+    exitFailure
+  msg <- doExtractCoreAt (const got) book (loc + 0)
+  putStrLn $ coreToString (doLiftDups msg)
+  let ret = termNew _W32_ 0 0
+  set host ret
+  return ret
+
+-- Primitive: Fresh `@FRESH`
+-- Returns a fresh dup label.
+reduceRefAt_FreshF :: Book -> Loc -> Loc -> Word64 -> HVM Term
+reduceRefAt_FreshF book host loc ari = do
+  incItr
+  when (ari /= 0) $ do
+    putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@Fresh'."
+    exitFailure
+  num <- fresh
+  let ret = termNew _W32_ 0 num
+  set host ret
+  return ret
 
 reduceCAt :: Bool -> ReduceAt
 reduceCAt = \ _ _ host -> do

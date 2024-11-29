@@ -8,7 +8,7 @@ import Control.Monad.State
 import Data.List
 import Data.Word
 import HVML.Show
-import HVML.Type
+import HVML.Type hiding (fresh)
 import qualified Data.Map.Strict as MS
 
 import Debug.Trace

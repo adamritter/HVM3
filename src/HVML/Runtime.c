@@ -26,6 +26,7 @@ typedef struct {
   ATerm* heap; // global node buffer
   u64*   size; // global node length
   u64*   itrs; // interaction count
+  u64*   frsh; // fresh dup label count
   Term (*book[4096])(Term); // functions
 } State;
 
@@ -36,6 +37,7 @@ static State HVM = {
   .heap = NULL,
   .size = NULL,
   .itrs = NULL,
+  .frsh = NULL,
   .book = {NULL}
 };
 
@@ -78,8 +80,10 @@ static State HVM = {
 #define OP_LSH 0x0E
 #define OP_RSH 0x0F
 
-#define SUP_F 0xFFE
 #define DUP_F 0xFFF
+#define SUP_F 0xFFE
+#define LOG_F 0xFFD
+#define FRESH_F 0xFFC
 
 #define LAZY 0x0
 #define STRI 0x1
@@ -96,6 +100,10 @@ Loc get_len() {
 
 u64 get_itr() {
   return *HVM.itrs;
+}
+
+u64 fresh() {
+  return (*HVM.frsh)++;
 }
 
 void set_len(Loc value) {
@@ -1202,6 +1210,9 @@ Term normal(Term term) {
 Term SUP_f(Term ref) {
   Loc ref_loc = term_loc(ref);
   Term lab = reduce(got(ref_loc + 0));
+  if (term_tag(lab) != W32) {
+    printf("ERROR\n");
+  }
   Term tm0 = got(ref_loc + 1);
   Term tm1 = got(ref_loc + 2);
   Loc  sup = alloc_node(2);
@@ -1216,6 +1227,9 @@ Term SUP_f(Term ref) {
 Term DUP_f(Term ref) {
   Loc ref_loc = term_loc(ref);
   Term lab = reduce(got(ref_loc + 0));
+  if (term_tag(lab) != W32) {
+    printf("ERROR\n");
+  }
   Term val = got(ref_loc + 1);
   Term bod = got(ref_loc + 2);
   Loc dup = alloc_node(2);
@@ -1228,6 +1242,16 @@ Term DUP_f(Term ref) {
   set(app2 + 0, term_new(APP, 0, app1));
   set(app2 + 1, term_new(DP1, term_loc(lab), dup));
   return term_new(APP, 0, app2);
+}
+
+Term LOG_f(Term ref) {
+  printf("TODO: LOG_f");
+  exit(0);
+}
+
+Term FRESH_f(Term ref) {
+  printf("TODO: FRESH_f");
+  exit(0);
 }
 
 // Runtime Memory
@@ -1243,8 +1267,12 @@ void hvm_init() {
   HVM.itrs  = malloc(sizeof(u64));
   *HVM.size = 1;
   *HVM.itrs = 0;
+  HVM.frsh  = malloc(sizeof(u64));
+  *HVM.frsh = 0x20;
   HVM.book[SUP_F] = SUP_f;
   HVM.book[DUP_F] = DUP_f;
+  HVM.book[LOG_F] = LOG_f;
+  HVM.book[FRESH_F] = FRESH_f;
 }
 
 void hvm_free() {
@@ -1253,6 +1281,7 @@ void hvm_free() {
   free(HVM.heap);
   free(HVM.size);
   free(HVM.itrs);
+  free(HVM.frsh);
 }
 
 State* hvm_get_state() {
@@ -1265,6 +1294,7 @@ void hvm_set_state(State* hvm) {
   HVM.heap = hvm->heap;
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;
+  HVM.frsh = hvm->frsh;
   for (int i = 0; i < 4096; i++) {
     HVM.book[i] = hvm->book[i];
   }

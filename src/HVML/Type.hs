@@ -132,6 +132,9 @@ foreign import ccall unsafe "Runtime.c get_itr"
 foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
 
+foreign import ccall unsafe "Runtime.c fresh"
+  fresh :: IO Word64
+
 foreign import ccall unsafe "Runtime.c reduce"
   reduceC :: Term -> IO Term
 
@@ -360,8 +363,16 @@ _DUP_F_ = 0xFFF
 _SUP_F_ :: Lab
 _SUP_F_ = 0xFFE
 
+_LOG_F_ :: Lab
+_LOG_F_ = 0xFFD
+
+_FRESH_F_ :: Lab
+_FRESH_F_ = 0xFFC
+
 primitives :: [(String, Lab)]
 primitives = 
   [ ("SUP", _SUP_F_)
   , ("DUP", _DUP_F_)
+  , ("LOG", _LOG_F_)
+  , ("FRESH", _FRESH_F_)
   ]

@@ -1,0 +1,365 @@
+// Superposes dependently typed λ-terms. With it, solving:
+//   (?X λt(t A B)) == λt(t B A)
+// Where
+//   ?X : ∀A. (∀P. A -> A -> P) -> (∀P. A -> A -> P)
+// Is down to 3k interactions. Of course, that's not too surprising given there
+// are only two functions of that type, but the real win is that now we only
+// need to make a choice when selecting an element from context. Intros and
+// elims follow directly from types, no need for choices / superpositions.
+
+data List {
+  #Nil
+  #Cons{head tail}
+}
+
+data Bits {
+  #O{pred}
+  #I{pred}
+  #E
+}
+
+data Term {
+  #Var{idx}
+  #Pol{bod}
+  #All{inp bod}
+  #Lam{bod}
+  #App{fun arg}
+  #U32
+  #Num{val}
+}
+
+data Pair {
+  #Pair{fst snd}
+}
+
+data Maybe {
+  #None
+  #Some{value}
+}
+
+// Prelude
+// -------
+
+@if(c t f) = ~ c {
+  0: f
+  p: t
+}
+
+@when(c t) = ~ c {
+  0: *
+  p: t
+}
+
+@tail(xs) = ~ xs {
+  #Nil: *
+  #Cons{h t}: t
+}
+
+@and(a b) = ~ a !b {
+  0: 0
+  p: b
+}
+
+@seq(str) = ~ str {
+  #Nil: #Nil
+  #Cons{h t}:
+    !! h = h
+    !! t = @seq(t)
+    #Cons{h t}
+}
+
+@tm0(x) = !&0{a b}=x a
+@tm1(x) = !&0{a b}=x b
+
+// Stringification
+// ---------------
+
+@show_nat(nat) = ~nat { 
+  0: λk #Cons{'Z' k}
+  p: λk #Cons{'S' (@show_nat(p) k)}
+}
+
+@show_dec(n r) =
+  ! &10000000{n n0} = n
+  ! &10000000{n n1} = n
+  ! chr = (+ (% n 10) '0')
+  ~ (< n0 10) !chr !r {
+    0: @show_dec((/ n1 10) #Cons{chr r})
+    t: #Cons{chr r}
+  }
+
+@do_show_dec(n) = @show_dec(n #Nil)
+
+@show_bits(bits) = ~bits {
+  #O{pred}: λk #Cons{'#' #Cons{'O' #Cons{'{' (@show_bits(pred) #Cons{'}' k})}}}
+  #I{pred}: λk #Cons{'#' #Cons{'I' #Cons{'{' (@show_bits(pred) #Cons{'}' k})}}}
+  #E: λk #Cons{'#' #Cons{'E' k}}
+}
+
+@do_show_bits(bits) = (@show_bits(bits) #Nil)
+
+@show_term(term dep) = ~term !dep {
+  #Var{idx}: λk
+    @show_dec(idx k)
+  #Pol{bod}: λk
+    !&10000002{dep d0}=dep
+    !&10000002{dep d1}=dep
+    #Cons{'∀' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
+  #All{inp bod}: λk
+    !&10000002{dep d0}=dep
+    !&10000002{dep d1}=dep
+    !&10000002{dep d2}=dep
+    #Cons{'Π'
+    #Cons{'('
+    (@show_term(inp d0)
+    #Cons{')'
+    (@show_term((bod #Var{d1}) (+ d2 1))
+    k)})}}
+  #Lam{bod}: λk
+    !&10000002{d0 d1}=dep
+    #Cons{'λ' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
+  #App{fun arg}: λk
+    !&10000002{d0 d1}=dep
+    #Cons{'(' (@show_term(fun d0)
+    #Cons{' ' (@show_term(arg d1)
+    #Cons{')' k})})}
+  #U32: λk
+    #Cons{'U' k}
+  #Num{val}: λk
+    #Cons{'#' @show_dec(val k)}
+}
+
+@do_show_term(term) = (@show_term(term 0) #Nil)
+
+// Equality
+// --------
+
+@eq(a b dep) = ~ @wnf(a) !b !dep {
+  #Var{a_idx}: ~ @wnf(b) !dep {
+    #Var{b_idx}: (== a_idx b_idx)
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #U32: 0
+    #Num{b_val}: 0
+  }
+  #Pol{a_bod}: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}:
+      !&10000003{dep d0}=dep
+      !&10000003{dep d1}=dep
+      @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #U32: 0
+    #Num{b_val}: 0
+  }
+  #All{a_inp a_bod}: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}:
+      !&10000003{dep d0}=dep
+      !&10000003{dep d1}=dep
+      !&10000003{dep d2}=dep
+      @and(@eq(a_inp b_inp d0) @eq((a_bod #Var{d1}) (b_bod #Var{d2}) (+ dep 1)))
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #U32: 0
+    #Num{b_val}: 0
+  }
+  #Lam{a_bod}: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}:
+      !&10000003{dep d0}=dep
+      !&10000003{dep d1}=dep
+      @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
+    #App{b_fun b_arg}: 0
+    #U32: 0
+    #Num{b_val}: 0
+  }
+  #App{a_fun a_arg}: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}:
+      !&10000003{dep d0}=dep
+      !&10000003{dep d1}=dep
+      @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
+    #U32: 0
+    #Num{b_val}: 0
+  }
+  #U32: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #U32: 1
+    #Num{b_val}: 0
+  }
+  #Num{a_val}: ~ @wnf(b) !dep {
+    #Var{b_idx}: 0
+    #Pol{b_bod}: 0
+    #All{b_inp b_bod}: 0
+    #Lam{b_bod}: 0
+    #App{b_fun b_arg}: 0
+    #U32: 0
+    #Num{b_val}: (== a_val b_val)
+  }
+}
+
+// Evaluation
+// ----------
+
+@wnf(term) = ~ term { 
+  #Var{idx}: #Var{idx}
+  #Pol{bod}: #Pol{bod}
+  #All{inp bod}: #All{inp bod}
+  #Lam{bod}: #Lam{bod}
+  #App{fun arg}: @wnf_app(@wnf(fun) arg)
+  #U32: #U32
+  #Num{val}: #Num{val}
+}
+
+@wnf_app(f x) = ~ f !x {
+  #Var{idx}: #App{#Var{idx} x}
+  #Pol{bod}: #App{#Pol{bod} x}
+  #All{inp bod}: #App{#All{inp bod} x}
+  #Lam{bod}: @wnf((bod @wnf(x)))
+  #App{fun arg}: #App{#App{fun arg} x}
+  #U32: #U32
+  #Num{val}: #App{#Num{val} x}
+}
+
+// Enumeration
+// -----------
+
+@all(lab typ dep ctx) =
+  @intr(lab typ dep ctx)
+
+@intr(lab typ dep ctx) =
+  ~ typ !lab !dep !ctx {
+    #All{t_inp t_bod}: 
+      !&0{dep0 dep1} = dep
+      !&0{ctx  bod}  = @all(lab (t_bod #Var{dep0}) (+ dep1 1) #Cons{&0{$x t_inp} ctx})
+      &0{@tail(ctx) #Lam{λ$x(bod)}}
+    #Pol{t_bod}:
+      !&0{dep0 dep1} = dep
+      @intr(lab (t_bod #Var{dep0}) (+ dep1 1) ctx)
+    #U32:
+      @pick(lab #U32 dep ctx λk(k))
+    #Var{idx}:
+      @pick(lab #Var{idx} dep ctx λk(k))
+    #App{fun arg}:
+      @pick(lab #App{fun arg} dep ctx λk(k))
+    #Lam{bod}: *
+    #Num{val}: *
+  }
+
+@pick(lab typ dep ctx rem) = 
+  ~ctx {
+    #Nil: *
+    #Cons{ann ctx}:
+      !&0{lab  lab0} = lab
+      !&0{lab  lab1} = lab
+      !&0{lab  lab2} = lab
+      !&0{lab  lab3} = lab
+      !&0{lab  lab4} = lab
+      !&0{labL labR} = lab
+      !&0{depL depR} = dep
+      @DUP(lab0 typ λtypL λtypR
+      @DUP(lab1 rem λremL λremR
+      @DUP(lab2 ann λannL λannR
+      @DUP(lab3 ctx λctxL λctxR
+      @SUP(lab4
+        @elim(labL typL depL (remL ctxL) annL)
+        @pick(labR typR depR ctxR λk(remR #Cons{annR k})))))))
+  }
+
+@elim(lab typ dep ctx ann) =
+  ! &0{v t} = ann
+  ~ t !lab !typ !dep !ctx !v {
+    #Pol{t_bod}:
+      ! &10000004{typ0 typ1} = typ
+      @elim(lab typ0 dep ctx &0{v (t_bod typ1)})
+    #All{t_inp t_bod}:
+      ! &0{depL depR} = dep
+      ! &0{labL labR} = lab
+      ! labL          = (+ (* labL 2) 0)
+      ! labR          = (+ (* labR 2) 1)
+      ! &0{ctx arg}   = @all(labR t_inp depR ctx)
+      ! &4{arg0 arg1} = arg
+      @elim(labL typ depL ctx &0{#App{v arg0} (t_bod arg1)})
+    #U32: 
+      @when(@eq(typ #U32 dep) &0{ctx v})
+    #Var{idx}:
+      @when(@eq(typ #Var{idx} dep) &0{ctx v})
+    #App{fun arg}:
+      @when(@eq(typ #App{fun arg} dep) &0{ctx v})
+    #Lam{bod}: *
+    #Num{val}: *
+  }
+
+// T0 = Π(x:U32) Π(y:U32) Π(z:U32) U32
+@T0 =
+  #All{#U32 λx
+  #All{#U32 λy
+  #All{#U32 λz
+  #U32}}}
+
+// CBool = ∀P Π(x:P) Π(y:P) P
+@CBool =
+  #Pol{λp
+  !&10000005{p p0}=p
+  !&10000005{p p1}=p
+  !&10000005{p p2}=p
+  #All{p0 λx
+  #All{p1 λy
+  p2}}}
+
+// Tup(A B) = ∀P Π(p: Π(x:A) Π(y:B) P) P
+@Tup(A B) =
+  #Pol{λp
+  !&10000006{p p0}=p
+  !&10000006{p p1}=p
+  #All{
+    #All{A λx
+    #All{B λy
+    p0}} λp
+  p1}}
+
+// TupF = ∀A Π(x: (Tup A A)) (Tup A A)
+@TupF =
+  #Pol{λA
+  #Pol{λB
+  !&10000007{A A0}=A
+  !&10000007{A A1}=A
+  !&10000007{A A2}=A
+  !&10000007{A A3}=A
+  #All{@Tup(A0 A1) λx
+  @Tup(A2 A3)}}}
+
+// Tests
+// -----
+
+//A= λt(t 1 2)
+@A = #Lam{λt #App{#App{t #Num{1}} #Num{2}}}
+
+//B= λt(t 2 1)
+@B = #Lam{λt #App{#App{t #Num{2}} #Num{1}}}
+
+//R= λx(x λaλbλt(t b a))
+@R = #Lam{λx #App{x #Lam{λa #Lam{λb #Lam{λt #App{#App{t b} a}}}}}}
+
+// X : ∀A. (Tup A A) -> (Tup A A) = <all terms>
+@T = @TupF
+@X = @tm1(@all(1 @T 0 #Nil))
+
+// Solves for `?X` in `(?X λt(t A B)) == λt(t B A)`.
+// It finds `?X = λλ(0 λλ((1 3) 2))` in 3k interactions.
+@main = @when(@eq(#App{@X @A} @B 0) @do_show_term(@X))

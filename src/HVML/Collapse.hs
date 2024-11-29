@@ -1,5 +1,7 @@
 -- //./Type.hs//
 
+-- FIXME: when SUP labels have large vals, this takes a lot of time.
+
 module HVML.Collapse where
 
 import Control.Monad (ap, forM, forM_)
@@ -330,7 +332,7 @@ flattenPQ term = go term (PQLeaf :: PQ (Collapse a)) where
     Nothing         -> []
 
 flatten :: Collapse a -> [a]
-flatten = flattenPQ
+flatten = flattenDFS
 
 -- Flat Collapser
 -- --------------

@@ -82,9 +82,14 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
     
     VAR -> do
       let loc = termLoc term
-      name <- genName state loc
-      return $ Var name
-    
+      sub <- got (loc + 0)
+      if termTag sub == _SUB_
+        then do
+          name <- genName state loc
+          return $ Var name
+        else do
+          extractCoreAt state reduceAt book (loc + 0)
+
     DP0 -> do
       let loc = termLoc term
       let lab = termLab term
