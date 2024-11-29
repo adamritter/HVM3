@@ -16,6 +16,8 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
 
+import Debug.Trace
+
 -- The Collapse Monad
 -- ------------------
 -- See: https://gist.github.com/VictorTaelin/60d3bc72fb4edefecd42095e44138b41
@@ -31,15 +33,14 @@ data Bin
 data Collapse a = CSup Word64 (Collapse a) (Collapse a) | CVal a | CEra
   deriving Show
 
--- The Collapse Monad
 bind :: Collapse a -> (a -> Collapse b) -> Collapse b
 bind k f = fork k IM.empty where
   -- fork :: Collapse a -> IntMap (Bin -> Bin) -> Collapse b
   fork CEra         paths = CEra
   fork (CVal v)     paths = pass (f v) (IM.map (\x -> x E) paths)
   fork (CSup k x y) paths =
-    let lft = fork x $ IM.alter (\x -> Just (maybe id putO x)) (fromIntegral k) paths in
-    let rgt = fork y $ IM.alter (\x -> Just (maybe id putI x)) (fromIntegral k) paths in
+    let lft = fork x $ IM.alter (\x -> Just (maybe (putO id) putO x)) (fromIntegral k) paths in
+    let rgt = fork y $ IM.alter (\x -> Just (maybe (putI id) putI x)) (fromIntegral k) paths in
     CSup k lft rgt 
 
   -- pass :: Collapse b -> IntMap Bin -> Collapse b
@@ -48,7 +49,8 @@ bind k f = fork k IM.empty where
   pass (CSup k x y) paths = case IM.lookup (fromIntegral k) paths of
     Just (O p) -> pass x (IM.insert (fromIntegral k) p paths)
     Just (I p) -> pass y (IM.insert (fromIntegral k) p paths)
-    _          -> CSup k x y
+    Just E     -> CSup k x y
+    Nothing    -> CSup k x y
 
   -- putO :: (Bin -> Bin) -> (Bin -> Bin)
   putO bs = \x -> bs (O x)
