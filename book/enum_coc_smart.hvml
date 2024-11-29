@@ -60,6 +60,11 @@ data Maybe {
   p: b
 }
 
+@unwrap(mb) = ~mb {
+  #None: *
+  #Some{x}: x
+}
+
 @seq(str) = ~ str {
   #Nil: #Nil
   #Cons{h t}:
@@ -80,8 +85,8 @@ data Maybe {
 }
 
 @show_dec(n r) =
-  ! &10000000{n n0} = n
-  ! &10000000{n n1} = n
+  ! &{n n0} = n
+  ! &{n n1} = n
   ! chr = (+ (% n 10) '0')
   ~ (< n0 10) !chr !r {
     0: @show_dec((/ n1 10) #Cons{chr r})
@@ -102,13 +107,13 @@ data Maybe {
   #Var{idx}: λk
     @show_dec(idx k)
   #Pol{bod}: λk
-    !&10000002{dep d0}=dep
-    !&10000002{dep d1}=dep
+    !&{dep d0}=dep
+    !&{dep d1}=dep
     #Cons{'∀' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
   #All{inp bod}: λk
-    !&10000002{dep d0}=dep
-    !&10000002{dep d1}=dep
-    !&10000002{dep d2}=dep
+    !&{dep d0}=dep
+    !&{dep d1}=dep
+    !&{dep d2}=dep
     #Cons{'Π'
     #Cons{'('
     (@show_term(inp d0)
@@ -116,10 +121,10 @@ data Maybe {
     (@show_term((bod #Var{d1}) (+ d2 1))
     k)})}}
   #Lam{bod}: λk
-    !&10000002{d0 d1}=dep
+    !&{d0 d1}=dep
     #Cons{'λ' (@show_term((bod #Var{d0}) (+ d1 1)) k)}
   #App{fun arg}: λk
-    !&10000002{d0 d1}=dep
+    !&{d0 d1}=dep
     #Cons{'(' (@show_term(fun d0)
     #Cons{' ' (@show_term(arg d1)
     #Cons{')' k})})}
@@ -147,8 +152,8 @@ data Maybe {
   #Pol{a_bod}: ~ @wnf(b) !dep {
     #Var{b_idx}: 0
     #Pol{b_bod}:
-      !&10000003{dep d0}=dep
-      !&10000003{dep d1}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
       @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
     #All{b_inp b_bod}: 0
     #Lam{b_bod}: 0
@@ -160,9 +165,9 @@ data Maybe {
     #Var{b_idx}: 0
     #Pol{b_bod}: 0
     #All{b_inp b_bod}:
-      !&10000003{dep d0}=dep
-      !&10000003{dep d1}=dep
-      !&10000003{dep d2}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
+      !&{dep d2}=dep
       @and(@eq(a_inp b_inp d0) @eq((a_bod #Var{d1}) (b_bod #Var{d2}) (+ dep 1)))
     #Lam{b_bod}: 0
     #App{b_fun b_arg}: 0
@@ -174,8 +179,8 @@ data Maybe {
     #Pol{b_bod}: 0
     #All{b_inp b_bod}: 0
     #Lam{b_bod}:
-      !&10000003{dep d0}=dep
-      !&10000003{dep d1}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
       @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
     #App{b_fun b_arg}: 0
     #U32: 0
@@ -187,8 +192,8 @@ data Maybe {
     #All{b_inp b_bod}: 0
     #Lam{b_bod}: 0
     #App{b_fun b_arg}:
-      !&10000003{dep d0}=dep
-      !&10000003{dep d1}=dep
+      !&{dep d0}=dep
+      !&{dep d1}=dep
       @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
     #U32: 0
     #Num{b_val}: 0
@@ -239,71 +244,62 @@ data Maybe {
 // Enumeration
 // -----------
 
-@all(lab typ dep ctx) =
-  @intr(lab typ dep ctx)
+@all(&L typ &dep ctx) =
+  @intr(&L typ &dep ctx)
 
-@intr(lab typ dep ctx) =
-  ~ typ !lab !dep !ctx {
+@intr(&L typ &dep ctx) =
+  ~ typ !ctx {
     #All{t_inp t_bod}: 
-      !&0{dep0 dep1} = dep
-      !&0{ctx  bod}  = @all(lab (t_bod #Var{dep0}) (+ dep1 1) #Cons{&0{$x t_inp} ctx})
+      !&0{ctx bod} = @all(&L (t_bod #Var{&dep}) (+ &dep 1) #Cons{#Some{&0{$x t_inp}} ctx})
       &0{@tail(ctx) #Lam{λ$x(bod)}}
     #Pol{t_bod}:
-      !&0{dep0 dep1} = dep
-      @intr(lab (t_bod #Var{dep0}) (+ dep1 1) ctx)
+      @intr(&L (t_bod #Var{&dep}) (+ &dep 1) ctx)
     #U32:
-      @pick(lab #U32 dep ctx λk(k))
+      @pick(&L #U32 &dep ctx λk(k))
     #Var{idx}:
-      @pick(lab #Var{idx} dep ctx λk(k))
+      @pick(&L #Var{idx} &dep ctx λk(k))
     #App{fun arg}:
-      @pick(lab #App{fun arg} dep ctx λk(k))
+      @pick(&L #App{fun arg} &dep ctx λk(k))
     #Lam{bod}: *
     #Num{val}: *
   }
 
-@pick(lab typ dep ctx rem) = 
+@pick(&L typ &dep ctx rem) = 
   ~ctx {
     #Nil: *
     #Cons{ann ctx}:
-      !&0{lab  lab0} = lab
-      !&0{lab  lab1} = lab
-      !&0{lab  lab2} = lab
-      !&0{lab  lab3} = lab
-      !&0{lab  lab4} = lab
-      !&0{labL labR} = lab
-      !&0{depL depR} = dep
-      @DUP(lab0 typ λtypL λtypR
-      @DUP(lab1 rem λremL λremR
-      @DUP(lab2 ann λannL λannR
-      @DUP(lab3 ctx λctxL λctxR
-      @SUP(lab4
-        @elim(labL typL depL (remL ctxL) annL)
-        @pick(labR typR depR ctxR λk(remR #Cons{annR k})))))))
+      !&L{typL typR} = typ
+      !&L{remL remR} = rem
+      !&L{annL annR} = ann
+      !&L{ctxL ctxR} = ctx
+      &L{
+        @elim(&L typL &dep (remL ctxL) annL)
+        @pick(&L typR &dep ctxR λk(remR #Cons{annR k}))
+      }
   }
 
-@elim(lab typ dep ctx ann) =
-  ! &0{v t} = ann
-  ~ t !lab !typ !dep !ctx !v {
-    #Pol{t_bod}:
-      ! &10000004{typ0 typ1} = typ
-      @elim(lab typ0 dep ctx &0{v (t_bod typ1)})
-    #All{t_inp t_bod}:
-      ! &0{depL depR} = dep
-      ! &0{labL labR} = lab
-      ! labL          = (+ (* labL 2) 0)
-      ! labR          = (+ (* labR 2) 1)
-      ! &0{ctx arg}   = @all(labR t_inp depR ctx)
-      ! &4{arg0 arg1} = arg
-      @elim(labL typ depL ctx &0{#App{v arg0} (t_bod arg1)})
-    #U32: 
-      @when(@eq(typ #U32 dep) &0{ctx v})
-    #Var{idx}:
-      @when(@eq(typ #Var{idx} dep) &0{ctx v})
-    #App{fun arg}:
-      @when(@eq(typ #App{fun arg} dep) &0{ctx v})
-    #Lam{bod}: *
-    #Num{val}: *
-  }
+@elim(&L typ &dep ctx ann) = ~ann {
+  #None: *
+  #Some{ann}:
+    ! &0{v t} = ann
+    ~ t !typ !ctx !v {
+      #Pol{t_bod}:
+        ! &{typ0 typ1} = typ
+        @elim(&L typ0 &dep ctx #Some{&0{v (t_bod typ1)}})
+      #All{t_inp t_bod}:
+        ! &0{ctx arg}   = @all((+(*&L 2)1) t_inp &dep ctx)
+        ! &{arg0 arg1}  = arg
+        @elim((+(*&L 2)0) typ &dep ctx #Some{&0{#App{v arg0} (t_bod arg1)}})
+      #U32: 
+        @when(@eq(typ #U32 &dep) &0{ctx v})
+      #Var{idx}:
+        @when(@eq(typ #Var{idx} &dep) &0{ctx v})
+      #App{fun arg}:
+        @when(@eq(typ #App{fun arg} &dep) &0{ctx v})
+      #Lam{bod}: *
+      #Num{val}: *
+    }
+}
 
 // T0 = Π(x:U32) Π(y:U32) Π(z:U32) U32
 @T0 =
@@ -315,9 +311,9 @@ data Maybe {
 // CBool = ∀P Π(x:P) Π(y:P) P
 @CBool =
   #Pol{λp
-  !&10000005{p p0}=p
-  !&10000005{p p1}=p
-  !&10000005{p p2}=p
+  !&{p p0}=p
+  !&{p p1}=p
+  !&{p p2}=p
   #All{p0 λx
   #All{p1 λy
   p2}}}
@@ -325,8 +321,8 @@ data Maybe {
 // Tup(A B) = ∀P Π(p: Π(x:A) Π(y:B) P) P
 @Tup(A B) =
   #Pol{λp
-  !&10000006{p p0}=p
-  !&10000006{p p1}=p
+  !&{p p0}=p
+  !&{p p1}=p
   #All{
     #All{A λx
     #All{B λy
@@ -337,10 +333,10 @@ data Maybe {
 @TupF =
   #Pol{λA
   #Pol{λB
-  !&10000007{A A0}=A
-  !&10000007{A A1}=A
-  !&10000007{A A2}=A
-  !&10000007{A A3}=A
+  !&{A A0}=A
+  !&{A A1}=A
+  !&{A A2}=A
+  !&{A A3}=A
   #All{@Tup(A0 A1) λx
   @Tup(A2 A3)}}}
 
@@ -362,4 +358,24 @@ data Maybe {
 
 // Solves for `?X` in `(?X λt(t A B)) == λt(t B A)`.
 // It finds `?X = λλ(0 λλ((1 3) 2))` in 3k interactions.
-@main = @when(@eq(#App{@X @A} @B 0) @do_show_term(@X))
+//@main = @when(@eq(#App{@X @A} @B 0) @do_show_term(@X))
+@main = @X
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

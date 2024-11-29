@@ -1,23 +1,20 @@
-@foo(&a x) = ~ x {
-  0: &a
-  p: &a
-}
+@main = λt(t &0{&0{1 2} &0{3 4}} &0{&0{1 2} &0{3 4}})
 
-@main = @foo(7 1)
+//λa ((a 1) 1)
+//λa ((a 2) 2)
+//λa ((a 3) 3)
+//λa ((a 4) 4)
 
+//@foo(&a x) = ~ x {
+  //0: &a
+  //p: &a
+//}
 
-
+//@main = @foo(7 1)
 
 //@main = λa
   //@DUP((+ 5 7) a λx λy [x y])
-
   //@DUP(11 @SUP(10 50 60) λa λb [a b])
-
-
-
-
-
-
 
 //data Tree { #Leaf #Node{lft rgt} }
 
