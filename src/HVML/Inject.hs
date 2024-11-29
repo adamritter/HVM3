@@ -2,8 +2,7 @@
 
 module HVML.Inject where
 
-import Control.Monad (foldM)
-import Control.Monad (forM_)
+import Control.Monad (foldM, when, forM_)
 import Control.Monad.State
 import Data.Char (ord)
 import Data.Word
@@ -30,7 +29,8 @@ injectCore _ (Var nam) loc = do
   case Map.lookup nam argsMap of
     Just term -> do
       lift $ set loc term
-      modify $ \s -> s { args = Map.delete nam (args s) }
+      when (head nam /= '&') $ do
+        modify $ \s -> s { args = Map.delete nam (args s) }
     Nothing -> do
       modify $ \s -> s { vars = (nam, loc) : vars s }
 
@@ -137,7 +137,10 @@ doInjectCoreAt book core host argList = do
     case Map.lookup name (args state) of
       Just term -> do
         set loc term
-        return $ Map.delete name m
+        if (head name /= '&') then do
+          return $ Map.delete name m
+        else do
+          return $ m
       Nothing -> do
         error $ "Unbound variable: " ++ name)
     (args state)

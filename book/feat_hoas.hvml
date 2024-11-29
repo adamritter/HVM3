@@ -48,7 +48,7 @@ data Term {
   #Sub{val}: #Var{"TODO"}
 }
 
-@id = #Lam{"x" λx(x)}
+@ID = #Lam{"x" λx(x)}
 @c2 = #Lam{"f" λf #Lam{"x" λx !&1{f0 f1}=f #App{f0 #App{f1 x}}}}
 @k2 = #Lam{"g" λf #Lam{"y" λx !&2{f0 f1}=f #App{f0 #App{f1 x}}}}
 @fn = #App{@c2 @k2}

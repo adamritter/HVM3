@@ -1,5 +1,15 @@
-@main = λa
-  @DUP((+ 5 7) a λx λy [x y])
+@foo(&a x) = ~ x {
+  0: &a
+  p: &a
+}
+
+@main = @foo(7 1)
+
+
+
+
+//@main = λa
+  //@DUP((+ 5 7) a λx λy [x y])
 
   //@DUP(11 @SUP(10 50 60) λa λb [a b])
 

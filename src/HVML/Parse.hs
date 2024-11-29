@@ -26,6 +26,7 @@ import qualified Data.Map.Strict as MS
 data ParserState = ParserState
   { parsedCtrToAri :: MS.Map String Int
   , parsedCtrToCid :: MS.Map String Word64
+  , freshLabel     :: Word64
   }
 
 type ParserM = Parsec String ParserState
@@ -40,13 +41,12 @@ parseCore = do
       return Era
     'λ' -> do
       consume "λ"
-      vr0 <- parseName
+      vr0 <- parseName1
       bod <- parseCore
       return $ Lam vr0 bod
     '(' -> do
       next <- lookAhead (anyChar >> anyChar)
       case next of
-        -- '@' -> parseRef
         '+' -> parseOper OP_ADD
         '-' -> parseOper OP_SUB
         '*' -> parseOper OP_MUL
@@ -81,15 +81,26 @@ parseCore = do
       parseRef
     '&' -> do
       consume "&"
-      lab <- read <$> many1 digit
-      consume "{"
-      tm0 <- parseCore
-      tm1 <- parseCore
-      consume "}"
-      return $ Sup lab tm0 tm1
+      name <- parseName
+      next <- optionMaybe $ try $ char '{'
+      case next of
+        Just _ -> do
+          tm0 <- parseCore
+          tm1 <- parseCore
+          consume "}"
+          if null name then do
+            num <- genFreshLabel
+            return $ Sup num tm0 tm1
+          else case reads name of
+            [(num :: Word64, "")] -> do
+              return $ Sup num tm0 tm1
+            otherwise -> do
+              return $ Ref "SUP" _SUP_F_ [Var ("&" ++ name), tm0, tm1]
+        Nothing -> do
+          return $ Var ("&" ++ name)
     '%' -> do
       consume "%"
-      nam <- parseName
+      nam <- parseName1
       typ <- parseCore
       return $ Typ nam typ
     '{' -> do
@@ -106,19 +117,26 @@ parseCore = do
       case next of
         '&' -> do
           consume "&"
-          lab <- read <$> many1 digit
+          nam <- parseName
           consume "{"
-          dp0 <- parseName
-          dp1 <- parseName
+          dp0 <- parseName1
+          dp1 <- parseName1
           consume "}"
           consume "="
           val <- parseCore
           bod <- parseCore
-          return $ Dup lab dp0 dp1 val bod
+          if null nam then do
+            num <- genFreshLabel
+            return $ Dup num dp0 dp1 val bod
+          else case reads nam of
+            [(num :: Word64, "")] -> do
+              return $ Dup num dp0 dp1 val bod
+            otherwise -> do
+              return $ Ref "DUP" _DUP_F_ [Var ("&" ++ nam), val, Lam dp0 (Lam dp1 bod)]
         '!' -> do
           consume "!"
           nam <- optionMaybe $ try $ do
-            nam <- parseName
+            nam <- parseName1
             consume "="
             return nam
           val <- parseCore
@@ -128,13 +146,13 @@ parseCore = do
             Nothing  -> return $ Let STRI "_" val bod
         '^' -> do
           consume "^"
-          nam <- parseName
+          nam <- parseName1
           consume "="
           val <- parseCore
           bod <- parseCore
           return $ Let PARA nam val bod
         _ -> do
-          nam <- parseName
+          nam <- parseName1
           consume "="
           val <- parseCore
           bod <- parseCore
@@ -145,7 +163,7 @@ parseCore = do
     '\'' -> parseChr
     '"' -> parseStr
     _ -> do
-      name <- parseName
+      name <- parseName1
       case reads (filter (/= '_') name) of
         [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
         _           -> return $ Var name
@@ -153,7 +171,7 @@ parseCore = do
 parseRef :: ParserM Core
 parseRef = do
   consume "@"
-  name <- parseName
+  name <- parseName1
   args <- option [] $ do
     try $ string "("
     args <- many $ do
@@ -166,7 +184,7 @@ parseRef = do
 parseCtr :: ParserM Core
 parseCtr = do
   consume "#"
-  nam <- parseName
+  nam <- parseName1
   cid <- if length nam == 0
     then return 0
     else do
@@ -194,7 +212,7 @@ parseMat = do
     try $ do
       skip
       consume "!"
-    key <- parseName
+    key <- parseName1
     val <- optionMaybe $ do
       try $ consume "="
       parseCore
@@ -208,12 +226,12 @@ parseMat = do
     -- Parse constructor case
     if next == '#' then do
       consume "#"
-      ctr <- parseName
+      ctr <- parseName1
       fds <- option [] $ do
         try $ consume "{"
         fds <- many $ do
           closeWith "}"
-          parseName
+          parseName1
         consume "}"
         return fds
       consume ":"
@@ -221,7 +239,7 @@ parseMat = do
       return (ctr, fds, bod)
     -- Parse numeric case
     else do
-      num <- parseName
+      num <- parseName1
       case reads num of
         [(n :: Word64, "")] -> do
           consume ":"
@@ -299,10 +317,10 @@ parseLst = do
   return $ foldr (\x acc -> Ctr 1 [x, acc]) (Ctr 0 []) elems
 
 parseName :: ParserM String
-parseName = skip >> many (alphaNum <|> char '_' <|> char '$')
+parseName = skip >> many (alphaNum <|> char '_' <|> char '$' <|> char '&')
 
 parseName1 :: ParserM String
-parseName1 = skip >> many1 (alphaNum <|> char '_')
+parseName1 = skip >> many1 (alphaNum <|> char '_' <|> char '$' <|> char '&')
 
 parseDef :: ParserM (String, ([String], Core))
 parseDef = do
@@ -364,7 +382,7 @@ parseBook = do
   return defs
 
 doParseCore :: String -> IO Core
-doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty) "" code of
+doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty 0) "" code of
   Right core -> do
     return $ core
   Left  err  -> do
@@ -372,7 +390,7 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty) "" c
     return $ Ref "⊥" 0 []
 
 doParseBook :: String -> IO Book
-doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty) "" code of
+doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty 0) "" code of
   Right (defs, st) -> do
     return $ createBook defs (parsedCtrToCid st) (parsedCtrToAri st)
   Left err -> do
@@ -406,6 +424,13 @@ skip = skipMany (parseSpace <|> parseComment) where
     skipMany (noneOf "\n")
     char '\n'
     return ()) <?> "Comment"
+
+genFreshLabel :: ParserM Word64
+genFreshLabel = do
+  st <- getState
+  let lbl = freshLabel st
+  putState st { freshLabel = lbl + 1 }
+  return $ lbl + 0x800000
 
 -- Adjusting
 -- ---------

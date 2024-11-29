@@ -33,17 +33,27 @@ data Collapse a = CSup Word64 (Collapse a) (Collapse a) | CVal a | CEra
 
 -- The Collapse Monad
 bind :: Collapse a -> (a -> Collapse b) -> Collapse b
-bind a f = fork a (repeat (\x -> x)) where
+bind k f = fork k IM.empty where
+  -- fork :: Collapse a -> IntMap (Bin -> Bin) -> Collapse b
   fork CEra         paths = CEra
-  fork (CVal v)     paths = pass (f v) (map (\x -> x E) paths)
-  fork (CSup k x y) paths = CSup k (fork x (mut k putO paths)) (fork y (mut k putI paths))
+  fork (CVal v)     paths = pass (f v) (IM.map (\x -> x E) paths)
+  fork (CSup k x y) paths =
+    let lft = fork x $ IM.alter (\x -> Just (maybe id putO x)) (fromIntegral k) paths in
+    let rgt = fork y $ IM.alter (\x -> Just (maybe id putI x)) (fromIntegral k) paths in
+    CSup k lft rgt 
+
+  -- pass :: Collapse b -> IntMap Bin -> Collapse b
   pass CEra         paths = CEra
   pass (CVal v)     paths = CVal v
-  pass (CSup k x y) paths = case paths !! fromIntegral k of
-    E   -> CSup k x y
-    O p -> pass x (mut k (\_->p) paths)
-    I p -> pass y (mut k (\_->p) paths)
+  pass (CSup k x y) paths = case IM.lookup (fromIntegral k) paths of
+    Just (O p) -> pass x (IM.insert (fromIntegral k) p paths)
+    Just (I p) -> pass y (IM.insert (fromIntegral k) p paths)
+    _          -> CSup k x y
+
+  -- putO :: (Bin -> Bin) -> (Bin -> Bin)
   putO bs = \x -> bs (O x)
+
+  -- putI :: (Bin -> Bin) -> (Bin -> Bin) 
   putI bs = \x -> bs (I x)
 
 -- Mutates an element at given index in a list
@@ -332,7 +342,7 @@ flattenPQ term = go term (PQLeaf :: PQ (Collapse a)) where
     Nothing         -> []
 
 flatten :: Collapse a -> [a]
-flatten = flattenDFS
+flatten = flattenPQ
 
 -- Flat Collapser
 -- --------------
