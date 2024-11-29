@@ -22,10 +22,10 @@ reduceAt debug book host = do
     root <- doExtractCoreAt (const got) book 0
     core <- doExtractCoreAt (const got) book host
     putStrLn $ "reduce: " ++ termToString term
-    putStrLn $ "---------------- CORE: "
-    putStrLn $ coreToString core
+    -- putStrLn $ "---------------- CORE: "
+    -- putStrLn $ coreToString core
     putStrLn $ "---------------- ROOT: "
-    putStrLn $ coreToString root
+    putStrLn $ coreToString (doLiftDups root)
   case tagT tag of
     LET -> do
       case modeT lab of
