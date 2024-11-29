@@ -55,6 +55,11 @@
 // be studied and extended with more sophisticate approaches, like types.
 // EDIT: the dependently typed version has been pushed. It reduces the rewrite
 // count to 3k, and greatly improves the enumerator shape.
+// EDIT: I just realized this potentially has a bug on the Lam case, since it
+// takes the `tail()` of the returned context, which might not be correct, since
+// the linear enumerator will itself remove elements that it uses; i.e., calling
+// `tail()` might remove an unrelated element. I won't fix this since this file
+// is just for demo'ing, but keep it in mind.
 
 data List {
   #Nil
