@@ -327,6 +327,22 @@ pqPop (PQNode x l r) = Just (x, pqUnion l r)
 pqPut :: (Word64,a) -> PQ a -> PQ a
 pqPut (k,v) = pqUnion (PQNode (k,v) PQLeaf PQLeaf)
 
+-- Simple Queue
+-- ------------
+-- Allows pushing to an end, and popping from another.
+-- Simple purely functional implementation.
+-- Includes sqPop and sqPut.
+
+data SQ a = SQ [a] [a]
+
+sqPop :: SQ a -> Maybe (a, SQ a)
+sqPop (SQ [] [])     = Nothing
+sqPop (SQ [] ys)     = sqPop (SQ (reverse ys) [])
+sqPop (SQ (x:xs) ys) = Just (x, SQ xs ys)
+
+sqPut :: a -> SQ a -> SQ a
+sqPut x (SQ xs ys) = SQ xs (x:ys)
+
 -- Flattener
 -- ---------
 
@@ -334,6 +350,14 @@ flattenDFS :: Collapse a -> [a]
 flattenDFS (CSup k a b) = flatten a ++ flatten b
 flattenDFS (CVal x)     = [x]
 flattenDFS CEra         = []
+
+flattenBFS :: Collapse a -> [a]
+flattenBFS term = go term (SQ [] [] :: SQ (Collapse a)) where
+  go (CSup k a b) sq = go CEra (sqPut b $ sqPut a $ sq)
+  go (CVal x)     sq = x : go CEra sq
+  go CEra         sq = case sqPop sq of
+    Just (v,sq) -> go v sq
+    Nothing     -> []
 
 flattenPQ :: Collapse a -> [a]
 flattenPQ term = go term (PQLeaf :: PQ (Collapse a)) where
@@ -344,7 +368,7 @@ flattenPQ term = go term (PQLeaf :: PQ (Collapse a)) where
     Nothing         -> []
 
 flatten :: Collapse a -> [a]
-flatten = flattenPQ
+flatten = flattenBFS
 
 -- Flat Collapser
 -- --------------
