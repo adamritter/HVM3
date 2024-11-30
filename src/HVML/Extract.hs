@@ -260,5 +260,7 @@ liftDupsCss ((c,fs,b):xs) =
 
 doLiftDups :: Core -> Core
 doLiftDups term =
-  let (termBody, termDups) = liftDups term
-  in Let LAZY "" termBody (termDups (Var ""))
+  let (termExpr, termDups) = liftDups term in
+  let termBody = termDups (Var "") in
+  -- hack to print expr before dups
+  Let LAZY "" termExpr termBody

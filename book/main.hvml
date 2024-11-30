@@ -1,7 +1,7 @@
 data List { #Nil #Cons{head tail} }
 
 @Foo = #Cons{1 @Foo}
-@main = @Foo
+@main = 50
 
 
 

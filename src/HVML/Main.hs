@@ -152,6 +152,9 @@ cliRun filePath typed debug compiled mode showStats = do
   when (mode == Search || mode == Normalize) $ do
     putStrLn $ coreToString (head vals)
 
+  when (mode /= Normalize) $ do
+    putStrLn ""
+
   -- Prints total time
   end <- getCPUTime
 
