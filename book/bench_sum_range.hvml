@@ -12,7 +12,7 @@ data List { #Nil #Cons{ head tail } }
 
 //@main = @sum(@range(50_000_000 #Nil) 0)
 @main = 
-  !! list = @range(200_000_000 #Nil)
+  !! list = @range(50_000_000 #Nil)
   @sum(list 0)
 
 //WORK: 1200000007 interactions

@@ -138,7 +138,7 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       sub <- got loc
       if termTag sub /= _SUB_
       then do
-        error "Internal Error: VAR does not point to SUB"
+        collapseDupsAt state reduceAt book (loc + 0)
       else do
         name <- genName namesRef loc
         return $ Var name
@@ -150,7 +150,7 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       sb1 <- got (loc+1)
       if termTag sb1 /= _SUB_
       then do
-        error "Internal Error: DP0 does not point to SUB"
+        collapseDupsAt state reduceAt book (loc + 0)
       else do
         let newPaths = IM.alter (Just . maybe [0] (0:)) (fromIntegral lab) paths
         collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)
@@ -162,7 +162,7 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       sb1 <- got (loc+1)
       if termTag sb1 /= _SUB_
       then do
-        error "Internal Error: DP1 does not point to SUB"
+        collapseDupsAt state reduceAt book (loc + 1)
       else do
         let newPaths = IM.alter (Just . maybe [1] (1:)) (fromIntegral lab) paths
         collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)

@@ -4,8 +4,9 @@
 
 module HVML.Reduce where
 
-import Control.Monad (when, forM)
+import Control.Monad (when, forM, forM_)
 import Data.Word
+import HVML.Collapse
 import HVML.Extract
 import HVML.Inject
 import HVML.Show
@@ -254,6 +255,9 @@ reduceRefAt_LogF book host loc ari = do
     exitFailure
   msg <- doExtractCoreAt (const got) book (loc + 0)
   putStrLn $ coreToString (doLiftDups msg)
+  -- msgs <- doCollapseFlatAt (const got) book (loc + 0)
+  -- forM_ msgs $ \msg -> do
+    -- putStrLn $ coreToString msg
   let ret = termNew _W32_ 0 0
   set host ret
   return ret
