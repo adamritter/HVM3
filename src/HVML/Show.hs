@@ -61,9 +61,14 @@ coreToString core =
         let nm1' = coreToString nm1 in
         "(" ++ operToString opr ++ " " ++ nm0' ++ " " ++ nm1' ++ ")"
       Let mod nam val bod ->
-        let val' = coreToString val in
-        let bod' = coreToString bod in
-        "! " ++ modeToString mod ++ nam ++ " = " ++ val' ++ " " ++ bod'
+        if nam == "" then
+          let val' = coreToString val in
+          let bod' = coreToString bod in
+          val' ++ "\n" ++ bod'
+        else
+          let val' = coreToString val in
+          let bod' = coreToString bod in
+          "! " ++ modeToString mod ++ nam ++ " = " ++ val' ++ "\n" ++ bod'
 
 operToString :: Oper -> String
 operToString OP_ADD = "+"

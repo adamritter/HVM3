@@ -261,4 +261,4 @@ liftDupsCss ((c,fs,b):xs) =
 doLiftDups :: Core -> Core
 doLiftDups term =
   let (termBody, termDups) = liftDups term
-  in Let LAZY "main" termBody (termDups (Var "main"))
+  in Let LAZY "" termBody (termDups (Var ""))
