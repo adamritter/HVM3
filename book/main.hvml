@@ -1,9 +1,7 @@
-data T { #Foo #Bar }
+data List { #Nil #Cons{head tail} }
 
-@main = λx ~ x {
-  #Foo{}: 1 // oxi
-  #Bar{}: 2
-}
+@Foo = #Cons{1 @Foo}
+@main = @Foo
 
 
 

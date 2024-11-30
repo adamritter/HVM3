@@ -1,5 +1,4 @@
 -- //./Type.hs//
--- //./Inject.hs//
 
 module HVML.Extract where
 
@@ -184,61 +183,82 @@ doExtractCoreAt reduceAt book loc = do
 -- Lifting Dups
 -- ------------
 
-liftDups :: Core -> State (Core -> Core) Core
-liftDups (Var nam) = return $ Var nam
-liftDups (Ref nam fid arg) = do
-  arg <- mapM liftDups arg
-  return $ Ref nam fid arg
-liftDups Era = return Era
-liftDups (Lam str bod) = do
-  bod <- liftDups bod
-  return $ Lam str bod
-liftDups (App fun arg) = do
-  fun <- liftDups fun
-  arg <- liftDups arg
-  return $ App fun arg
-liftDups (Sup lab tm0 tm1) = do
-  tm0 <- liftDups tm0
-  tm1 <- liftDups tm1
-  return $ Sup lab tm0 tm1
-liftDups (Dup lab dp0 dp1 val bod) = do
-  val <- liftDups val
-  bod <- liftDups bod
-  modify (\oldState k -> oldState (Dup lab dp0 dp1 val k))
-  return bod
-liftDups (Typ nam bod) = do
-  bod <- liftDups bod
-  return $ Typ nam bod
-liftDups (Ann val typ) = do
-  val <- liftDups val
-  typ <- liftDups typ
-  return $ Ann val typ
-liftDups (Ctr cid fds) = do
-  fds <- mapM liftDups fds
-  return $ Ctr cid fds
-liftDups (Mat val mov css) = do
-  val <- liftDups val
-  mov <- mapM (\(key, val) -> do
-    val <- liftDups val
-    return (key, val)) mov
-  css <- mapM (\(ctr, fds, bod) -> do
-    bod <- liftDups bod
-    return (ctr, fds, bod)) css
-  return $ Mat val mov css
-liftDups (U32 val) = do
-  return $ U32 val
-liftDups (Chr val) = do
-  return $ Chr val
-liftDups (Op2 opr nm0 nm1) = do
-  nm0 <- liftDups nm0
-  nm1 <- liftDups nm1
-  return $ Op2 opr nm0 nm1
-liftDups (Let mod nam val bod) = do
-  val <- liftDups val
-  bod <- liftDups bod
-  return $ Let mod nam val bod
+liftDups :: Core -> (Core, Core -> Core)
+liftDups (Var nam) =
+  (Var nam, id)
+liftDups (Ref nam fid arg) =
+  let (argT, argD) = liftDupsList arg
+  in (Ref nam fid argT, argD)
+liftDups Era =
+  (Era, id)
+liftDups (Lam str bod) =
+  let (bodT, bodD) = liftDups bod
+  in (Lam str bodT, bodD)
+liftDups (App fun arg) =
+  let (funT, funD) = liftDups fun
+      (argT, argD) = liftDups arg
+  in (App funT argT, funD . argD)
+liftDups (Sup lab tm0 tm1) =
+  let (tm0T, tm0D) = liftDups tm0
+      (tm1T, tm1D) = liftDups tm1
+  in (Sup lab tm0T tm1T, tm0D . tm1D)
+liftDups (Dup lab dp0 dp1 val bod) =
+  let (valT, valD) = liftDups val
+      (bodT, bodD) = liftDups bod
+  in (bodT, \x -> valD (bodD (Dup lab dp0 dp1 valT x)))
+liftDups (Typ nam bod) =
+  let (bodT, bodD) = liftDups bod
+  in (Typ nam bodT, bodD)
+liftDups (Ann val typ) =
+  let (valT, valD) = liftDups val
+      (typT, typD) = liftDups typ
+  in (Ann valT typT, valD . typD)
+liftDups (Ctr cid fds) =
+  let (fdsT, fdsD) = liftDupsList fds
+  in (Ctr cid fdsT, fdsD)
+liftDups (Mat val mov css) =
+  let (valT, valD) = liftDups val
+      (movT, movD) = liftDupsMov mov
+      (cssT, cssD) = liftDupsCss css
+  in (Mat valT movT cssT, valD . movD . cssD)
+liftDups (U32 val) =
+  (U32 val, id)
+liftDups (Chr val) =
+  (Chr val, id)
+liftDups (Op2 opr nm0 nm1) =
+  let (nm0T, nm0D) = liftDups nm0
+      (nm1T, nm1D) = liftDups nm1
+  in (Op2 opr nm0T nm1T, nm0D . nm1D)
+liftDups (Let mod nam val bod) =
+  let (valT, valD) = liftDups val
+      (bodT, bodD) = liftDups bod
+  in (Let mod nam valT bodT, valD . bodD)
+
+liftDupsList :: [Core] -> ([Core], Core -> Core)
+liftDupsList [] = 
+  ([], id)
+liftDupsList (x:xs) =
+  let (xT, xD)   = liftDups x
+      (xsT, xsD) = liftDupsList xs
+  in (xT:xsT, xD . xsD)
+
+liftDupsMov :: [(String, Core)] -> ([(String, Core)], Core -> Core)
+liftDupsMov [] = 
+  ([], id)
+liftDupsMov ((k,v):xs) =
+  let (vT, vD)   = liftDups v
+      (xsT, xsD) = liftDupsMov xs
+  in ((k,vT):xsT, vD . xsD)
+
+liftDupsCss :: [(String, [String], Core)] -> ([(String, [String], Core)], Core -> Core)
+liftDupsCss [] = 
+  ([], id)
+liftDupsCss ((c,fs,b):xs) =
+  let (bT, bD)   = liftDups b
+      (xsT, xsD) = liftDupsCss xs
+  in ((c,fs,bT):xsT, bD . xsD)
 
 doLiftDups :: Core -> Core
 doLiftDups term =
-  let (liftedTerm, finalState) = runState (liftDups term) id
-  in finalState liftedTerm
+  let (termBody, termDups) = liftDups term
+  in Let LAZY "main" termBody (termDups (Var "main"))
