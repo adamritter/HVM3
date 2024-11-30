@@ -222,6 +222,7 @@ parseMat = do
   consume "{"
   css <- many $ do
     closeWith "}"
+    skip
     next <- lookAhead anyChar
     -- Parse constructor case
     if next == '#' then do
@@ -407,11 +408,11 @@ doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.em
 -- --------------
 
 consume :: String -> ParserM String
-consume str = spaces >> string str
+consume str = skip >> string str
 
 closeWith :: String -> ParserM ()
 closeWith str = try $ do
-  spaces
+  skip
   notFollowedBy (string str)
 
 skip :: ParserM ()
