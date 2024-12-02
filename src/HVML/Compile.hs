@@ -162,7 +162,7 @@ compileFullCore book fid (Ctr cid fds) host = do
   fdsT <- mapM (\ (i,fd) -> compileFullCore book fid fd (ctrNam ++ " + " ++ show i)) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
   return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
-compileFullCore book fid (Mat val mov css) host = do
+compileFullCore book fid tm@(Mat val mov css) host = do
   matNam <- fresh "mat"
   let arity = length css
   emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + arity) ++ ");"
@@ -174,7 +174,7 @@ compileFullCore book fid (Mat val mov css) host = do
     bodT <- compileFullCore book fid bod' (matNam ++ " + " ++ show (i+1))
     emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
   -- Create the base Mat term
-  let mat = "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  let mat = "term_new(MAT, u12v2_new(" ++ show arity ++ "," ++ show (ifLetLab book tm) ++ "), " ++ matNam ++ ")"
   -- Apply moved values
   foldM (\term (key, val) -> do
     appNam <- fresh "app"
@@ -233,7 +233,7 @@ compileFastArgs book fid body ctx reuse = do
 
 -- Compiles a fast function body (pattern-matching)
 compileFastBody :: Book -> Word64 -> Core -> [String] -> Bool -> Int -> MS.Map Int [String] -> Compile ()
-compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
+compileFastBook book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLetLab book term == 0 = do
   valT   <- compileFastCore book fid val reuse
   valNam <- fresh "val"
   numNam <- fresh "num"
@@ -492,7 +492,7 @@ compileFastCore book fid (Ctr cid fds) reuse = do
   fdsT <- mapM (\ (i,fd) -> compileFastCore book fid fd reuse) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
   return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
-compileFastCore book fid (Mat val mov css) reuse = do
+compileFastCore book fid tm@(Mat val mov css) reuse = do
   matNam <- fresh "mat"
   let arity = length css
   matLoc <- compileFastAlloc (1 + arity) reuse
@@ -503,7 +503,7 @@ compileFastCore book fid (Mat val mov css) reuse = do
     let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
     bodT <- compileFastCore book fid bod' reuse
     emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
-  let mat = "term_new(MAT, " ++ show arity ++ ", " ++ matNam ++ ")"
+  let mat = "term_new(MAT, u12v2_new(" ++ show arity ++ "," ++ show (ifLetLab book tm) ++ "), " ++ matNam ++ ")"
   foldM (\term (key, val) -> do
     appNam <- fresh "app"
     appLoc <- compileFastAlloc 2 reuse

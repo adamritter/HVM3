@@ -130,7 +130,7 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
     
     MAT -> do
       let loc = termLoc term
-      let len = termLab term
+      let len = u12v2X $ termLab term
       val <- extractCoreAt state reduceAt book (loc + 0)
       css <- mapM (\i -> extractCoreAt state reduceAt book (loc + 1 + i)) [0..len-1]
       css <- mapM (\c -> return ("#", [], c)) css -- FIXME: recover names and fields on extraction (must store id)

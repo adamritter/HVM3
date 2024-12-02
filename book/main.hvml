@@ -1,7 +1,34 @@
-data List { #Nil #Cons{head tail} }
+data Foo { #A{a b} #B{a b} #C{a b} #D{a b} }
 
-@Foo = #Cons{1 @Foo}
-@main = 50
+@main = ~ 7 {
+  0: 3
+  p: p
+}
+
+//@main = ~ #A{1 2} {
+  //#A{a b}: ["A" a b]
+  //#B{a b}: ["B" a b]
+  //#C{a b}: ["C" a b]
+//}
+
+//@main = λx ~ #D{1 2} {
+  //#A{a b}: ["A" a b]
+  //#C{a b}: ["C" a b]
+  //term: term
+//}
+
+
+//@main = ~ #A{1 2} {
+  //#A{a b}: ["A" a b]
+  //x: 123
+//}
+
+
+
+//data List { #Nil #Cons{head tail} }
+
+//@Foo = #Cons{1 @Foo}
+//@main = 50
 
 
 

@@ -352,9 +352,18 @@ modeT 0x02 = PARA
 modeT mode = error $ "unknown mode: " ++ show mode
 
 -- Getter function for maps
-mget map key = case MS.lookup key map of
-  Just val -> val
-  Nothing  -> error $ "key not found: " ++ show key
+mget map key =
+  case MS.lookup key map of
+    Just val -> val
+    Nothing  -> error $ "key not found: " ++ show key
+
+-- The if-let match stores its target ctr id
+ifLetLab :: Book -> Core -> Word64
+ifLetLab book (Mat _ _ [(ctr,_,_),("_",_,_)]) =
+  case MS.lookup ctr (ctrToCid book) of
+    Just cid -> 1 + cid
+    Nothing  -> 0
+ifLetLab book _ = 0
 
 -- Primitive Functions
 _DUP_F_ :: Lab

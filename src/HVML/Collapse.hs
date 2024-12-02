@@ -178,7 +178,7 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
 
     MAT -> do
       let loc = termLoc term
-      let len = termLab term
+      let len = u12v2X $ termLab term
       let aux = if len == 0 then [] else [loc + 1 + i | i <- [0..len-1]]
       val0 <- collapseDupsAt state reduceAt book (loc + 0)
       css0 <- forM aux $ \h -> do

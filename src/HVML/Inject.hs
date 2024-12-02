@@ -98,17 +98,16 @@ injectCore book (Ctr cid fds) loc = do
   sequence_ [injectCore book fd (ctr + ix) | (ix,fd) <- zip [0..] fds]
   lift $ set loc (termNew _CTR_ (u12v2New cid (fromIntegral arity)) ctr)
 
-injectCore book (Mat val mov css) loc = do
+injectCore book tm@(Mat val mov css) loc = do
   -- Allocate space for the Mat term
   mat <- lift $ allocNode (1 + fromIntegral (length css))
   -- Inject the value being matched
   injectCore book val (mat + 0)
-  -- Process each case
+  -- Inject each case body
   forM_ (zip [0..] css) $ \ (idx, (ctr, fds, bod)) -> do
-    -- Inject the case body into memory
     injectCore book (foldr Lam (foldr Lam bod (map fst mov)) fds) (mat + 1 + idx)
   -- After processing all cases, create the Mat term
-  trm <- return $ termNew _MAT_ (fromIntegral (length css)) mat
+  trm <- return $ termNew _MAT_ (u12v2New (fromIntegral (length css)) (ifLetLab book tm)) mat
   ret <- foldM (\mat (_, val) -> do
       app <- lift $ allocNode 2
       lift $ set (app + 0) mat

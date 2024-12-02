@@ -4,6 +4,7 @@ module HVML.Parse where
 
 import Control.Monad (foldM, forM)
 import Control.Monad.State
+import Data.Either (isLeft)
 import Data.List
 import Data.Maybe
 import Data.Word
@@ -238,26 +239,46 @@ parseMat = do
       consume ":"
       bod <- parseCore
       return (ctr, fds, bod)
-    -- Parse numeric case
+    -- Parse numeric or default case
     else do
-      num <- parseName1
-      case reads num of
+      nam <- parseName1
+      case reads nam of
+        -- Numeric case
         [(n :: Word64, "")] -> do
           consume ":"
           bod <- parseCore
-          return (num, [], bod)
+          return (nam, [], bod)
+        -- Default case
         otherwise -> do
           consume ":"
           bod <- parseCore
-          return ("+", [num], bod)
+          return ("_", [nam], bod)
   consume "}"
-  css <- forM css $ \(ctr, fds, bod) -> do
+  css <- forM css $ \ (ctr, fds, bod) -> do
     cid <- case reads ctr of
-      [(num, "")]  -> return $ Left (read num :: Word64)
-      _            -> do st <- getState; return $ Right $ fromMaybe maxBound $ MS.lookup ctr (parsedCtrToCid st)
+      [(num, "")] -> do
+        return $ Left (read num :: Word64)
+      otherwise -> do
+        st <- getState
+        return $ Right $ fromMaybe maxBound $ MS.lookup ctr (parsedCtrToCid st)
     return (cid, (ctr, fds, bod))
   css <- return $ map snd $ sortOn fst css
-  return $ Mat val mov css
+
+  -- Transform matches with default cases into nested chain of matches
+  if length css == 1 && (let (ctr, _, _) = head css in ctr == "_") then do
+    fail "Match with only a default case is not allowed."
+  else if (let (ctr, _, _) = last css in ctr == "_") then do
+    let defName = (let (_,[nm],_) = last css in nm)
+    let ifLets  = intoIfLetChain (Var defName) mov (init css) defName (last css)
+    return $ Let LAZY defName val ifLets
+  else do
+    return $ Mat val mov css
+
+intoIfLetChain :: Core -> [(String, Core)] -> [(String, [String], Core)] -> String -> (String, [String], Core) -> Core
+intoIfLetChain _ _ [] defName (_,_,defBody) = defBody
+intoIfLetChain val mov ((ctr,fds,bod):css) defName defCase =
+  let rest = intoIfLetChain val mov css defName defCase in 
+  Mat val mov [(ctr, fds, bod), ("_", [defName], rest)]
 
 parseOper :: Oper -> ParserM Core
 parseOper op = do

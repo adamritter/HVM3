@@ -578,7 +578,8 @@ Term reduce_mat_sup(Term mat, Term sup) {
   Lab sup_lab = term_lab(sup);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Lab mat_len = term_lab(mat);
+  Lab mat_lab = term_lab(mat);
+  u64 mat_len = u12v2_x(mat_lab);
   Loc mat1    = alloc_node(1 + mat_len);
   //Loc mat0    = alloc_node(1 + mat_len);
   //Loc sup0    = alloc_node(2);
@@ -593,8 +594,8 @@ Term reduce_mat_sup(Term mat, Term sup) {
     set(mat0 + 1 + i, term_new(DP0, sup_lab, du0));
     set(mat1 + 1 + i, term_new(DP1, sup_lab, du0));
   }
-  set(sup0 + 0, term_new(MAT, mat_len, mat0));
-  set(sup0 + 1, term_new(MAT, mat_len, mat1));
+  set(sup0 + 0, term_new(MAT, mat_lab, mat0));
+  set(sup0 + 1, term_new(MAT, mat_lab, mat1));
   return term_new(SUP, sup_lab, sup0);
 }
 
@@ -613,18 +614,46 @@ Term reduce_mat_ctr(Term mat, Term ctr) {
   //printf("reduce_mat_ctr "); print_term(mat); printf("\n");
   inc_itr();
   Loc mat_loc = term_loc(mat);
-  Loc ctr_loc = term_loc(ctr);
-  Lab ctr_lab = term_lab(ctr);
-  u64 ctr_num = u12v2_x(ctr_lab);
-  u64 ctr_ari = u12v2_y(ctr_lab);
-  Term app = got(mat_loc + 1 + ctr_num);
-  for (u64 i = 0; i < ctr_ari; i++) {
-    Loc new_app = alloc_node(2);
-    set(new_app + 0, app);
-    set(new_app + 1, got(ctr_loc + i));
-    app = term_new(APP, 0, new_app);
+  Lab mat_lab = term_lab(mat);
+  // If-Let
+  if (u12v2_y(mat_lab) > 0) {
+    Loc ctr_loc = term_loc(ctr);
+    Lab ctr_lab = term_lab(ctr);
+    u64 mat_ctr = u12v2_y(mat_lab) - 1;
+    u64 ctr_num = u12v2_x(ctr_lab);
+    u64 ctr_ari = u12v2_y(ctr_lab);
+    if (mat_ctr == ctr_num) {
+      Term app = got(mat_loc + 1);
+      for (u64 i = 0; i < ctr_ari; i++) {
+        Loc new_app = alloc_node(2);
+        set(new_app + 0, app);
+        set(new_app + 1, got(ctr_loc + i));
+        app = term_new(APP, 0, new_app);
+      }
+      return app;
+    } else {
+      Term app = got(mat_loc + 2);
+      Loc new_app = alloc_node(2);
+      set(new_app + 0, app);
+      set(new_app + 1, ctr);
+      app = term_new(APP, 0, new_app);
+      return app;
+    }
+  // Match
+  } else {
+    Loc ctr_loc = term_loc(ctr);
+    Lab ctr_lab = term_lab(ctr);
+    u64 ctr_num = u12v2_x(ctr_lab);
+    u64 ctr_ari = u12v2_y(ctr_lab);
+    Term app = got(mat_loc + 1 + ctr_num);
+    for (u64 i = 0; i < ctr_ari; i++) {
+      Loc new_app = alloc_node(2);
+      set(new_app + 0, app);
+      set(new_app + 1, got(ctr_loc + i));
+      app = term_new(APP, 0, new_app);
+    }
+    return app;
   }
-  return app;
 }
 
 // ~ num {K0 K1 K2 ... KN}
@@ -636,7 +665,8 @@ Term reduce_mat_w32(Term mat, Term w32) {
   inc_itr();
   Lab mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
-  Lab mat_len = term_lab(mat);
+  Lab mat_lab = term_lab(mat);
+  u64 mat_len = u12v2_x(mat_lab);
   u64 w32_val = term_loc(w32);
   if (w32_val < mat_len - 1) {
     return got(mat_loc + 1 + w32_val);
@@ -1117,6 +1147,9 @@ Term reduce(Term term) {
         case DP0: set(hloc + 0, next); break;
         case DP1: set(hloc + 0, next); break;
         case MAT: set(hloc + 0, next); break;
+        case ANN: set(hloc + 1, next); break;
+        case OPX: set(hloc + 0, next); break;
+        case OPY: set(hloc + 1, next); break;
       }
       *HVM.spos = stop;
       return HVM.sbuf[stop];
@@ -1189,8 +1222,8 @@ Term normal(Term term) {
       return wnf;
     }
     case MAT: {
-      u64 ari = lab;
-      for (u64 i = 0; i <= ari; i++) {
+      u64 mat_len = u12v2_x(lab);
+      for (u64 i = 0; i <= mat_len; i++) {
         Term arg = got(loc + i);
         arg = normal(arg);
         set(loc + i, arg);
