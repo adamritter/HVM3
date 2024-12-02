@@ -139,82 +139,47 @@ data Maybe {
 // Equality
 // --------
 
-@eq(a b dep) = ~ @wnf(a) !b !dep {
-  #Var{a_idx}: ~ @wnf(b) !dep {
-    #Var{b_idx}: (== a_idx b_idx)
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
-    #U32: 0
-    #Num{b_val}: 0
+@eq(a b d) = ~ @wnf(a) !b !d {
+  #Var{aI}: ~ @wnf(b) !d {
+    #Var{bI}: (== aI bI)
+    else: 0
   }
-  #Pol{a_bod}: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}:
-      !&{dep d0}=dep
-      !&{dep d1}=dep
-      @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
-    #U32: 0
-    #Num{b_val}: 0
+  #Pol{aB}: ~ @wnf(b) !d {
+    #Pol{bB}:
+      !&{d d0}=d
+      !&{d d1}=d
+      @eq((aB #Var{d0}) (bB #Var{d1}) (+ d 1))
+    else: 0
   }
-  #All{a_inp a_bod}: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}:
-      !&{dep d0}=dep
-      !&{dep d1}=dep
-      !&{dep d2}=dep
-      @and(@eq(a_inp b_inp d0) @eq((a_bod #Var{d1}) (b_bod #Var{d2}) (+ dep 1)))
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
-    #U32: 0
-    #Num{b_val}: 0
+  #All{aI aB}: ~ @wnf(b) !d {
+    #All{bI bB}:
+      !&{d d0}=d
+      !&{d d1}=d
+      !&{d d2}=d
+      @and(@eq(aI bI d0) @eq((aB #Var{d1}) (bB #Var{d2}) (+ d 1)))
+    else: 0
   }
-  #Lam{a_bod}: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}:
-      !&{dep d0}=dep
-      !&{dep d1}=dep
-      @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ dep 1))
-    #App{b_fun b_arg}: 0
-    #U32: 0
-    #Num{b_val}: 0
+  #Lam{aB}: ~ @wnf(b) !d {
+    #Lam{bB}:
+      !&{d d0}=d
+      !&{d d1}=d
+      @eq((aB #Var{d0}) (bB #Var{d1}) (+ d 1))
+    else: 0
   }
-  #App{a_fun a_arg}: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}:
-      !&{dep d0}=dep
-      !&{dep d1}=dep
-      @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
-    #U32: 0
-    #Num{b_val}: 0
+  #App{aF aX}: ~ @wnf(b) !d {
+    #App{bF bX}:
+      !&{d d0}=d
+      !&{d d1}=d
+      @and(@eq(aF bF d0) @eq(aX bX d1))
+    else: 0
   }
-  #U32: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
+  #U32: ~ @wnf(b) !d {
     #U32: 1
-    #Num{b_val}: 0
+    else: 0
   }
-  #Num{a_val}: ~ @wnf(b) !dep {
-    #Var{b_idx}: 0
-    #Pol{b_bod}: 0
-    #All{b_inp b_bod}: 0
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
-    #U32: 0
-    #Num{b_val}: (== a_val b_val)
+  #Num{aV}: ~ @wnf(b) !d {
+    #Num{bV}: (== aV bV)
+    else: 0
   }
 }
 

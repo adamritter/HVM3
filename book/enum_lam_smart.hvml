@@ -171,24 +171,18 @@ data Maybe {
       !&{dep d1}=dep
       !&{dep d2}=dep
       @eq((a_bod #Var{d0}) (b_bod #Var{d1}) (+ 1 d2))
-    #App{b_fun b_arg}: 0
-    #Var{b_idx}: 0
-    #Sub{b_val}: *
+    else: 0
   }
   #App{a_fun a_arg}: ~ b !dep {
-    #Lam{b_bod}: 0
     #App{b_fun b_arg}:
       !&{dep d0}=dep
       !&{dep d1}=dep
       @and(@eq(a_fun b_fun d0) @eq(a_arg b_arg d1))
-    #Var{b_idx}: 0
-    #Sub{b_val}: *
+    else: 0
   }
   #Var{a_idx}: ~ b !dep {
-    #Lam{b_bod}: 0
-    #App{b_fun b_arg}: 0
     #Var{b_idx}: (== a_idx b_idx)
-    #Sub{b_val}: *
+    else: 0
   }
   #Sub{a_val}: *
 }
