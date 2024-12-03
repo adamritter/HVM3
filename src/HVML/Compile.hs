@@ -227,6 +227,9 @@ compileFast book fid core copy args = do
     if copy && strict then do
       case MS.lookup fid (idToLabs book) of
         Just labs -> do
+          emit $ "if (term_tag(" ++ argNam ++ ") == ERA) {"
+          emit $ "  return term_new(ERA, 0, 0);"
+          emit $ "}"
           emit $ "if (term_tag(" ++ argNam ++ ") == SUP) {"
           tabInc
           emit $ "u64 lab = term_lab(" ++ argNam ++ ");"

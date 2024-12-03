@@ -236,6 +236,11 @@ void print_term(Term term) {
   printf(",0x%06x,0x%09x)", term_lab(term), term_loc(term));
 }
 
+void print_term_ln(Term term) {
+  print_term(term);
+  printf("\n");
+}
+
 void print_heap() {
   Loc len = get_len();
   for (Loc i = 0; i < len; i++) {
@@ -252,7 +257,7 @@ void print_heap() {
 // ----------
 
 // @foo(&L{ax ay} b c ...)
-// ----------------------- REF-SUP (when @L not in @foo)
+// ----------------------- REF-SUP-COPY (when @L not in @foo)
 // ! &L{bx by} = b
 // ! &L{cx cy} = b
 // ...
@@ -599,7 +604,7 @@ Term reduce_dup_w32(Term dup, Term w32) {
 }
 
 // ! &L{x y} = @foo(a b c ...)
-// --------------------------- DUP-REF (when &L not in @foo)
+// --------------------------- DUP-REF-COPY (when &L not in @foo)
 // ! &L{a0 a1} = a
 // ! &L{b0 b1} = b
 // ! &L{c0 c1} = c
