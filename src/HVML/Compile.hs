@@ -233,7 +233,7 @@ compileFastArgs book fid body ctx reuse = do
 
 -- Compiles a fast function body (pattern-matching)
 compileFastBody :: Book -> Word64 -> Core -> [String] -> Bool -> Int -> MS.Map Int [String] -> Compile ()
-compileFastBook book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLetLab book term == 0 = do
+compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLetLab book term == 0 = do
   valT   <- compileFastCore book fid val reuse
   valNam <- fresh "val"
   numNam <- fresh "num"
