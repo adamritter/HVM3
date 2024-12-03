@@ -1159,6 +1159,12 @@ Term reduce(Term term) {
   return 0;
 }
 
+Term reduce_at(Loc host) {
+  Term term = reduce(got(host));
+  set(host, term);
+  return term;
+}
+
 Term normal(Term term) {
   Term wnf = reduce(term);
   Tag tag = term_tag(wnf);

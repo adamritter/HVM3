@@ -140,21 +140,6 @@ reduceAt debug book host = do
     REF -> do
       reduceRefAt book host
       reduceAt debug book host
-    -- REF -> do
-      -- let fid = u12v2X lab
-      -- let ari = u12v2Y lab
-      -- case MS.lookup fid (idToFunc book) of
-        -- Just (nams, core) -> do
-          -- incItr
-          -- when (length nams /= fromIntegral ari) $ do
-            -- putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
-            -- exitFailure
-          -- args <- if ari == 0
-            -- then return []
-            -- else mapM (\i -> got (loc + i)) [0 .. ari - 1]
-          -- doInjectCoreAt book core host $ zip nams args
-          -- reduceAt debug book host
-        -- Nothing -> return term
     otherwise -> do
       return term
   where
@@ -176,15 +161,19 @@ reduceRefAt book host = do
     x | x == _LOG_F_ -> reduceRefAt_LogF book host loc ari
     x | x == _FRESH_F_ -> reduceRefAt_FreshF book host loc ari
     otherwise -> case MS.lookup fid (idToFunc book) of
-      Just (nams, core) -> do
+      Just (args, core) -> do
         incItr
-        when (length nams /= fromIntegral ari) $ do
+        when (length args /= fromIntegral ari) $ do
           putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
           exitFailure
-        args <- if ari == 0
-          then return []
-          else mapM (\i -> got (loc + i)) [0 .. ari - 1]
-        doInjectCoreAt book core host $ zip nams args
+        argTerms <- if ari == 0
+          then return [] 
+          else forM (zip [0..] args) $ \(i, (strict, _)) -> do
+            term <- got (loc + i)
+            if strict
+              then reduceAt False book (loc + i)
+              else return term
+        doInjectCoreAt book core host $ zip (map snd args) argTerms
       Nothing -> return term
 
 -- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`

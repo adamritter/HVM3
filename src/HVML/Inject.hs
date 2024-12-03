@@ -129,7 +129,7 @@ injectCore book (Op2 opr nm0 nm1) loc = do
   injectCore book nm1 (opx + 1)
   lift $ set loc (termNew _OPX_ (fromIntegral $ fromEnum opr) opx)
 
-doInjectCoreAt :: Book -> Core -> Loc -> [(String, Term)] -> HVM Term
+doInjectCoreAt :: Book -> Core -> Loc -> [(String,Term)] -> HVM Term
 doInjectCoreAt book core host argList = do
   (_, state) <- runStateT (injectCore book core host) (emptyState { args = Map.fromList argList })
   foldM (\m (name, loc) -> do

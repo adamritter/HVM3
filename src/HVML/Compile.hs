@@ -36,7 +36,7 @@ compile book fid =
     else unlines [ full , fast ]
 
 -- Compiles a function using either Fast-Mode or Full-Mode
-compileWith :: (Book -> Word64 -> Core -> [String] -> Compile ()) -> Book -> Word64 -> String
+compileWith :: (Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()) -> Book -> Word64 -> String
 compileWith cmp book fid = 
   let args   = fst (mget (idToFunc book) fid) in
   let core   = snd (mget (idToFunc book) fid) in
@@ -65,12 +65,16 @@ fresh name = do
 -- Full Compiler
 -- -------------
 
-compileFull :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileFull :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
 compileFull book fid core args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_t(Term ref) {"
   tabInc
   forM_ (zip [0..] args) $ \(i, arg) -> do
-    bind arg $ "got(term_loc(ref) + " ++ show i ++ ")"
+    let argName = snd arg
+    let argTerm = if fst arg
+          then "reduce_at(term_loc(ref) + " ++ show i ++ ")"
+          else "got(term_loc(ref) + " ++ show i ++ ")"
+    bind argName argTerm
   result <- compileFullCore book fid core "root"
   st <- get
   forM_ (vars st) $ \ (var,host) -> do
@@ -208,15 +212,19 @@ compileFullCore book fid (Ref rNam rFid rArg) host = do
 -- -------------
 
 -- Compiles a function using Fast-Mode
-compileFast :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileFast :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
 compileFast book fid core args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
   tabInc
   emit "u64 itrs = 0;"
   args <- forM (zip [0..] args) $ \ (i, arg) -> do
     argNam <- fresh "arg"
-    emit $ "Term " ++ argNam ++ " = got(term_loc(ref) + " ++ show i ++ ");"
-    bind arg argNam
+    -- TODO: if it is a strict argument, use "reduce_at" instead of "got"
+    if fst arg then do
+      emit $ "Term " ++ argNam ++ " = reduce_at(term_loc(ref) + " ++ show i ++ ");"
+    else do
+      emit $ "Term " ++ argNam ++ " = got(term_loc(ref) + " ++ show i ++ ");"
+    bind (snd arg) argNam
     return argNam
   compileFastArgs book fid core args MS.empty
   tabDec
@@ -575,7 +583,7 @@ compileFastVar var = do
       return "<ERR>"
 
 -- Compiles a function using Fast-Mode
-compileSlow :: Book -> Word64 -> Core -> [String] -> Compile ()
+compileSlow :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
 compileSlow book fid core args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
   emit $ "  return " ++ mget (idToName book) fid ++ "_t(ref);"

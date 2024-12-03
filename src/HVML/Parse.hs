@@ -344,7 +344,7 @@ parseName = skip >> many (alphaNum <|> char '_' <|> char '$' <|> char '&')
 parseName1 :: ParserM String
 parseName1 = skip >> many1 (alphaNum <|> char '_' <|> char '$' <|> char '&')
 
-parseDef :: ParserM (String, ([String], Core))
+parseDef :: ParserM (String, ([(Bool, String)], Core))
 parseDef = do
   try $ do
     skip
@@ -354,13 +354,17 @@ parseDef = do
     try $ string "("
     args <- many $ do
       closeWith ")"
-      parseName
+      strict <- option False $ do
+        try $ do
+          consume "!"
+          return True
+      arg <- parseName
+      return (strict, arg)
     consume ")"
     return args
   skip
   consume "="
   core <- parseCore
-  -- trace ("PARSED: " ++ name ++ "(" ++ intercalate "," args ++ ") = " ++ coreToString core) $ return ()
   return (name, (args, core))
 
 parseADT :: ParserM ()
@@ -394,7 +398,7 @@ parseADTCtr = do
   skip
   return (name, fields)
 
-parseBook :: ParserM [(String, ([String], Core))]
+parseBook :: ParserM [(String, ([(Bool,String)], Core))]
 parseBook = do
   skip
   many parseADT
@@ -411,7 +415,7 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty 0) ""
     showParseError "" code err
     return $ Ref "⊥" 0 []
 
-doParseBook :: String -> IO Book
+doParseBook :: String -> IO Book 
 doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty 0) "" code of
   Right (defs, st) -> do
     return $ createBook defs (parsedCtrToCid st) (parsedCtrToAri st)
@@ -419,10 +423,10 @@ doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.em
     showParseError "" code err
     return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty
   where
-    parseBookWithState :: ParserM ([(String, ([String], Core))], ParserState)
+    parseBookWithState :: ParserM ([(String, ([(Bool,String)], Core))], ParserState)
     parseBookWithState = do
       defs <- parseBook
-      st   <- getState
+      st <- getState
       return (defs, st)
 
 -- Helper Parsers
@@ -462,12 +466,12 @@ genFreshLabel = do
 -- "DUP" -> 0xFFFFFF
 -- its type must receive/return a map
 
-createBook :: [(String, ([String], Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
+createBook :: [(String, ([(Bool,String)], Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
 createBook defs ctrToCid ctrToAri =
-  let withPrims = \ n2i -> MS.union n2i $ MS.fromList primitives
+  let withPrims = \n2i -> MS.union n2i $ MS.fromList primitives
       nameToId' = withPrims $ MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      idToFunc' = MS.fromList $ map (\ (name, (args, core)) -> (mget nameToId' name, (args, lexify (setRefIds nameToId' core)))) defs
+      idToFunc' = MS.fromList $ map (\(name, (args, core)) -> (mget nameToId' name, (args, lexify (setRefIds nameToId' core)))) defs
   in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid
 
 -- Adds the function id to Ref constructors
@@ -593,3 +597,9 @@ showParseError filename input err = do
   putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
   putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
+
+
+
+
+
+

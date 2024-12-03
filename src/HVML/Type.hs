@@ -38,7 +38,7 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
-type Func = ([String], Core)
+type Func = ([(Bool,String)], Core)
 
 data Book = Book
   { idToFunc :: MS.Map Word64 Func
