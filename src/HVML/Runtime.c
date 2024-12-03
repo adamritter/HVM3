@@ -251,9 +251,63 @@ void print_heap() {
 // Evaluation
 // ----------
 
-// @foo
-// --------- REF
-// book[foo]
+// @foo(&L{ax ay} b c ...)
+// ----------------------- REF-SUP (when @L not in @foo)
+// ! &L{bx by} = b
+// ! &L{cx cy} = b
+// ...
+// &L{@foo(ax bx cx ...) @foo(ay by cy ...)}
+// TODO: implement this in an index-generic way.
+// that is, receive the index where the SUP is.
+// clone all other indexes with a DUP
+Term reduce_ref_sup(Term ref, u32 idx) {
+  inc_itr();
+  Loc ref_loc = term_loc(ref);
+  Lab ref_lab = term_lab(ref);
+  u64 fun_id = u12v2_x(ref_lab);
+  u64 arity  = u12v2_y(ref_lab);
+  if (idx >= arity) {
+    printf("ERROR: Invalid index in reduce_ref_sup\n");
+    exit(1);
+  }
+  Term sup = got(ref_loc + idx);
+  if (term_tag(sup) != SUP) {
+    printf("ERROR: Expected SUP at index %u\n", idx);
+    exit(1);
+  }
+  Lab sup_lab = term_lab(sup);
+  Loc sup_loc = term_loc(sup);
+  Term sup0 = got(sup_loc + 0);
+  Term sup1 = got(sup_loc + 1);
+  // Allocate space for new REF node arguments for the second branch
+  Loc ref1_loc = alloc_node(arity);
+  for (u64 i = 0; i < arity; ++i) {
+    if (i != idx) {
+      // Duplicate argument
+      Term arg = got(ref_loc + i);
+      Loc dup_loc = alloc_node(2);
+      set(dup_loc + 0, arg);
+      set(dup_loc + 1, term_new(SUB, 0, 0));
+      set(ref_loc + i, term_new(DP0, sup_lab, dup_loc));
+      set(ref1_loc + i, term_new(DP1, sup_lab, dup_loc));
+    } else {
+      // Set the SUP components directly
+      set(ref_loc + i, sup0);
+      set(ref1_loc + i, sup1);
+    }
+  }
+  // Create new REF nodes
+  Term ref0 = term_new(REF, ref_lab, ref_loc);
+  Term ref1 = term_new(REF, ref_lab, ref1_loc);
+  // Reuse sup_loc to create the new SUP node
+  set(sup_loc + 0, ref0);
+  set(sup_loc + 1, ref1);
+  return term_new(SUP, sup_lab, sup_loc);
+}
+
+// @foo(a b c ...)
+// -------------------- REF
+// book[foo](a b c ...)
 Term reduce_ref(Term ref) {
   //printf("reduce_ref "); print_term(ref); printf("\n");
   //printf("call %d %p\n", term_loc(ref), HVM.book[term_loc(ref)]);
@@ -541,6 +595,37 @@ Term reduce_dup_w32(Term dup, Term w32) {
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   set(dup_loc + 0, w32);
   set(dup_loc + 1, w32);
+  return got(dup_loc + dup_num);
+}
+
+// ! &L{x y} = @foo(a b c ...)
+// --------------------------- DUP-REF (when &L not in @foo)
+// ! &L{a0 a1} = a
+// ! &L{b0 b1} = b
+// ! &L{c0 c1} = c
+// ...
+// x <- @foo(a0 b0 c0 ...)
+// y <- @foo(a1 b1 c1 ...)
+Term reduce_dup_ref(Term dup, Term ref) {
+  //printf("reduce_dup_ref "); print_term(dup); printf("\n");
+  inc_itr();
+  Loc dup_loc = term_loc(dup);
+  Lab dup_lab = term_lab(dup);
+  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
+  Loc ref_loc = term_loc(ref);
+  Lab ref_lab = term_lab(ref);
+  u64 ref_ari = u12v2_y(ref_lab);
+  Loc ref0    = ref_loc;
+  Loc ref1    = alloc_node(1 + ref_ari);
+  for (u64 i = 0; i < ref_ari; i++) {
+    Loc du0 = alloc_node(2);
+    set(du0 + 0, got(ref_loc + i));
+    set(du0 + 1, term_new(SUB, 0, 0));
+    set(ref0 + i, term_new(DP0, dup_lab, du0));
+    set(ref1 + i, term_new(DP1, dup_lab, du0));
+  }
+  set(dup_loc + 0, term_new(REF, ref_lab, ref0));
+  set(dup_loc + 1, term_new(REF, ref_lab, ref1));
   return got(dup_loc + dup_num);
 }
 
@@ -1250,7 +1335,7 @@ Term SUP_f(Term ref) {
   Loc ref_loc = term_loc(ref);
   Term lab = reduce(got(ref_loc + 0));
   if (term_tag(lab) != W32) {
-    printf("ERROR\n");
+    printf("ERROR:non-numeric-sup-label\n");
   }
   Term tm0 = got(ref_loc + 1);
   Term tm1 = got(ref_loc + 2);
@@ -1267,13 +1352,26 @@ Term DUP_f(Term ref) {
   Loc ref_loc = term_loc(ref);
   Term lab = reduce(got(ref_loc + 0));
   if (term_tag(lab) != W32) {
-    printf("ERROR\n");
+    printf("ERROR:non-numeric-dup-label\n");
   }
   Term val = got(ref_loc + 1);
   Term bod = got(ref_loc + 2);
   Loc dup = alloc_node(2);
   set(dup + 0, val);
   set(dup + 1, term_new(SUB, 0, 0));
+  Term bod_term = got(ref_loc + 2);
+  if (term_tag(bod_term) == LAM) {
+    Loc lam1_loc = term_loc(bod_term);
+    Term lam1_bod = got(lam1_loc + 1);
+    if (term_tag(lam1_bod) == LAM) {
+      Loc lam2_loc = term_loc(lam1_bod);
+      Term lam2_bod = got(lam2_loc + 1);
+      set(lam1_loc + 0, term_new(DP0, term_loc(lab), dup));
+      set(lam2_loc + 0, term_new(DP1, term_loc(lab), dup));
+      *HVM.itrs += 2;
+      return lam2_bod;
+    }
+  }
   Loc app1 = alloc_node(2);
   set(app1 + 0, bod);
   set(app1 + 1, term_new(DP0, term_loc(lab), dup));
@@ -1281,6 +1379,7 @@ Term DUP_f(Term ref) {
   set(app2 + 0, term_new(APP, 0, app1));
   set(app2 + 1, term_new(DP1, term_loc(lab), dup));
   return term_new(APP, 0, app2);
+
 }
 
 Term LOG_f(Term ref) {

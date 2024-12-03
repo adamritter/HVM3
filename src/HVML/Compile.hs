@@ -1,5 +1,5 @@
 -- //./Type.hs//
--- //./Inject.hs//
+-- //./Reduce.hs//
 
 module HVML.Compile where
 
@@ -36,12 +36,13 @@ compile book fid =
     else unlines [ full , fast ]
 
 -- Compiles a function using either Fast-Mode or Full-Mode
-compileWith :: (Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()) -> Book -> Word64 -> String
+compileWith :: (Book -> Word64 -> Core -> Bool -> [(Bool,String)] -> Compile ()) -> Book -> Word64 -> String
 compileWith cmp book fid = 
-  let args   = fst (mget (idToFunc book) fid) in
+  let copy   = fst (fst (mget (idToFunc book) fid)) in
+  let args   = snd (fst (mget (idToFunc book) fid)) in
   let core   = snd (mget (idToFunc book) fid) in
   let state  = CompileState 0 0 MS.empty [] [] in
-  let result = runState (cmp book fid core args) state in
+  let result = runState (cmp book fid core copy args) state in
   unlines $ reverse $ code (snd result)
 
 emit :: String -> Compile ()
@@ -65,8 +66,8 @@ fresh name = do
 -- Full Compiler
 -- -------------
 
-compileFull :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
-compileFull book fid core args = do
+compileFull :: Book -> Word64 -> Core -> Bool -> [(Bool,String)] -> Compile ()
+compileFull book fid core copy args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_t(Term ref) {"
   tabInc
   forM_ (zip [0..] args) $ \(i, arg) -> do
@@ -212,19 +213,38 @@ compileFullCore book fid (Ref rNam rFid rArg) host = do
 -- -------------
 
 -- Compiles a function using Fast-Mode
-compileFast :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
-compileFast book fid core args = do
+compileFast :: Book -> Word64 -> Core -> Bool -> [(Bool,String)] -> Compile ()
+compileFast book fid core copy args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
   tabInc
   emit "u64 itrs = 0;"
-  args <- forM (zip [0..] args) $ \ (i, arg) -> do
+  args <- forM (zip [0..] args) $ \ (i, (strict, arg)) -> do
     argNam <- fresh "arg"
-    -- TODO: if it is a strict argument, use "reduce_at" instead of "got"
-    if fst arg then do
+    if strict then do
       emit $ "Term " ++ argNam ++ " = reduce_at(term_loc(ref) + " ++ show i ++ ");"
     else do
       emit $ "Term " ++ argNam ++ " = got(term_loc(ref) + " ++ show i ++ ");"
-    bind (snd arg) argNam
+    if copy && strict then do
+      case MS.lookup fid (idToLabs book) of
+        Just labs -> do
+          emit $ "if (term_tag(" ++ argNam ++ ") == SUP) {"
+          tabInc
+          emit $ "u64 lab = term_lab(" ++ argNam ++ ");"
+          emit $ "if (1"
+          forM_ (MS.keys labs) $ \lab -> do
+            emit $ "    && lab != " ++ show lab
+          emit $ ") {"
+          tabInc
+          emit $ "Term term = reduce_ref_sup(ref, " ++ show i ++ ");"
+          emit $ "return term;"
+          tabDec
+          emit $ "}"
+          tabDec
+          emit $ "}"
+        Nothing -> return ()
+    else
+      return ()
+    bind arg argNam
     return argNam
   compileFastArgs book fid core args MS.empty
   tabDec
@@ -407,9 +427,11 @@ compileFastCore book fid (Let mode var val bod) reuse = do
   valT <- compileFastCore book fid val reuse
   case mode of
     LAZY -> do
+      emit $ "itrs += 1;"
       bind var valT
     STRI -> do
       valNam <- fresh "val"
+      emit $ "itrs += 1;"
       emit $ "Term " ++ valNam ++ " = reduce(" ++ valT ++ ");"
       bind var valNam
     PARA -> do -- TODO: implement parallel evaluation
@@ -564,13 +586,52 @@ compileFastCore book fid (Op2 opr nu0 nu1) reuse = do
   emit $ "}"
   return $ retNam
 compileFastCore book fid (Ref rNam rFid rArg) reuse = do
-  refNam <- fresh "ref"
-  let arity = length rArg
-  refLoc <- compileFastAlloc arity reuse
-  emit $ "Loc " ++ refNam ++ " = " ++ refLoc ++ ";"
-  argsT <- mapM (\ (i,arg) -> compileFastCore book fid arg reuse) (zip [0..] rArg)
-  sequence_ [emit $ "set(" ++ refNam ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
-  return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refNam ++ ")"
+  -- Inline Dynamic SUP
+  if rNam == "SUP" then do
+    let [lab, tm0, tm1] = rArg
+    supNam <- fresh "sup"
+    labNam <- fresh "lab"
+    supLoc <- compileFastAlloc 2 reuse
+    labT <- compileFastCore book fid lab reuse
+    emit $ "Term " ++ labNam ++ " = reduce(" ++ labT ++ ");"
+    emit $ "if (term_tag(" ++ labNam ++ ") != W32) {"
+    emit $ "  printf(\"ERROR:non-numeric-sup-label\\n\");"
+    emit $ "}"
+    emit $ "itrs += 1;"
+    emit $ "Loc " ++ supNam ++ " = " ++ supLoc ++ ";"
+    tm0T <- compileFastCore book fid tm0 reuse
+    tm1T <- compileFastCore book fid tm1 reuse
+    emit $ "set(" ++ supNam ++ " + 0, " ++ tm0T ++ ");"
+    emit $ "set(" ++ supNam ++ " + 1, " ++ tm1T ++ ");"
+    return $ "term_new(SUP, term_loc(" ++ labNam ++ "), " ++ supNam ++ ")"
+  -- Inline Dynamic DUP
+  else if rNam == "DUP" && (case rArg of [_, _, Lam _ (Lam _ _)] -> True ; _ -> False) then do
+    let [lab, val, Lam x (Lam y body)] = rArg
+    dupNam <- fresh "dup"
+    labNam <- fresh "lab"
+    dupLoc <- compileFastAlloc 2 reuse
+    labT <- compileFastCore book fid lab reuse
+    emit $ "Term " ++ labNam ++ " = reduce(" ++ labT ++ ");"
+    emit $ "if (term_tag(" ++ labNam ++ ") != W32) {"
+    emit $ "  printf(\"ERROR:non-numeric-sup-label\\n\");"
+    emit $ "}"
+    emit $ "itrs += 3;"
+    emit $ "Loc " ++ dupNam ++ " = " ++ dupLoc ++ ";"
+    valT <- compileFastCore book fid val reuse
+    emit $ "set(" ++ dupNam ++ " + 0, " ++ valT ++ ");"
+    emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
+    bind x $ "term_new(DP0, term_loc(" ++ labNam ++ "), " ++ dupNam ++ " + 0)"
+    bind y $ "term_new(DP1, term_loc(" ++ labNam ++ "), " ++ dupNam ++ " + 0)"
+    compileFastCore book fid body reuse
+  -- Create REF node
+  else do
+    refNam <- fresh "ref"
+    let arity = length rArg
+    refLoc <- compileFastAlloc arity reuse
+    emit $ "Loc " ++ refNam ++ " = " ++ refLoc ++ ";"
+    argsT <- mapM (\ (i,arg) -> compileFastCore book fid arg reuse) (zip [0..] rArg)
+    sequence_ [emit $ "set(" ++ refNam ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
+    return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refNam ++ ")"
 
 -- Compiles a variable in fast mode
 compileFastVar :: String -> Compile String
@@ -583,8 +644,8 @@ compileFastVar var = do
       return "<ERR>"
 
 -- Compiles a function using Fast-Mode
-compileSlow :: Book -> Word64 -> Core -> [(Bool,String)] -> Compile ()
-compileSlow book fid core args = do
+compileSlow :: Book -> Word64 -> Core -> Bool -> [(Bool,String)] -> Compile ()
+compileSlow book fid core copy args = do
   emit $ "Term " ++ mget (idToName book) fid ++ "_f(Term ref) {"
   emit $ "  return " ++ mget (idToName book) fid ++ "_t(ref);"
   emit $ "}"

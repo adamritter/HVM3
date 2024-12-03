@@ -1,6 +1,4 @@
 -- //./Type.hs//
--- //./Inject.hs//
--- //./Extract.hs//
 
 module HVML.Reduce where
 
@@ -160,8 +158,8 @@ reduceRefAt book host = do
     x | x == _SUP_F_ -> reduceRefAt_SupF book host loc ari
     x | x == _LOG_F_ -> reduceRefAt_LogF book host loc ari
     x | x == _FRESH_F_ -> reduceRefAt_FreshF book host loc ari
-    otherwise -> case MS.lookup fid (idToFunc book) of
-      Just (args, core) -> do
+    oterwise -> case MS.lookup fid (idToFunc book) of
+      Just ((copy, args), core) -> do
         incItr
         when (length args /= fromIntegral ari) $ do
           putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
@@ -174,7 +172,31 @@ reduceRefAt book host = do
               then reduceAt False book (loc + i)
               else return term
         doInjectCoreAt book core host $ zip (map snd args) argTerms
-      Nothing -> return term
+        -- TODO: I disabled Fast Copy Optimization on interpreted mode because I
+        -- don't think it is relevant here. We use it for speed, to trigger the
+        -- hot paths on compiled functions, which don't happen when interpreted.
+        -- I think leaving it out is good because it ensures interpreted mode is
+        -- always optimal (minimizing interactions). This also allows the dev to
+        -- see how Fast Copy Mode affects the interaction count.
+        -- let inject = doInjectCoreAt book core host $ zip (map snd args) argTerms
+        -- Fast Copy Optimization
+        -- if copy then do
+          -- let supGet = \x (idx,sup) -> if tagT (termTag sup) == SUP then Just (idx,sup) else x
+          -- let supGot = foldl' supGet Nothing $ zip [0..] argTerms
+          -- case supGot of
+            -- Just (idx,sup) -> do
+              -- let isCopySafe = case MS.lookup fid (idToLabs book) of
+                    -- Nothing   -> False
+                    -- Just labs -> not $ MS.member (termLab sup) labs
+              -- if isCopySafe then do
+                -- term <- reduceRefSup term idx
+                -- set host term
+                -- return term
+              -- else inject
+            -- otherwise -> inject
+        -- else inject
+      Nothing -> do
+        return term
 
 -- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
 reduceRefAt_DupF :: Book -> Loc -> Loc -> Word64 -> HVM Term  

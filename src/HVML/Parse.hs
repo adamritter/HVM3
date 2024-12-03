@@ -344,8 +344,12 @@ parseName = skip >> many (alphaNum <|> char '_' <|> char '$' <|> char '&')
 parseName1 :: ParserM String
 parseName1 = skip >> many1 (alphaNum <|> char '_' <|> char '$' <|> char '&')
 
-parseDef :: ParserM (String, ([(Bool, String)], Core))
+parseDef :: ParserM (String, ((Bool, [(Bool, String)]), Core))
 parseDef = do
+  copy <- option False $ do
+    try $ do
+      consume "!"
+      return True
   try $ do
     skip
     consume "@"
@@ -365,7 +369,7 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
-  return (name, (args, core))
+  return (name, ((copy,args), core))
 
 parseADT :: ParserM ()
 parseADT = do
@@ -398,7 +402,7 @@ parseADTCtr = do
   skip
   return (name, fields)
 
-parseBook :: ParserM [(String, ([(Bool,String)], Core))]
+parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do
   skip
   many parseADT
@@ -421,9 +425,9 @@ doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.em
     return $ createBook defs (parsedCtrToCid st) (parsedCtrToAri st)
   Left err -> do
     showParseError "" code err
-    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty
+    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
   where
-    parseBookWithState :: ParserM ([(String, ([(Bool,String)], Core))], ParserState)
+    parseBookWithState :: ParserM ([(String, ((Bool,[(Bool,String)]), Core))], ParserState)
     parseBookWithState = do
       defs <- parseBook
       st <- getState
@@ -466,13 +470,14 @@ genFreshLabel = do
 -- "DUP" -> 0xFFFFFF
 -- its type must receive/return a map
 
-createBook :: [(String, ([(Bool,String)], Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
+createBook :: [(String, ((Bool,[(Bool,String)]), Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
 createBook defs ctrToCid ctrToAri =
   let withPrims = \n2i -> MS.union n2i $ MS.fromList primitives
       nameToId' = withPrims $ MS.fromList $ zip (map fst defs) [0..]
       idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      idToFunc' = MS.fromList $ map (\(name, (args, core)) -> (mget nameToId' name, (args, lexify (setRefIds nameToId' core)))) defs
-  in Book idToFunc' idToName' nameToId' ctrToAri ctrToCid
+      idToFunc' = MS.fromList $ map (\(name, ((copy,args), core)) -> (mget nameToId' name, ((copy,args), lexify (setRefIds nameToId' core)))) defs
+      idToLabs' = MS.fromList $ map (\(name, (_, core)) -> (mget nameToId' name, collectLabels core)) defs
+  in Book idToFunc' idToName' idToLabs' nameToId' ctrToAri ctrToCid
 
 -- Adds the function id to Ref constructors
 setRefIds :: MS.Map String Word64 -> Core -> Core
@@ -496,6 +501,27 @@ setRefIds fids term = case term of
     Nothing  -> unsafePerformIO $ do
       putStrLn $ "error:unbound-ref @" ++ nam
       exitFailure
+
+-- Collects all SUP/DUP labels used
+collectLabels :: Core -> MS.Map Word64 ()
+collectLabels term = case term of
+  Var _               -> MS.empty
+  U32 _               -> MS.empty
+  Chr _               -> MS.empty
+  Era                 -> MS.empty
+  Ref "SUP" _SUP_F_ _ -> MS.singleton maxBound ()
+  Ref "DUP" _DUP_F_ _ -> MS.singleton maxBound ()
+  Ref _ _ args        -> MS.unions $ map collectLabels args
+  Let _ _ val bod     -> MS.union (collectLabels val) (collectLabels bod)
+  Lam _ bod           -> collectLabels bod
+  App fun arg         -> MS.union (collectLabels fun) (collectLabels arg)
+  Sup lab tm0 tm1     -> MS.insert lab () $ MS.union (collectLabels tm0) (collectLabels tm1)
+  Dup lab _ _ val bod -> MS.insert lab () $ MS.union (collectLabels val) (collectLabels bod)
+  Typ _ typ           -> collectLabels typ
+  Ann val typ         -> MS.union (collectLabels val) (collectLabels typ)
+  Ctr _ fds           -> MS.unions $ map collectLabels fds
+  Mat val mov css     -> MS.unions $ collectLabels val : map (collectLabels . snd) mov ++ map (\(_,_,bod) -> collectLabels bod) css
+  Op2 _ x y           -> MS.union (collectLabels x) (collectLabels y)
 
 -- Gives unique names to lexically scoped vars, unless they start with '$'.
 -- Example: `λx λt (t λx(x) x)` will read as `λx0 λt1 (t1 λx2(x2) x0)`.
@@ -597,9 +623,4 @@ showParseError filename input err = do
   putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
   putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
-
-
-
-
-
 

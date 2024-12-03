@@ -38,11 +38,21 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
-type Func = ([(Bool,String)], Core)
+-- A top-level function, including:
+-- - copy: true when ref-copy mode is enabled
+-- - args: a list of (isArgStrict, argName) pairs
+-- - core: the function's body
+-- Note: ref-copy improves C speed, but increases interaction count
+type Func = ((Bool, [(Bool,String)]), Core)
 
+-- NOTE: the new idToLabs field is a map from a function id to a set of all
+-- DUP/SUP labels used in its body. note that, when a function uses either
+-- HVM.SUP or HVM.DUP internally, this field is set to Nothing. this will be
+-- used to apply the fast DUP-REF and REF-SUP interactions, when safe to do so
 data Book = Book
   { idToFunc :: MS.Map Word64 Func
   , idToName :: MS.Map Word64 String
+  , idToLabs :: MS.Map Word64 (MS.Map Word64 ())
   , nameToId :: MS.Map String Word64
   , ctrToAri :: MS.Map String Int
   , ctrToCid :: MS.Map String Word64
@@ -177,6 +187,9 @@ foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
 foreign import ccall unsafe "Runtime.c reduce_dup_w32"
   reduceDupW32 :: Term -> Term -> IO Term
 
+foreign import ccall unsafe "Runtime.c reduce_dup_ref"
+  reduceDupRef :: Term -> Term -> IO Term
+
 foreign import ccall unsafe "Runtime.c reduce_mat_era"
   reduceMatEra :: Term -> Term -> IO Term
 
@@ -248,6 +261,9 @@ foreign import ccall unsafe "Runtime.c reduce_ann_ctr"
 
 foreign import ccall unsafe "Runtime.c reduce_ann_w32"
   reduceAnnW32 :: Term -> Term -> IO Term
+
+foreign import ccall unsafe "Runtime.c reduce_ref_sup"
+  reduceRefSup :: Term -> Word64 -> IO Term
 
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
@@ -351,20 +367,6 @@ modeT 0x01 = STRI
 modeT 0x02 = PARA
 modeT mode = error $ "unknown mode: " ++ show mode
 
--- Getter function for maps
-mget map key =
-  case MS.lookup key map of
-    Just val -> val
-    Nothing  -> error $ "key not found: " ++ show key
-
--- The if-let match stores its target ctr id
-ifLetLab :: Book -> Core -> Word64
-ifLetLab book (Mat _ _ [(ctr,_,_),("_",_,_)]) =
-  case MS.lookup ctr (ctrToCid book) of
-    Just cid -> 1 + cid
-    Nothing  -> 0
-ifLetLab book _ = 0
-
 -- Primitive Functions
 _DUP_F_ :: Lab
 _DUP_F_ = 0xFFF
@@ -385,3 +387,20 @@ primitives =
   , ("LOG", _LOG_F_)
   , ("FRESH", _FRESH_F_)
   ]
+
+-- Utils
+-- -----
+
+-- Getter function for maps
+mget map key =
+  case MS.lookup key map of
+    Just val -> val
+    Nothing  -> error $ "key not found: " ++ show key
+
+-- The if-let match stores its target ctr id
+ifLetLab :: Book -> Core -> Word64
+ifLetLab book (Mat _ _ [(ctr,_,_),("_",_,_)]) =
+  case MS.lookup ctr (ctrToCid book) of
+    Just cid -> 1 + cid
+    Nothing  -> 0
+ifLetLab book _ = 0
