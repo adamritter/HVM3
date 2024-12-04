@@ -3,7 +3,7 @@
 
 module HVML.Compile where
 
-import Control.Monad (forM_, forM, foldM)
+import Control.Monad (forM_, forM, foldM, when)
 import Control.Monad.State
 import Data.List
 import Data.Word
@@ -264,7 +264,7 @@ compileFastArgs book fid body ctx reuse = do
 
 -- Compiles a fast function body (pattern-matching)
 compileFastBody :: Book -> Word64 -> Core -> [String] -> Bool -> Int -> MS.Map Int [String] -> Compile ()
-compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLetLab book term == 0 = do
+compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
   valT   <- compileFastCore book fid val reuse
   valNam <- fresh "val"
   numNam <- fresh "num"
@@ -308,13 +308,12 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLet
     emit $ "}"
   -- Constructor Pattern-Matching
   else do
-    emit $ "if (term_tag(" ++ valNam ++ ") == CTR) {"
-    tabInc
-    emit $ "switch (u12v2_x(term_lab(" ++ valNam ++ "))) {"
-    tabInc
-    forM_ (zip [0..] css) $ \ (i, (ctr,fds,bod)) -> do
-      emit $ "case " ++ show i ++ ": {"
+    if ifLetLab book term > 0 then do
+      emit $ "if (term_tag(" ++ valNam ++ ") == CTR) {"
       tabInc
+      emit $ "if (u12v2_x(term_lab(" ++ valNam ++ ")) == " ++ show (ifLetLab book term - 1) ++ ") {"
+      tabInc
+      let (ctr,fds,bod) = css !! 0
       let reuse' = MS.insertWith (++) (length fds) ["term_loc(" ++ valNam ++ ")"] reuse
       forM_ (zip [0..] fds) $ \ (k,fd) -> do
         fdNam <- fresh "fd"
@@ -324,13 +323,47 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse | ifLet
         valT <- compileFastCore book fid val reuse'
         bind key valT
       compileFastBody book fid bod ctx stop (itr + 1 + length fds + length mov) reuse'
-      emit $ "break;"
+      tabDec
+      emit $ "} else {"
+      tabInc
+      let (ctr,fds,bod) = css !! 1
+      when (length fds /= 1) $ do
+        error "incorrect arity on if-let default case"
+      fdNam <- fresh "fd"
+      emit $ "Term " ++ fdNam ++ " = " ++ valNam ++ ";"
+      bind (head fds) fdNam
+      forM_ mov $ \ (key,val) -> do
+        valT <- compileFastCore book fid val reuse
+        bind key valT
+      compileFastBody book fid bod ctx stop (itr + 1 + 1 + length mov) reuse
       tabDec
       emit $ "}"
-    tabDec
-    emit $ "}"
-    tabDec
-    emit $ "}"
+      tabDec
+      emit $ "}"
+    else do
+      emit $ "if (term_tag(" ++ valNam ++ ") == CTR) {"
+      tabInc
+      emit $ "switch (u12v2_x(term_lab(" ++ valNam ++ "))) {"
+      tabInc
+      forM_ (zip [0..] css) $ \ (i, (ctr,fds,bod)) -> do
+        emit $ "case " ++ show i ++ ": {"
+        tabInc
+        let reuse' = MS.insertWith (++) (length fds) ["term_loc(" ++ valNam ++ ")"] reuse
+        forM_ (zip [0..] fds) $ \ (k,fd) -> do
+          fdNam <- fresh "fd"
+          emit $ "Term " ++ fdNam ++ " = got(term_loc(" ++ valNam ++ ") + " ++ show k ++ ");"
+          bind fd fdNam
+        forM_ mov $ \ (key,val) -> do
+          valT <- compileFastCore book fid val reuse'
+          bind key valT
+        compileFastBody book fid bod ctx stop (itr + 1 + length fds + length mov) reuse'
+        emit $ "break;"
+        tabDec
+        emit $ "}"
+      tabDec
+      emit $ "}"
+      tabDec
+      emit $ "}"
   compileFastUndo book fid term ctx itr reuse
 compileFastBody book fid term@(Dup lab dp0 dp1 val bod) ctx stop itr reuse = do
   valT <- compileFastCore book fid val reuse

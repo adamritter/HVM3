@@ -509,8 +509,6 @@ collectLabels term = case term of
   U32 _               -> MS.empty
   Chr _               -> MS.empty
   Era                 -> MS.empty
-  Ref "SUP" _SUP_F_ _ -> MS.singleton maxBound ()
-  Ref "DUP" _DUP_F_ _ -> MS.singleton maxBound ()
   Ref _ _ args        -> MS.unions $ map collectLabels args
   Let _ _ val bod     -> MS.union (collectLabels val) (collectLabels bod)
   Lam _ bod           -> collectLabels bod
