@@ -134,6 +134,7 @@ static void link(Term neg, Term pos) {
 static void move(Loc neg_loc, Term pos) {
   Term neg = swap(neg_loc, pos);
   if (term_tag(neg) != SUB) {
+    take(neg_loc);
     link(neg, pos);
   }
 }
@@ -240,8 +241,6 @@ static void interact(Term a, Term b) {
   Loc a_loc = term_loc(a);
   Loc b_loc = term_loc(b);
 
-  // printf("INTERACT %s ~ %s\n", tag_to_str(a_tag), tag_to_str(b_tag));
-
   switch (a_tag) {
     case APP:
       switch (b_tag) {
@@ -276,6 +275,8 @@ static int normal_step() {
 
   Term neg = take(loc + 0);
   Term pos = take(loc + 1);
+
+  // printf("\n\nINTERACT %s ~ %s\n\n", tag_to_str(neg), tag_to_str(pos));
 
   interact(neg, pos);
 
