@@ -15,8 +15,6 @@ data Core
   | App Core Core -- (f x)
   | Sup Word64 Core Core -- &L{a b}
   | Dup Word64 String String Core Core -- ! &L{a b} = v body
-  | Typ String Core -- %x(T)
-  | Ann Core Core -- {v:T}
   | Ctr Word64 [Core] -- #Ctr{a b ...}
   | Mat Core [(String,Core)] [(String,[String],Core)] -- ~ v { #A{a b ...}: ... #B{a b ...}: ... ... }
   | U32 Word32 -- 123
@@ -74,8 +72,6 @@ data TAG
   | APP
   | LAM
   | SUP
-  | TYP
-  | ANN
   | SUB
   | REF
   | LET
@@ -121,8 +117,8 @@ foreign import ccall unsafe "Runtime.c term_new"
 foreign import ccall unsafe "Runtime.c term_tag"
   termTag :: Term -> Tag
 
-foreign import ccall unsafe "Runtime.c term_bit"
-  termBit :: Term -> Tag
+foreign import ccall unsafe "Runtime.c term_get_bit"
+  termGetBit :: Term -> Tag
 
 foreign import ccall unsafe "Runtime.c term_lab"
   termLab :: Term -> Lab
@@ -132,6 +128,9 @@ foreign import ccall unsafe "Runtime.c term_loc"
 
 foreign import ccall unsafe "Runtime.c term_set_bit"
   termSetBit :: Term -> Tag
+
+foreign import ccall unsafe "Runtime.c term_rem_bit"
+  termRemBit :: Term -> Tag
 
 foreign import ccall unsafe "Runtime.c get_len"
   getLen :: IO Word64
@@ -160,9 +159,6 @@ foreign import ccall unsafe "Runtime.c reduce_app_lam"
 foreign import ccall unsafe "Runtime.c reduce_app_sup"
   reduceAppSup :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_app_typ"
-  reduceAppTyp :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_ctr"
   reduceAppCtr :: Term -> Term -> IO Term
 
@@ -177,9 +173,6 @@ foreign import ccall unsafe "Runtime.c reduce_dup_lam"
 
 foreign import ccall unsafe "Runtime.c reduce_dup_sup"
   reduceDupSup :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_dup_typ"
-  reduceDupTyp :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
   reduceDupCtr :: Term -> Term -> IO Term
@@ -199,9 +192,6 @@ foreign import ccall unsafe "Runtime.c reduce_mat_lam"
 foreign import ccall unsafe "Runtime.c reduce_mat_sup"
   reduceMatSup :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_mat_typ"
-  reduceMatTyp :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_ctr"
   reduceMatCtr :: Term -> Term -> IO Term
 
@@ -216,9 +206,6 @@ foreign import ccall unsafe "Runtime.c reduce_opx_lam"
 
 foreign import ccall unsafe "Runtime.c reduce_opx_sup"
   reduceOpxSup :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_opx_typ"
-  reduceOpxTyp :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_opx_ctr"
   reduceOpxCtr :: Term -> Term -> IO Term
@@ -235,32 +222,11 @@ foreign import ccall unsafe "Runtime.c reduce_opy_lam"
 foreign import ccall unsafe "Runtime.c reduce_opy_sup"
   reduceOpySup :: Term -> Term -> IO Term
 
-foreign import ccall unsafe "Runtime.c reduce_opy_typ"
-  reduceOpyTyp :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_ctr"
   reduceOpyCtr :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_opy_w32"
   reduceOpyW32 :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_era"
-  reduceAnnEra :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_lam"
-  reduceAnnLam :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_sup"
-  reduceAnnSup :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_typ"
-  reduceAnnTyp :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_ctr"
-  reduceAnnCtr :: Term -> Term -> IO Term
-
-foreign import ccall unsafe "Runtime.c reduce_ann_w32"
-  reduceAnnW32 :: Term -> Term -> IO Term
 
 foreign import ccall unsafe "Runtime.c reduce_ref_sup"
   reduceRefSup :: Term -> Word64 -> IO Term
@@ -294,14 +260,12 @@ tagT 0x03 = SUB
 tagT 0x04 = REF
 tagT 0x05 = LET
 tagT 0x06 = APP
-tagT 0x07 = ANN
 tagT 0x08 = MAT
 tagT 0x09 = OPX
 tagT 0x0A = OPY
 tagT 0x0B = ERA
 tagT 0x0C = LAM
 tagT 0x0D = SUP
-tagT 0x0E = TYP
 tagT 0x0F = CTR
 tagT 0x10 = W32
 tagT 0x11 = CHR
@@ -328,9 +292,6 @@ _LET_ = 0x05
 _APP_ :: Tag
 _APP_ = 0x06
 
-_ANN_ :: Tag
-_ANN_ = 0x07
-
 _MAT_ :: Tag
 _MAT_ = 0x08
 
@@ -348,9 +309,6 @@ _LAM_ = 0x0C
 
 _SUP_ :: Tag
 _SUP_ = 0x0D
-
-_TYP_ :: Tag
-_TYP_ = 0x0E
 
 _CTR_ :: Tag
 _CTR_ = 0x0F

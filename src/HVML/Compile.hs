@@ -102,21 +102,21 @@ compileFullCore book fid (Var name) host = do
   compileFullVar name host
 compileFullCore book fid (Let mode var val bod) host = do
   letNam <- fresh "let"
-  emit $ "Loc " ++ letNam ++ " = alloc_node(3);"
-  emit $ "set(" ++ letNam ++ " + 0, term_new(SUB, 0, 0));"
-  valT <- compileFullCore book fid val (letNam ++ " + 1")
-  emit $ "set(" ++ letNam ++ " + 1, " ++ valT ++ ");"
+  emit $ "Loc " ++ letNam ++ " = alloc_node(2);"
+  -- emit $ "set(" ++ letNam ++ " + 0, term_new(SUB, 0, 0));"
+  valT <- compileFullCore book fid val (letNam ++ " + 0")
+  emit $ "set(" ++ letNam ++ " + 0, " ++ valT ++ ");"
   bind var $ "term_new(VAR, 0, " ++ letNam ++ " + 0)"
-  bodT <- compileFullCore book fid bod (letNam ++ " + 2")
-  emit $ "set(" ++ letNam ++ " + 2, " ++ bodT ++ ");"
+  bodT <- compileFullCore book fid bod (letNam ++ " + 1")
+  emit $ "set(" ++ letNam ++ " + 1, " ++ bodT ++ ");"
   return $ "term_new(LET, " ++ show (fromEnum mode) ++ ", " ++ letNam ++ ")"
 compileFullCore book fid (Lam var bod) host = do
   lamNam <- fresh "lam"
-  emit $ "Loc " ++ lamNam ++ " = alloc_node(2);"
-  emit $ "set(" ++ lamNam ++ " + 0, term_new(SUB, 0, 0));"
+  emit $ "Loc " ++ lamNam ++ " = alloc_node(1);"
+  -- emit $ "set(" ++ lamNam ++ " + 0, term_new(SUB, 0, 0));"
   bind var $ "term_new(VAR, 0, " ++ lamNam ++ " + 0)"
-  bodT <- compileFullCore book fid bod (lamNam ++ " + 1")
-  emit $ "set(" ++ lamNam ++ " + 1, " ++ bodT ++ ");"
+  bodT <- compileFullCore book fid bod (lamNam ++ " + 0")
+  emit $ "set(" ++ lamNam ++ " + 0, " ++ bodT ++ ");"
   return $ "term_new(LAM, 0, " ++ lamNam ++ ")"
 compileFullCore book fid (App fun arg) host = do
   appNam <- fresh "app"
@@ -144,22 +144,6 @@ compileFullCore book fid (Dup lab dp0 dp1 val bod) host = do
   emit $ "set(" ++ dupNam ++ " + 0, " ++ valT ++ ");"
   bodT <- compileFullCore book fid bod host
   return bodT
-compileFullCore book fid (Typ var bod) host = do
-  typNam <- fresh "typ"
-  emit $ "Loc " ++ typNam ++ " = alloc_node(2);"
-  emit $ "set(" ++ typNam ++ " + 0, term_new(SUB, 0, 0));"
-  bind var $ "term_new(VAR, 0, " ++ typNam ++ " + 0)"
-  bodT <- compileFullCore book fid bod (typNam ++ " + 1")
-  emit $ "set(" ++ typNam ++ " + 1, " ++ bodT ++ ");"
-  return $ "term_new(TYP, 0, " ++ typNam ++ ")"
-compileFullCore book fid (Ann val typ) host = do
-  annNam <- fresh "ann"
-  emit $ "Loc " ++ annNam ++ " = alloc_node(2);"
-  valT <- compileFullCore book fid val (annNam ++ " + 0")
-  typT <- compileFullCore book fid typ (annNam ++ " + 1")
-  emit $ "set(" ++ annNam ++ " + 0, " ++ valT ++ ");"
-  emit $ "set(" ++ annNam ++ " + 1, " ++ typT ++ ");"
-  return $ "term_new(ANN, 0, " ++ annNam ++ ")"
 compileFullCore book fid (Ctr cid fds) host = do
   ctrNam <- fresh "ctr"
   let arity = length fds
@@ -479,12 +463,12 @@ compileFastCore book fid (Var name) reuse = do
   compileFastVar name
 compileFastCore book fid (Lam var bod) reuse = do
   lamNam <- fresh "lam"
-  lamLoc <- compileFastAlloc 2 reuse
+  lamLoc <- compileFastAlloc 1 reuse
   emit $ "Loc " ++ lamNam ++ " = " ++ lamLoc ++ ";"
-  emit $ "set(" ++ lamNam ++ " + 0, term_new(SUB, 0, 0));"
+  -- emit $ "set(" ++ lamNam ++ " + 0, term_new(SUB, 0, 0));"
   bind var $ "term_new(VAR, 0, " ++ lamNam ++ " + 0)"
   bodT <- compileFastCore book fid bod reuse
-  emit $ "set(" ++ lamNam ++ " + 1, " ++ bodT ++ ");"
+  emit $ "set(" ++ lamNam ++ " + 0, " ++ bodT ++ ");"
   return $ "term_new(LAM, 0, " ++ lamNam ++ ")"
 compileFastCore book fid (App fun arg) reuse = do
   appNam <- fresh "app"
@@ -532,24 +516,6 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) reuse = do
   bind dp0 dp0Nam
   bind dp1 dp1Nam
   compileFastCore book fid bod reuse
-compileFastCore book fid (Typ var bod) reuse = do
-  typNam <- fresh "typ"
-  typLoc <- compileFastAlloc 2 reuse
-  emit $ "Loc " ++ typNam ++ " = " ++ typLoc ++ ";"
-  emit $ "set(" ++ typNam ++ " + 0, term_new(SUB, 0, 0));"
-  bind var $ "term_new(VAR, 0, " ++ typNam ++ " + 0)"
-  bodT <- compileFastCore book fid bod reuse
-  emit $ "set(" ++ typNam ++ " + 1, " ++ bodT ++ ");"
-  return $ "term_new(TYP, 0, " ++ typNam ++ ")"
-compileFastCore book fid (Ann val typ) reuse = do
-  annNam <- fresh "ann"
-  annLoc <- compileFastAlloc 2 reuse
-  emit $ "Loc " ++ annNam ++ " = " ++ annLoc ++ ";"
-  valT <- compileFastCore book fid val reuse
-  typT <- compileFastCore book fid typ reuse
-  emit $ "set(" ++ annNam ++ " + 0, " ++ valT ++ ");"
-  emit $ "set(" ++ annNam ++ " + 1, " ++ typT ++ ");"
-  return $ "term_new(ANN, 0, " ++ annNam ++ ")"
 compileFastCore book fid (Ctr cid fds) reuse = do
   ctrNam <- fresh "ctr"
   let arity = length fds

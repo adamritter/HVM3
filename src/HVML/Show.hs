@@ -37,10 +37,6 @@ coreToString core =
         let val' = coreToString val in
         let bod' = coreToString bod in
         "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ val' ++ "\n" ++ bod'
-      Typ nam typ ->
-        "%" ++ nam ++ " " ++ coreToString typ
-      Ann val typ ->
-        "{" ++ coreToString val ++ " :: " ++ coreToString typ ++ "}"
       Ref nam fid arg ->
         let arg' = intercalate " " (map coreToString arg) in
         "@" ++ nam ++ "(" ++ arg' ++ ")"

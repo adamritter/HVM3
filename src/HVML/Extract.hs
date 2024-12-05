@@ -44,14 +44,14 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       let loc  = termLoc term
       let mode = modeT (termLab term)
       name <- genName state (loc + 0)
-      val  <- extractCoreAt state reduceAt book (loc + 1)
-      bod  <- extractCoreAt state reduceAt book (loc + 2)
+      val  <- extractCoreAt state reduceAt book (loc + 0)
+      bod  <- extractCoreAt state reduceAt book (loc + 1)
       return $ Let mode name val bod
 
     LAM -> do
       let loc = termLoc term
       name <- genName state (loc + 0)
-      bod  <- extractCoreAt state reduceAt book (loc + 1)
+      bod  <- extractCoreAt state reduceAt book (loc + 0)
       return $ Lam name bod
     
     APP -> do
@@ -67,26 +67,15 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       tm1 <- extractCoreAt state reduceAt book (loc + 1)
       return $ Sup lab tm0 tm1
 
-    TYP -> do
-      let loc = termLoc term
-      name <- genName state (loc + 0)
-      bod  <- extractCoreAt state reduceAt book (loc + 1)
-      return $ Typ name bod
-    
-    ANN -> do
-      let loc = termLoc term
-      val <- extractCoreAt state reduceAt book (loc + 0)
-      typ <- extractCoreAt state reduceAt book (loc + 1)
-      return $ Ann val typ
-    
     VAR -> do
       let loc = termLoc term
       sub <- got (loc + 0)
-      if termTag sub == _SUB_
+      if termGetBit sub == 0
         then do
           name <- genName state loc
           return $ Var name
         else do
+          set (loc + 0) (termRemBit sub)
           extractCoreAt state reduceAt book (loc + 0)
 
     DP0 -> do
@@ -206,13 +195,6 @@ liftDups (Dup lab dp0 dp1 val bod) =
   let (valT, valD) = liftDups val
       (bodT, bodD) = liftDups bod
   in (bodT, \x -> valD (bodD (Dup lab dp0 dp1 valT x)))
-liftDups (Typ nam bod) =
-  let (bodT, bodD) = liftDups bod
-  in (Typ nam bodT, bodD)
-liftDups (Ann val typ) =
-  let (valT, valD) = liftDups val
-      (typT, typD) = liftDups typ
-  in (Ann valT typT, valD . typD)
 liftDups (Ctr cid fds) =
   let (fdsT, fdsD) = liftDupsList fds
   in (Ctr cid fdsT, fdsD)

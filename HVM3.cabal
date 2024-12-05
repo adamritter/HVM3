@@ -19,7 +19,6 @@ executable hvml
     other-modules:    HVML.Type
                     , HVML.Collapse
                     , HVML.Compile
-                    , HVML.Equal
                     , HVML.Extract
                     , HVML.Inject
                     , HVML.Parse
@@ -35,6 +34,7 @@ executable hvml
                       ansi-terminal == 1.1.1,
                       transformers == 0.6.1.1,
                       list-t == 1.0.5.7,
+                      time ^>=1.12.2,
                       process,
                       libffi,
                       unix,
@@ -43,7 +43,7 @@ executable hvml
     default-language: GHC2024
     c-sources:        src/HVML/Runtime.c
     extra-libraries:  c
-    ghc-options:     -Wno-all
+    ghc-options:     -Wno-all -threaded
 
 executable hvms
     import:           warnings

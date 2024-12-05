@@ -99,18 +99,6 @@ parseCore = do
               return $ Ref "SUP" _SUP_F_ [Var ("&" ++ name), tm0, tm1]
         Nothing -> do
           return $ Var ("&" ++ name)
-    '%' -> do
-      consume "%"
-      nam <- parseName1
-      typ <- parseCore
-      return $ Typ nam typ
-    '{' -> do
-      consume "{"
-      val <- parseCore
-      consume "::"
-      typ <- parseCore
-      consume "}"
-      return $ Ann val typ
     '!' -> do
       consume "!"
       skip
@@ -488,8 +476,6 @@ setRefIds fids term = case term of
   App f x       -> App (setRefIds fids f) (setRefIds fids x)
   Sup l x y     -> Sup l (setRefIds fids x) (setRefIds fids y)
   Dup l x y v b -> Dup l x y (setRefIds fids v) (setRefIds fids b)
-  Typ x t       -> Typ x (setRefIds fids t)
-  Ann x t       -> Ann (setRefIds fids x) (setRefIds fids t)
   Ctr cid fds   -> Ctr cid (map (setRefIds fids) fds)
   Mat x mov css -> Mat (setRefIds fids x) (map (\ (k,v) -> (k, setRefIds fids v)) mov) (map (\ (ctr,fds,cs) -> (ctr, fds, setRefIds fids cs)) css)
   Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
@@ -515,8 +501,6 @@ collectLabels term = case term of
   App fun arg         -> MS.union (collectLabels fun) (collectLabels arg)
   Sup lab tm0 tm1     -> MS.insert lab () $ MS.union (collectLabels tm0) (collectLabels tm1)
   Dup lab _ _ val bod -> MS.insert lab () $ MS.union (collectLabels val) (collectLabels bod)
-  Typ _ typ           -> collectLabels typ
-  Ann val typ         -> MS.union (collectLabels val) (collectLabels typ)
   Ctr _ fds           -> MS.unions $ map collectLabels fds
   Mat val mov css     -> MS.unions $ collectLabels val : map (collectLabels . snd) mov ++ map (\(_,_,bod) -> collectLabels bod) css
   Op2 _ x y           -> MS.union (collectLabels x) (collectLabels y)
@@ -567,13 +551,6 @@ lexify term = evalState (go term MS.empty) 0 where
       ctx  <- extend dp1 dp1' ctx
       bod  <- go bod ctx
       return $ Dup lab dp0' dp1' val bod
-    Typ nam typ -> do
-      typ <- go typ ctx
-      return $ Typ nam typ
-    Ann val typ -> do
-      val <- go val ctx
-      typ <- go typ ctx
-      return $ Ann val typ
     Ctr cid fds -> do
       fds <- mapM (\x -> go x ctx) fds
       return $ Ctr cid fds
