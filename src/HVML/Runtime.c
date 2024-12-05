@@ -417,9 +417,9 @@ Term reduce_dup_era(Term dup, Term era) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
-  set(dup_loc + 0, era);
-  set(dup_loc + 1, era);
-  return got(dup_loc + dup_num);
+  sub(dup_loc + 0, era);
+  sub(dup_loc + 1, era);
+  return term_rem_bit(got(dup_loc + dup_num));
 }
 
 // ! &L{r s} = λx(f)
@@ -451,7 +451,7 @@ Term reduce_dup_lam(Term dup, Term lam) {
   sub(dup_loc + 0, term_new(LAM, 0, lm0));
   sub(dup_loc + 1, term_new(LAM, 0, lm1));
   sub(lam_loc + 0, term_new(SUP, dup_lab, su0));
-  return got(dup_loc + dup_num);
+  return term_rem_bit(got(dup_loc + dup_num));
 }
 
 // ! &L{x y} = &R{a b}
@@ -477,7 +477,7 @@ Term reduce_dup_sup(Term dup, Term sup) {
     Term tm1 = got(sup_loc + 1);
     sub(dup_loc + 0, tm0);
     sub(dup_loc + 1, tm1);
-    return got(dup_loc + dup_num);
+    return term_rem_bit(got(dup_loc + dup_num));
   } else {
     Loc du0 = alloc_node(2);
     Loc du1 = alloc_node(2);
@@ -496,7 +496,7 @@ Term reduce_dup_sup(Term dup, Term sup) {
     set(su1 + 1, term_new(DP1, dup_lab, du1));
     sub(dup_loc + 0, term_new(SUP, sup_lab, su0));
     sub(dup_loc + 1, term_new(SUP, sup_lab, su1));
-    return got(dup_loc + dup_num);
+    return term_rem_bit(got(dup_loc + dup_num));
   }
 }
 
@@ -529,7 +529,7 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   }
   sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
   sub(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
-  return got(dup_loc + dup_num);
+  return term_rem_bit(got(dup_loc + dup_num));
 }
 
 // ! &L{x y} = 123
@@ -543,7 +543,7 @@ Term reduce_dup_w32(Term dup, Term w32) {
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   sub(dup_loc + 0, w32);
   sub(dup_loc + 1, w32);
-  return got(dup_loc + dup_num);
+  return term_rem_bit(got(dup_loc + dup_num));
 }
 
 // ! &L{x y} = @foo(a b c ...)
@@ -574,7 +574,7 @@ Term reduce_dup_ref(Term dup, Term ref) {
   }
   sub(dup_loc + 0, term_new(REF, ref_lab, ref0));
   sub(dup_loc + 1, term_new(REF, ref_lab, ref1));
-  return got(dup_loc + dup_num);
+  return term_rem_bit(got(dup_loc + dup_num));
 }
 
 // ~ * {K0 K1 K2 ...} 
@@ -898,6 +898,21 @@ Term reduce(Term term) {
         next = got(loc + 0);
         continue;
       }
+      case MAT: {
+        HVM.sbuf[(*spos)++] = next;
+        next = got(loc + 0);
+        continue;
+      }
+      case OPX: {
+        HVM.sbuf[(*spos)++] = next;
+        next = got(loc + 0);
+        continue;
+      }
+      case OPY: {
+        HVM.sbuf[(*spos)++] = next;
+        next = got(loc + 1);
+        continue;
+      }
       case DP0: {
         Term sb0 = got(loc + 0);
         if (term_get_bit(sb0) == 0) {
@@ -919,21 +934,6 @@ Term reduce(Term term) {
           next = term_rem_bit(sb1);
           continue;
         }
-      }
-      case MAT: {
-        HVM.sbuf[(*spos)++] = next;
-        next = got(loc + 0);
-        continue;
-      }
-      case OPX: {
-        HVM.sbuf[(*spos)++] = next;
-        next = got(loc + 0);
-        continue;
-      }
-      case OPY: {
-        HVM.sbuf[(*spos)++] = next;
-        next = got(loc + 1);
-        continue;
       }
       case VAR: {
         Term sub = got(loc);

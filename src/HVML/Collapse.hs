@@ -226,9 +226,7 @@ instance Monad Collapse where
           -- | otherwise = go q (chr (ord 'a' + r) : ac)
           -- where (q,r) = quotRem (n - 1) 26
 
-type CollapseDupsState = (IM.IntMap [Int])
-
-collapseDupsAt :: CollapseDupsState -> ReduceAt -> Book -> Loc -> HVM Core
+collapseDupsAt :: IM.IntMap [Int] -> ReduceAt -> Book -> Loc -> HVM Core
 collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
@@ -356,25 +354,6 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
       putStrLn ("unexpected-tag:" ++ show tag)
       return $ Var "?"
       -- exitFailure
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 -- Sup Collapser
 -- -------------

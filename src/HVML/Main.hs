@@ -142,11 +142,11 @@ cliRun filePath debug compiled mode showStats = do
   -- Print all collapsed results
   when (mode == Collapse) $ do
     forM_ vals $ \ term -> do
-      putStrLn $ coreToString term
+      putStrLn $ showCore term
 
   -- Prints just the first collapsed result
   when (mode == Search || mode == Normalize) $ do
-    putStrLn $ coreToString (head vals)
+    putStrLn $ showCore (head vals)
 
   when (mode /= Normalize) $ do
     putStrLn ""
