@@ -9,6 +9,7 @@ import HVMS.Type
 
 pcoreToString :: PCore -> String
 pcoreToString (PVar nam)     = nam
+pcoreToString (PRef nam)     = "@" ++ nam
 pcoreToString PNul           = "*"
 pcoreToString (PLam var bod) = "(" ++ ncoreToString var ++ " " ++ pcoreToString bod ++ ")"
 pcoreToString (PSup t1 t2)   = "{" ++ pcoreToString t1 ++ " " ++ pcoreToString t2 ++ "}"
@@ -42,6 +43,7 @@ tagToString tag
   | tag == _APP_ = "APP"
   | tag == _SUP_ = "SUP"
   | tag == _DUP_ = "DUP"
+  | tag == _REF_ = "REF"
   | otherwise    = "???"
 
 labToString :: Lab -> String

@@ -13,7 +13,6 @@ import HVMS.Inject
 import HVMS.Extract
 import HVMS.Parse
 import HVMS.Show
-import HVMS.Normal
 
 -- Main
 -- ----
@@ -38,17 +37,19 @@ cliRun filePath showStats = do
   hvmInit
 
   code <- readFile filePath
-  net <- case doParseNet code of
-    Right net -> pure net
+  book <- case doParseBook code of
+    Right book -> pure book
     Left  err -> exitWithError ("ParserError: " ++ err)
 
-  root <- doInjectNet net
-  net' <- doExtractNet root
-  norm <- normal root
+  maybeMain <- doInjectBook book
+  main <- case maybeMain of
+    Just main -> pure main
+    Nothing -> exitWithError "missing 'main' definition"
 
-  set 0 norm
-  norm' <- doExtractNet norm
-  putStrLn $ netToString norm'
+  term <- normalize main
+
+  net <- extractNet term
+  putStrLn $ netToString net
 
   when showStats $ do
     end <- getCPUTime

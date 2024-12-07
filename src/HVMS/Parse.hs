@@ -5,6 +5,7 @@ import Text.Parsec.String
 import HVMS.Type
 
 import Debug.Trace
+import qualified Data.Map.Strict as MS
 
 -- Core Parser
 -- ----------
@@ -28,6 +29,10 @@ parsePCore = do
       tm2 <- parsePCore
       consume "}"
       return $ PSup tm1 tm2
+    '@' -> do
+      consume "@"
+      name <- parseName
+      return $ PRef name
     _ -> do
       name <- parseName
       return $ PVar name
@@ -79,6 +84,22 @@ parseNet = do
   bag <- parseBag
   return $ Net rot bag
 
+parseDef :: Parser (String, Net)
+parseDef = do
+  consume "@"
+  name <- parseName
+  consume "="
+  net <- parseNet
+  spaces
+  return (name, net)
+
+parseBook :: Parser Book
+parseBook = do
+  defs <- many parseDef
+  spaces
+  eof
+  return $ Book (MS.fromList defs)
+
 -- Utilities
 -- ---------
 
@@ -91,10 +112,10 @@ parseName = spaces >> many1 (alphaNum <|> char '_')
 consume :: String -> Parser String
 consume str = spaces >> string str
 
--- Main Entry Points
+-- Main Entry Point
 -- ----------------
 
-doParseNet :: String -> Either String Net
-doParseNet code = case parse parseNet "" code of
+doParseBook :: String -> Either String Book
+doParseBook code = case parse parseBook "" code of
   Right net -> Right net
   Left  err -> Left  (show err)
