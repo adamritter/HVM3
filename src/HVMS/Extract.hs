@@ -26,6 +26,8 @@ extractPCore term = case termTag term of
           tm1' <- extractPCore tm1
           tm2' <- extractPCore tm2
           return $ PSup tm1' tm2'
+      | tag == _W32_ -> do
+          return $ PU32 (termLoc term)
       | otherwise -> return PNul
 
 -- Convert a term in memory to a NCore.
@@ -42,6 +44,14 @@ extractNCore loc term = case termTag term of
           arg' <- extractPCore arg
           ret' <- extractNCore (loc + 1) ret
           return $ NApp arg' ret'
+      | tag == _OPX_ || tag == _OPY_ -> do
+          let op  = (toEnum (fromIntegral (termLab term)))
+          let loc = termLoc term
+          arg <- get (loc + 0)
+          ret <- get (loc + 1)
+          arg' <- extractPCore arg
+          ret' <- extractNCore (loc + 1) ret
+          return $ NOp2 op arg' ret'
       | tag == _DUP_ -> do
           let loc = termLoc term
           dp1 <- get (loc + 0)
@@ -58,6 +68,7 @@ extractVar loc term = case termTag term of
       | tag == _LAM_ -> extractPCore term
       | tag == _SUP_ -> extractPCore term
       | tag == _SUB_ -> return $ PVar ("v" ++ show loc)
+      | tag == _W32_ -> return $ PU32 (termLoc term)
       | otherwise    -> return PNul
 
 -- Bag and Net Extraction

@@ -24,8 +24,29 @@ typedef uint64_t u64;
 #define SUP 0x07
 #define DUP 0x08
 #define REF 0x09
+#define OPX 0x0A
+#define OPY 0x0B
+#define W32 0x0C
 
 const Term VOID = 0;
+
+// Operators
+#define OP_ADD 0x00
+#define OP_SUB 0x01
+#define OP_MUL 0x02
+#define OP_DIV 0x03
+#define OP_MOD 0x04
+#define OP_EQ  0x05
+#define OP_NE  0x06
+#define OP_LT  0x07
+#define OP_GT  0x08
+#define OP_LTE 0x09
+#define OP_GTE 0x0A
+#define OP_AND 0x0B
+#define OP_OR  0x0C
+#define OP_XOR 0x0D
+#define OP_LSH 0x0E
+#define OP_RSH 0x0F
 
 // Types
 typedef uint64_t u64;
@@ -86,8 +107,15 @@ Loc term_loc(Term term) {
 }
 
 Term term_offset_loc(Term term, Loc offset) {
-  if (term_tag(term) == SUB) {
-    return term;
+  // do not offset terms that use loc for something other than
+  // indices into the global buffer.
+  switch (term_tag(term)) {
+    case SUB:
+    case NUL:
+    case ERA:
+    case REF:
+    case W32:
+      return term;
   }
 
   Term tag = term_tag(term);
@@ -180,6 +208,13 @@ void def_new(char* name) {
 
   memcpy(def.nodes, BUFF, sizeof(Term) * def.nodes_len);
   memcpy(def.rbag, BUFF + RBAG, sizeof(Term) * def.rbag_len);
+
+  // printf("NEW DEF '%s':\n", def.name);
+  // dump_buff();
+  // printf("\n");
+
+  memset(BUFF, 0, sizeof(Term) * def.nodes_len);
+  memset(BUFF + RBAG, 0, sizeof(Term) * def.rbag_len);
 
   RNOD_END = 0;
   RBAG_END = 0;
@@ -280,6 +315,106 @@ static void interact_appnul(Loc a_loc) {
   move(ret, term_new(NUL, 0, 0));
 }
 
+static void interact_appw32(Loc a_loc, u32 num) {
+  Term arg = take(port(1, a_loc));
+  Loc  ret = port(2, a_loc);
+  link(term_new(W32, 0, num), arg);
+  move(ret, term_new(W32, 0, num));
+}
+
+static void interact_opxnul(Loc a_loc) {
+  Term arg = take(port(1, a_loc));
+  Loc  ret = port(2, a_loc);
+  link(term_new(ERA, 0, 0), arg);
+  move(ret, term_new(NUL, 0, 0));
+}
+
+static void interact_opxw32(Loc a_loc, Lab op, u32 num) {
+  Term arg = swap(port(1, a_loc), term_new(W32, 0, num));
+  link(term_new(OPY, op, a_loc), arg);
+}
+
+static void interact_opxsup(Loc a_loc, Loc b_loc) {
+  Term arg = take(port(1, a_loc));
+  Loc  ret = port(2, a_loc);
+  Term tm1 = take(port(1, b_loc));
+  Term tm2 = take(port(2, b_loc));
+  Loc  dp1 = alloc_node(2);
+  Loc  dp2 = alloc_node(2);
+  Loc  cn1 = alloc_node(2);
+  Loc  cn2 = alloc_node(2);
+  set(port(1, dp1), term_new(SUB, 0, 0));
+  set(port(2, dp1), term_new(SUB, 0, 0));
+  set(port(1, dp2), term_new(VAR, 0, port(2, cn1)));
+  set(port(2, dp2), term_new(VAR, 0, port(2, cn2)));
+  set(port(1, cn1), term_new(VAR, 0, port(1, dp1)));
+  set(port(2, cn1), term_new(SUB, 0, 0));
+  set(port(1, cn2), term_new(VAR, 0, port(2, dp1)));
+  set(port(2, cn2), term_new(SUB, 0, 0));
+  link(term_new(DUP, 0, dp1), arg);
+  move(ret, term_new(SUP, 0, dp2));
+  link(term_new(OPX, 0, cn1), tm1);
+  link(term_new(OPX, 0, cn2), tm2);
+}
+
+static void interact_opynul(Loc a_loc) {
+  Term arg = take(port(1, a_loc));
+  Loc  ret = port(2, a_loc);
+  link(term_new(ERA, 0, 0), arg);
+  move(ret, term_new(NUL, 0, 0));
+}
+
+static void interact_opyw32(Loc a_loc, Lab op, u32 y) {
+  u32 x  = term_loc(take(port(1, a_loc)));
+  Loc ret = port(2, a_loc);
+  u32 res;
+
+  switch (op) {
+    case OP_ADD: res = x + y; break;
+    case OP_SUB: res = x - y; break;
+    case OP_MUL: res = x * y; break;
+    case OP_DIV: res = x / y; break;
+    case OP_MOD: res = x % y; break;
+    case OP_EQ : res = x == y; break;
+    case OP_NE : res = x != y; break;
+    case OP_LT : res = x < y; break;
+    case OP_GT : res = x > y; break;
+    case OP_LTE: res = x <= y; break;
+    case OP_GTE: res = x >= y; break;
+    case OP_AND: res = x & y; break;
+    case OP_OR : res = x | y; break;
+    case OP_XOR: res = x ^ y; break;
+    case OP_LSH: res = x << y; break;
+    case OP_RSH: res = x >> y; break;
+  }
+
+  move(ret, term_new(W32, 0, res));
+}
+
+static void interact_opysup(Loc a_loc, Loc b_loc) {
+  Term arg = take(port(1, a_loc));
+  Loc  ret = port(2, a_loc);
+  Term tm1 = take(port(1, b_loc));
+  Term tm2 = take(port(2, b_loc));
+  Loc  dp1 = alloc_node(2);
+  Loc  dp2 = alloc_node(2);
+  Loc  cn1 = alloc_node(2);
+  Loc  cn2 = alloc_node(2);
+  set(port(1, dp1), term_new(SUB, 0, 0));
+  set(port(2, dp1), term_new(SUB, 0, 0));
+  set(port(1, dp2), term_new(VAR, 0, port(2, cn1)));
+  set(port(2, dp2), term_new(VAR, 0, port(2, cn2)));
+  set(port(1, cn1), term_new(VAR, 0, port(1, dp1)));
+  set(port(2, cn1), term_new(SUB, 0, 0));
+  set(port(1, cn2), term_new(VAR, 0, port(2, dp1)));
+  set(port(2, cn2), term_new(SUB, 0, 0));
+  link(term_new(DUP, 0, dp1), arg);
+  move(ret, term_new(SUP, 0, dp2));
+  link(term_new(OPY, 0, cn1), tm1);
+  link(term_new(OPY, 0, cn2), tm2);
+}
+
+
 static void interact_dupsup(Loc a_loc, Loc b_loc) {
   Loc  dp1 = port(1, a_loc);
   Loc  dp2 = port(2, a_loc);
@@ -313,9 +448,16 @@ static void interact_duplam(Loc a_loc, Loc b_loc) {
   link(term_new(DUP, 0, du2), bod);
 }
 
-static void interact_dupnul(u64 a_loc) {
-  u64 dp1 = port(1, a_loc);
-  u64 dp2 = port(2, a_loc);
+static void interact_dupnul(Loc a_loc) {
+  Loc dp1 = port(1, a_loc);
+  Loc dp2 = port(2, a_loc);
+  move(dp1, term_new(W32, 0, a_loc));
+  move(dp2, term_new(W32, 0, a_loc));
+}
+
+static void interact_dupw32(u64 a_loc) {
+  Loc dp1 = port(1, a_loc);
+  Loc dp2 = port(2, a_loc);
   move(dp1, term_new(NUL, 0, 0));
   move(dp2, term_new(NUL, 0, 0));
 }
@@ -347,14 +489,34 @@ static void interact(Term neg, Term pos) {
       switch (pos_tag) {
         case LAM: interact_applam(neg_loc, pos_loc); break;
         case NUL: interact_appnul(neg_loc); break;
+        case W32: interact_appw32(neg_loc, pos_loc); break;
         case REF: link(neg, expand_ref(pos_loc)); break;
         case SUP: interact_appsup(neg_loc, pos_loc); break;
+      }
+      break;
+    case OPX:
+      switch (pos_tag) {
+        case LAM: break;
+        case NUL: interact_opxnul(neg_loc); break;
+        case W32: interact_opxw32(neg_loc, term_lab(neg), pos_loc); break;
+        case REF: link(neg, expand_ref(pos_loc)); break;
+        case SUP: interact_opxsup(neg_loc, pos_loc); break;
+      }
+      break;
+    case OPY:
+      switch (pos_tag) {
+        case LAM: break;
+        case NUL: interact_opynul(neg_loc); break;
+        case W32: interact_opyw32(neg_loc, term_lab(neg), pos_loc); break;
+        case REF: link(neg, expand_ref(pos_loc)); break;
+        case SUP: interact_opysup(neg_loc, pos_loc); break;
       }
       break;
     case DUP:
       switch (pos_tag) {
         case LAM: interact_duplam(neg_loc, pos_loc); break;
         case NUL: interact_dupnul(neg_loc); break;
+        case W32: interact_dupw32(neg_loc); break;
         // TODO(enricozb): dup-ref optimization
         case REF: link(neg, expand_ref(pos_loc)); break;
         case SUP: interact_dupsup(neg_loc, pos_loc); break;
@@ -364,6 +526,7 @@ static void interact(Term neg, Term pos) {
       switch (pos_tag) {
         case LAM: interact_eralam(pos_loc); break;
         case NUL: break;
+        case W32: break;
         case REF: break;
         case SUP: interact_erasup(pos_loc); break;
       }
@@ -442,6 +605,10 @@ static char* tag_to_str(Tag tag) {
     case SUP:  return "SUP";
     case DUP:  return "DUP";
     case REF:  return "REF";
+    case OPX:  return "OPX";
+    case OPY:  return "OPY";
+    case W32:  return "W32";
+
     default:   return "???";
   }
 }

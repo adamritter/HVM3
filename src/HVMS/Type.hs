@@ -15,14 +15,23 @@ data PCore
   | PNul
   | PLam NCore PCore
   | PSup PCore PCore
+  | PU32 Word32
   deriving (Show, Eq)
 
 data NCore
   = NSub String
   | NEra
   | NApp PCore NCore
+  | NOp2 Oper  PCore NCore
   | NDup NCore NCore
   deriving (Show, Eq)
+
+data Oper
+  = OP_ADD | OP_SUB | OP_MUL | OP_DIV
+  | OP_MOD | OP_EQ  | OP_NE  | OP_LT
+  | OP_GT  | OP_LTE | OP_GTE | OP_AND
+  | OP_OR  | OP_XOR | OP_LSH | OP_RSH
+  deriving (Show, Eq, Enum)
 
 -- A Redex is a pair of Terms (trees connected by their main ports)
 type Dex = (NCore, PCore)
@@ -50,7 +59,7 @@ type Loc  = Word32
 type Term = Word64
 
 -- Runtime constants
-_VAR_, _SUB_, _NUL_, _ERA_, _LAM_, _APP_, _SUP_, _DUP_, _REF_ :: Tag
+_VAR_, _SUB_, _NUL_, _ERA_, _LAM_, _APP_, _SUP_, _DUP_, _REF_, _OPX_, _OPY_, _W32_ :: Tag
 _VAR_ = 0x01
 _SUB_ = 0x02
 _NUL_ = 0x03
@@ -60,6 +69,9 @@ _APP_ = 0x06
 _SUP_ = 0x07
 _DUP_ = 0x08
 _REF_ = 0x09
+_OPX_ = 0x0A
+_OPY_ = 0x0B
+_W32_ = 0x0C
 
 _VOID_ :: Term
 _VOID_ = 0x0

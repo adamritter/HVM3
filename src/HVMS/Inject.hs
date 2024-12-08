@@ -43,6 +43,8 @@ injectPCore (PSup tm1 tm2) loc defs vars = do
   set (sup + 0) tm1
   set (sup + 1) tm2
   return (vars, termNew _SUP_ 0 sup)
+injectPCore (PU32 num) loc defs vars =
+  return (vars, termNew _W32_ 0 num)
 
 injectNCore :: NCore -> Maybe Loc -> DefMap -> VarMap -> IO (VarMap, Term)
 injectNCore (NSub name) loc defs vars = case (Map.lookup name vars, loc) of
@@ -66,6 +68,13 @@ injectNCore (NApp arg ret) loc defs vars = do
   set (app + 0) arg
   set (app + 1) ret
   return (vars, termNew _APP_ 0 app)
+injectNCore (NOp2 opr arg ret) loc defs vars = do
+  loc <- allocNode 2
+  (vars, arg) <- injectPCore arg (Just (loc + 0)) defs vars
+  (vars, ret) <- injectNCore ret (Just (loc + 1)) defs vars
+  set (loc + 0) arg
+  set (loc + 1) ret
+  return (vars, termNew _OPX_ (fromIntegral $ fromEnum opr) loc)
 injectNCore (NDup dp1 dp2) loc defs vars = do
   dup <- allocNode 2
   (vars, dp1) <- injectNCore dp1 (Just (dup + 0)) defs vars
