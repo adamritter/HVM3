@@ -13,12 +13,31 @@ pcoreToString (PRef nam)     = "@" ++ nam
 pcoreToString PNul           = "*"
 pcoreToString (PLam var bod) = "(" ++ ncoreToString var ++ " " ++ pcoreToString bod ++ ")"
 pcoreToString (PSup t1 t2)   = "{" ++ pcoreToString t1 ++ " " ++ pcoreToString t2 ++ "}"
+pcoreToString (PU32 num)     = show num
 
 ncoreToString :: NCore -> String
 ncoreToString (NSub nam)     = nam
 ncoreToString NEra           = "*"
 ncoreToString (NApp arg ret) = "(" ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
 ncoreToString (NDup d1 d2)   = "{" ++ ncoreToString d1 ++ " " ++ ncoreToString d2 ++ "}"
+
+operToString :: Oper -> String
+operToString OP_ADD = "+"
+operToString OP_SUB = "-"
+operToString OP_MUL = "*"
+operToString OP_DIV = "/"
+operToString OP_MOD = "%"
+operToString OP_EQ  = "=="
+operToString OP_NE  = "!="
+operToString OP_LT  = "<"
+operToString OP_GT  = ">"
+operToString OP_LTE = "<="
+operToString OP_GTE = ">="
+operToString OP_AND = "&"
+operToString OP_OR  = "|"
+operToString OP_XOR = "^"
+operToString OP_LSH = "<<"
+operToString OP_RSH = ">>"
 
 dexToString :: Dex -> String
 dexToString (neg, pos) = ncoreToString neg ++ " ~ " ++ pcoreToString pos
@@ -44,6 +63,9 @@ tagToString tag
   | tag == _SUP_ = "SUP"
   | tag == _DUP_ = "DUP"
   | tag == _REF_ = "REF"
+  | tag == _OPX_ = "OPX"
+  | tag == _OPY_ = "OPY"
+  | tag == _W32_ = "W32"
   | otherwise    = "???"
 
 labToString :: Lab -> String
