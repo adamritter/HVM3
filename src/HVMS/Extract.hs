@@ -44,6 +44,14 @@ extractNCore loc term = case termTag term of
           arg' <- extractPCore arg
           ret' <- extractNCore (loc + 1) ret
           return $ NApp arg' ret'
+      | tag == _OPX_ || tag == _OPY_ -> do
+          let op  = (toEnum (fromIntegral (termLab term)))
+          let loc = termLoc term
+          arg <- get (loc + 0)
+          ret <- get (loc + 1)
+          arg' <- extractPCore arg
+          ret' <- extractNCore (loc + 1) ret
+          return $ NOp2 op arg' ret'
       | tag == _DUP_ -> do
           let loc = termLoc term
           dp1 <- get (loc + 0)

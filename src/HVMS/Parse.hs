@@ -53,7 +53,7 @@ parseNCore = do
           opr <- parseOper;
           arg <- parsePCore;
           ret <- parseNCore;
-          return $ POp2 opr arg ret
+          return $ NOp2 opr arg ret
         } <|> do {
           arg <- parsePCore;
           ret <- parseNCore;

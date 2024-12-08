@@ -16,10 +16,11 @@ pcoreToString (PSup t1 t2)   = "{" ++ pcoreToString t1 ++ " " ++ pcoreToString t
 pcoreToString (PU32 num)     = show num
 
 ncoreToString :: NCore -> String
-ncoreToString (NSub nam)     = nam
-ncoreToString NEra           = "*"
-ncoreToString (NApp arg ret) = "(" ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
-ncoreToString (NDup d1 d2)   = "{" ++ ncoreToString d1 ++ " " ++ ncoreToString d2 ++ "}"
+ncoreToString (NSub nam)        = nam
+ncoreToString NEra              = "*"
+ncoreToString (NApp arg ret)    = "(" ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
+ncoreToString (NDup d1 d2)      = "{" ++ ncoreToString d1 ++ " " ++ ncoreToString d2 ++ "}"
+ncoreToString (NOp2 op arg ret) = "(" ++ operToString op ++ " " ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
 
 operToString :: Oper -> String
 operToString OP_ADD = "+"

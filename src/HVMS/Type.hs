@@ -22,7 +22,7 @@ data NCore
   = NSub String
   | NEra
   | NApp PCore NCore
-  | POp2 Oper  PCore NCore
+  | NOp2 Oper  PCore NCore
   | NDup NCore NCore
   deriving (Show, Eq)
 

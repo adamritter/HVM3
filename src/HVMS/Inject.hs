@@ -68,7 +68,7 @@ injectNCore (NApp arg ret) loc defs vars = do
   set (app + 0) arg
   set (app + 1) ret
   return (vars, termNew _APP_ 0 app)
-injectNCore (POp2 opr arg ret) loc defs vars = do
+injectNCore (NOp2 opr arg ret) loc defs vars = do
   loc <- allocNode 2
   (vars, arg) <- injectPCore arg (Just (loc + 0)) defs vars
   (vars, ret) <- injectNCore ret (Just (loc + 1)) defs vars
