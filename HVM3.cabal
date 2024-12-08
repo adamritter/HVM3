@@ -51,7 +51,6 @@ executable hvms
     other-modules:    HVMS.Type
                     , HVMS.Extract
                     , HVMS.Inject
-                    , HVMS.Normal
                     , HVMS.Parse
                     , HVMS.Show
     build-depends:    base ^>=4.20.0.0,
