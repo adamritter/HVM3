@@ -8,10 +8,13 @@ import HVMS.Type
 
 extractPCore :: Term -> IO PCore
 extractPCore term = case termTag term of
-  NUL -> return PNul
   VAR -> do
     got <- get (termLoc term)
     extractVar (termLoc term) got
+  REF -> do
+    name <- defName (termLoc term)
+    return $ PRef name
+  NUL -> return PNul
   LAM -> do
     let loc = termLoc term
     var <- get (loc + 0)
@@ -49,6 +52,13 @@ extractNCore loc term = case termTag term of
     dp1' <- extractNCore (loc + 0) dp1
     dp2' <- extractNCore (loc + 1) dp2
     return $ NDup dp1' dp2'
+  MAT -> do
+    let num = termLab term
+    let loc = termLoc term
+    let extractArm i = get (loc + i) >>= extractPCore
+    ret  <- get (loc + 0) >>= extractNCore (loc + 0)
+    arms <- mapM extractArm [1..num]
+    return $ NMat ret arms
   x | elem x [OPX, OPY] -> do
     let op  = termOper term
     let loc = termLoc term
@@ -61,11 +71,15 @@ extractNCore loc term = case termTag term of
 extractVar :: Loc -> Term -> IO PCore
 extractVar loc term = case termTag term of
   VAR -> extractPCore term
+  REF -> extractPCore term
   NUL -> extractPCore term
   LAM -> extractPCore term
   SUP -> extractPCore term
   SUB -> return $ PVar ("v" ++ show loc)
   W32 -> return $ PU32 (termLoc term)
+  tag -> do
+    putStrLn $ "extractVar: unexpected tag " ++ show tag
+    return PNul
 
 -- Bag and Net Extraction
 -- ---------------------

@@ -27,6 +27,7 @@ typedef uint64_t u64;
 #define OPX 0x0A
 #define OPY 0x0B
 #define W32 0x0C
+#define MAT 0x0D
 
 const Term VOID = 0;
 
@@ -221,6 +222,10 @@ void def_new(char* name) {
 
   BOOK.defs[BOOK.len] = def;
   BOOK.len++;
+}
+
+char* def_name(Loc def_idx) {
+  return BOOK.defs[def_idx].name;
 }
 
 // Expands a ref's data into a linear block of nodes with its nodes' locs
@@ -455,12 +460,35 @@ static void interact_dupnul(Loc a_loc) {
   move(dp2, term_new(W32, 0, a_loc));
 }
 
-static void interact_dupw32(u64 a_loc) {
+static void interact_dupw32(Loc a_loc, u32 n) {
   Loc dp1 = port(1, a_loc);
   Loc dp2 = port(2, a_loc);
-  move(dp1, term_new(NUL, 0, 0));
-  move(dp2, term_new(NUL, 0, 0));
+  move(dp1, term_new(W32, 0, n));
+  move(dp2, term_new(W32, 0, n));
 }
+
+static void interact_matnul(Loc a_loc, Lab arity) {
+  move(port(1, a_loc), term_new(NUL, 0, 0));
+  for (u32 i = 0; i < arity; i++) {
+    link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
+  }
+}
+
+static void interact_matw32(Loc a_loc, Lab arity, u32 n) {
+  for (u32 i = 0; i < arity; i++) {
+    if (i != n) {
+      link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
+    }
+  }
+
+  Term ret = n < arity ? take(port(n + 2, a_loc)) : term_new(NUL, 0, 0);
+  move(port(1, a_loc), ret);
+}
+
+static void interact_matsup(Loc a_loc, Loc b_loc) {
+  printf("unimplemented\n");
+}
+
 
 static void interact_eralam(Loc b_loc) {
   Loc  var = port(1, b_loc);
@@ -516,10 +544,19 @@ static void interact(Term neg, Term pos) {
       switch (pos_tag) {
         case LAM: interact_duplam(neg_loc, pos_loc); break;
         case NUL: interact_dupnul(neg_loc); break;
-        case W32: interact_dupw32(neg_loc); break;
+        case W32: interact_dupw32(neg_loc, pos_loc); break;
         // TODO(enricozb): dup-ref optimization
         case REF: link(neg, expand_ref(pos_loc)); break;
         case SUP: interact_dupsup(neg_loc, pos_loc); break;
+      }
+      break;
+    case MAT:
+      switch (pos_tag) {
+        case LAM: break;
+        case NUL: interact_matnul(neg_loc, term_lab(neg)); break;
+        case W32: interact_matw32(neg_loc, term_lab(neg), pos_loc); break;
+        case REF: link(neg, expand_ref(pos_loc)); break;
+        case SUP: interact_matsup(neg_loc, pos_loc); break;
       }
       break;
     case ERA:
@@ -608,6 +645,7 @@ static char* tag_to_str(Tag tag) {
     case OPX:  return "OPX";
     case OPY:  return "OPY";
     case W32:  return "W32";
+    case MAT:  return "MAT";
 
     default:   return "???";
   }

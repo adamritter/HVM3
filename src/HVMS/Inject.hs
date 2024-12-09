@@ -1,5 +1,6 @@
 module HVMS.Inject where
 
+import Control.Monad (foldM)
 import Data.Word
 import Foreign.C.String (newCString)
 import qualified Data.Map as Map
@@ -61,27 +62,39 @@ injectNCore (NSub name) loc defs vars = case (Map.lookup name vars, loc) of
     return (vars, _VOID_)
 injectNCore NEra _ defs vars =
   return (vars, termNew ERA 0 0)
-injectNCore (NApp arg ret) loc defs vars = do
+injectNCore (NApp arg ret) _ defs vars = do
   app <- allocNode 2
   (vars, arg) <- injectPCore arg (Just (app + 0)) defs vars
   (vars, ret) <- injectNCore ret (Just (app + 1)) defs vars
   set (app + 0) arg
   set (app + 1) ret
   return (vars, termNew APP 0 app)
-injectNCore (NOp2 opr arg ret) loc defs vars = do
+injectNCore (NOp2 opr arg ret) _ defs vars = do
   loc <- allocNode 2
   (vars, arg) <- injectPCore arg (Just (loc + 0)) defs vars
   (vars, ret) <- injectNCore ret (Just (loc + 1)) defs vars
   set (loc + 0) arg
   set (loc + 1) ret
   return (vars, termNew OPX (fromIntegral $ fromEnum opr) loc)
-injectNCore (NDup dp1 dp2) loc defs vars = do
+injectNCore (NDup dp1 dp2) _ defs vars = do
   dup <- allocNode 2
   (vars, dp1) <- injectNCore dp1 (Just (dup + 0)) defs vars
   (vars, dp2) <- injectNCore dp2 (Just (dup + 1)) defs vars
   set (dup + 0) dp1
   set (dup + 1) dp2
   return (vars, termNew DUP 0 dup)
+injectNCore (NMat ret arms) _ defs vars = do
+  let num = fromIntegral (length arms) :: Lab
+  mt0 <- allocNode 1
+  (vars, ret) <- injectNCore ret (Just mt0) defs vars
+  set mt0 ret
+  mt1 <- allocNode (fromIntegral num :: Word64)
+  vars <- foldM (\vars (i, arm) -> do {
+    (vars, arm) <- injectPCore arm (Just (mt1 + i)) defs vars;
+    set (mt1 + i) arm;
+    return vars
+  }) vars (zip [0..num-1] arms)
+  return (vars, termNew MAT num mt0)
 
 -- Dex, Net, and Book Injection
 -- ----------------------------

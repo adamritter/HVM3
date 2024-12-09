@@ -24,6 +24,7 @@ data NCore
   | NApp PCore NCore
   | NOp2 Oper  PCore NCore
   | NDup NCore NCore
+  | NMat NCore [PCore]
   deriving (Show, Eq)
 
 data Oper
@@ -72,6 +73,7 @@ data Tag
   | OPX
   | OPY
   | W32
+  | MAT
   deriving (Enum, Eq, Show)
 
 -- Runtime constants
@@ -104,6 +106,11 @@ foreign import ccall unsafe "Runtime.c term_loc"
 
 foreign import ccall unsafe "Runtime.c def_new"
   defNew :: CString -> IO ()
+
+foreign import ccall unsafe "Runtime.c def_name"
+  defName_ :: Loc -> IO CString
+defName :: Loc -> IO String
+defName loc = defName_ loc >>= peekCString
 
 foreign import ccall unsafe "Runtime.c swap"
   swap :: Loc -> Term -> IO Term

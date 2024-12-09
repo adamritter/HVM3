@@ -67,6 +67,12 @@ parseNCore = do
       dp2 <- parseNCore
       consume "}"
       return $ NDup dp1 dp2
+    '?' -> do
+      consume "?("
+      ret  <- parseNCore
+      arms <- many1 parsePCore
+      consume ")"
+      return $ NMat ret arms
     _ -> do
       name <- parseName
       return $ NSub name
