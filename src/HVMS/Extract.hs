@@ -8,68 +8,64 @@ import HVMS.Type
 
 extractPCore :: Term -> IO PCore
 extractPCore term = case termTag term of
-  tag | tag == _NUL_ -> return PNul
-      | tag == _VAR_ -> do
-          got <- get (termLoc term)
-          extractVar (termLoc term) got
-      | tag == _LAM_ -> do
-          let loc = termLoc term
-          var <- get (loc + 0)
-          bod <- get (loc + 1)
-          var' <- extractNCore (loc + 0) var
-          bod' <- extractPCore bod
-          return $ PLam var' bod'
-      | tag == _SUP_ -> do
-          let loc = termLoc term
-          tm1 <- get (loc + 0)
-          tm2 <- get (loc + 1)
-          tm1' <- extractPCore tm1
-          tm2' <- extractPCore tm2
-          return $ PSup tm1' tm2'
-      | tag == _W32_ -> do
-          return $ PU32 (termLoc term)
-      | otherwise -> return PNul
+  NUL -> return PNul
+  VAR -> do
+    got <- get (termLoc term)
+    extractVar (termLoc term) got
+  LAM -> do
+    let loc = termLoc term
+    var <- get (loc + 0)
+    bod <- get (loc + 1)
+    var' <- extractNCore (loc + 0) var
+    bod' <- extractPCore bod
+    return $ PLam var' bod'
+  SUP -> do
+    let loc = termLoc term
+    tm1 <- get (loc + 0)
+    tm2 <- get (loc + 1)
+    tm1' <- extractPCore tm1
+    tm2' <- extractPCore tm2
+    return $ PSup tm1' tm2'
+  W32 -> return $ PU32 (termLoc term)
 
 -- Convert a term in memory to a NCore.
 -- The optional location is the location of the term
 -- being extracted in the buffer.
 extractNCore :: Loc -> Term -> IO NCore
 extractNCore loc term = case termTag term of
-  tag | tag == _ERA_ -> return NEra
-      | tag == _SUB_ -> return $ NSub ("v" ++ show loc)
-      | tag == _APP_ -> do
-          let loc = termLoc term
-          arg <- get (loc + 0)
-          ret <- get (loc + 1)
-          arg' <- extractPCore arg
-          ret' <- extractNCore (loc + 1) ret
-          return $ NApp arg' ret'
-      | tag == _OPX_ || tag == _OPY_ -> do
-          let op  = (toEnum (fromIntegral (termLab term)))
-          let loc = termLoc term
-          arg <- get (loc + 0)
-          ret <- get (loc + 1)
-          arg' <- extractPCore arg
-          ret' <- extractNCore (loc + 1) ret
-          return $ NOp2 op arg' ret'
-      | tag == _DUP_ -> do
-          let loc = termLoc term
-          dp1 <- get (loc + 0)
-          dp2 <- get (loc + 1)
-          dp1' <- extractNCore (loc + 0) dp1
-          dp2' <- extractNCore (loc + 1) dp2
-          return $ NDup dp1' dp2'
-      | otherwise -> return NEra
+  ERA -> return NEra
+  SUB -> return $ NSub ("v" ++ show loc)
+  APP -> do
+    let loc = termLoc term
+    arg <- get (loc + 0)
+    ret <- get (loc + 1)
+    arg' <- extractPCore arg
+    ret' <- extractNCore (loc + 1) ret
+    return $ NApp arg' ret'
+  DUP -> do
+    let loc = termLoc term
+    dp1 <- get (loc + 0)
+    dp2 <- get (loc + 1)
+    dp1' <- extractNCore (loc + 0) dp1
+    dp2' <- extractNCore (loc + 1) dp2
+    return $ NDup dp1' dp2'
+  x | elem x [OPX, OPY] -> do
+    let op  = termOper term
+    let loc = termLoc term
+    arg <- get (loc + 0)
+    ret <- get (loc + 1)
+    arg' <- extractPCore arg
+    ret' <- extractNCore (loc + 1) ret
+    return $ NOp2 op arg' ret'
 
 extractVar :: Loc -> Term -> IO PCore
 extractVar loc term = case termTag term of
-  tag | tag == _VAR_ -> extractPCore term
-      | tag == _NUL_ -> extractPCore term
-      | tag == _LAM_ -> extractPCore term
-      | tag == _SUP_ -> extractPCore term
-      | tag == _SUB_ -> return $ PVar ("v" ++ show loc)
-      | tag == _W32_ -> return $ PU32 (termLoc term)
-      | otherwise    -> return PNul
+  VAR -> extractPCore term
+  NUL -> extractPCore term
+  LAM -> extractPCore term
+  SUP -> extractPCore term
+  SUB -> return $ PVar ("v" ++ show loc)
+  W32 -> return $ PU32 (termLoc term)
 
 -- Bag and Net Extraction
 -- ---------------------
