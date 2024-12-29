@@ -22,47 +22,61 @@ showCore = coreToString . prettyRename
 
 coreToString :: Core -> String
 coreToString core =
+
   case pretty core of
     Just str -> str
     Nothing -> case core of
+
       Var nam ->
         nam
+
       Era ->
         "*"
+
       Lam vr0 bod ->
         let bod' = coreToString bod in
         "λ" ++ vr0 ++ " " ++ bod'
+
       App fun arg ->
         let fun' = coreToString fun in
         let arg' = coreToString arg in
         "(" ++ fun' ++ " " ++ arg' ++ ")"
+
       Sup lab tm0 tm1 ->
         let tm0' = coreToString tm0 in
         let tm1' = coreToString tm1 in
         "&" ++ show lab ++ "{" ++ tm0' ++ " " ++ tm1' ++ "}"
+
       Dup lab dp0 dp1 val bod ->
         let val' = coreToString val in
         let bod' = coreToString bod in
         "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ val' ++ "\n" ++ bod'
+
       Ref nam fid arg ->
         let arg' = intercalate " " (map coreToString arg) in
         "@" ++ nam ++ "(" ++ arg' ++ ")"
+
       Ctr cid fds ->
         let fds' = unwords (map coreToString fds) in
         "#" ++ show cid ++ "{" ++ fds' ++ "}"
+
       Mat val mov css ->
         let val' = coreToString val in
         let mov' = concatMap (\ (k,v) -> " !" ++ k ++ "=" ++ coreToString v) mov in
         let css' = unwords [ctr ++ "{" ++ unwords fds ++ "}:" ++ coreToString bod | (ctr, fds, bod) <- css] in
         "(~" ++ val' ++ mov' ++ " {" ++ css' ++ "})"
+
       U32 val ->
         show val
+
       Chr val ->
         "'" ++ [val] ++ "'"
+
       Op2 opr nm0 nm1 ->
         let nm0' = coreToString nm0 in
         let nm1' = coreToString nm1 in
         "(" ++ operToString opr ++ " " ++ nm0' ++ " " ++ nm1' ++ ")"
+
       Let mod nam val bod ->
         if nam == "" then
           let val' = coreToString val in
@@ -122,58 +136,60 @@ prettyRename core = unsafePerformIO $ do
   namesRef <- newIORef MS.empty
   go namesRef core
   where
+
     go namesRef core = case core of
+
       Var name -> do
         name' <- genName namesRef name
         return $ Var name'
-        
+
       Lam name body -> do
         name' <- genName namesRef name
         body' <- go namesRef body
         return $ Lam name' body'
-        
+
       Let mode name val body -> do
         name' <- genName namesRef name
         val' <- go namesRef val
         body' <- go namesRef body
         return $ Let mode name' val' body'
-        
+
       App fun arg -> do
         fun' <- go namesRef fun
         arg' <- go namesRef arg
         return $ App fun' arg'
-        
+
       Sup lab x y -> do
         x' <- go namesRef x
         y' <- go namesRef y
         return $ Sup lab x' y'
-        
+
       Dup lab x y val body -> do
         x' <- genName namesRef x
         y' <- genName namesRef y
         val' <- go namesRef val
         body' <- go namesRef body
         return $ Dup lab x' y' val' body'
-        
+
       Ctr cid args -> do
         args' <- mapM (go namesRef) args
         return $ Ctr cid args'
-        
+
       Mat val mov css -> do
         val' <- go namesRef val
         mov' <- mapM (\(k,v) -> do v' <- go namesRef v; return (k,v')) mov
         css' <- mapM (\(c,vs,t) -> do t' <- go namesRef t; return (c,vs,t')) css
         return $ Mat val' mov' css'
-        
+
       Op2 op x y -> do
         x' <- go namesRef x
         y' <- go namesRef y
         return $ Op2 op x' y'
-        
+
       Ref name fid args -> do
         args' <- mapM (go namesRef) args
         return $ Ref name fid args'
-        
+
       other -> return other
 
     genName namesRef name = do
@@ -184,7 +200,7 @@ prettyRename core = unsafePerformIO $ do
           let newName = genNameFromIndex (MS.size nameMap)
           modifyIORef' namesRef (MS.insert name newName)
           return newName
-          
+
     genNameFromIndex n = go (n + 1) "" where
       go n ac | n == 0    = ac
               | otherwise = go q (chr (ord 'a' + r) : ac)

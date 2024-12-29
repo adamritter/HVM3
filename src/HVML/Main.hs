@@ -7,13 +7,21 @@
 module Main where
 
 import Control.Monad (when, forM_)
--- import Control.Parallel
-import GHC.Conc
 import Data.FileEmbed
+import Data.Time.Clock
 import Data.Word
 import Foreign.C.Types
 import Foreign.LibFFI
 import Foreign.LibFFI.Types
+import GHC.Conc
+import HVML.Collapse
+import HVML.Compile
+import HVML.Extract
+import HVML.Inject
+import HVML.Parse
+import HVML.Reduce
+import HVML.Show
+import HVML.Type
 import System.CPUTime
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(ExitSuccess, ExitFailure))
@@ -23,16 +31,6 @@ import System.Posix.DynamicLinker
 import System.Process (callCommand)
 import Text.Printf
 import qualified Data.Map.Strict as MS
-import Data.Time.Clock
-
-import HVML.Collapse
-import HVML.Compile
-import HVML.Extract
-import HVML.Inject
-import HVML.Parse
-import HVML.Reduce
-import HVML.Show
-import HVML.Type
 
 runtime_c :: String
 runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
@@ -89,44 +87,34 @@ cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
 cliRun filePath debug compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
-
   -- TASK: instead of parsing a core term out of the file, lets parse a Book.
   code <- readFile filePath
   book <- doParseBook code
-
   -- Create the C file content
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (idToFunc book))
   let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
-
   -- Compile to native
   when compiled $ do
     -- Write the C file
     writeFile "./.main.c" mainC
-    
     -- Compile to shared library
     callCommand "gcc -O2 -fPIC -shared .main.c -o .main.so"
-    
     -- Load the dynamic library
     bookLib <- dlopen "./.main.so" [RTLD_NOW]
-
     -- Remove both generated files
     callCommand "rm .main.so"
-    
     -- Register compiled functions
     forM_ (MS.keys (idToFunc book)) $ \ fid -> do
       funPtr <- dlsym bookLib (mget (idToName book) fid ++ "_f")
       hvmDefine fid funPtr
-
     -- Link compiled state
     hvmGotState <- hvmGetState
     hvmSetState <- dlsym bookLib "hvm_set_state"
     callFFI hvmSetState retVoid [argPtr hvmGotState]
-
   -- Abort when main isn't present
   when (not $ MS.member "main" (nameToId book)) $ do
     putStrLn "Error: 'main' not found."
     exitWith (ExitFailure 1)
-
   -- Normalize main
   init <- getCPUTime
   root <- doInjectCoreAt book (Ref "main" (mget (nameToId book) "main") []) 0 []
@@ -138,22 +126,17 @@ cliRun filePath debug compiled mode showStats = do
     else do
       core <- doExtractCoreAt rxAt book 0
       return [(doLiftDups core)]
-
   -- Print all collapsed results
   when (mode == Collapse) $ do
     forM_ vals $ \ term -> do
       putStrLn $ showCore term
-
   -- Prints just the first collapsed result
   when (mode == Search || mode == Normalize) $ do
     putStrLn $ showCore (head vals)
-
   when (mode /= Normalize) $ do
     putStrLn ""
-
   -- Prints total time
   end <- getCPUTime
-
   -- Show stats
   when showStats $ do
     itrs <- getItr
@@ -165,7 +148,6 @@ cliRun filePath debug compiled mode showStats = do
     printf "SIZE: %llu nodes\n" size
     printf "PERF: %.3f MIPS\n" mips
     return ()
-
   -- Finalize
   hvmFree
   return $ Right ()

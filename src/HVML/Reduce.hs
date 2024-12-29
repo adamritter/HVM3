@@ -13,11 +13,13 @@ import System.Exit
 import qualified Data.Map.Strict as MS
 
 reduceAt :: Bool -> ReduceAt
+
 reduceAt debug book host = do 
   term <- got host
   let tag = termTag term
   let lab = termLab term
   let loc = termLoc term
+
   when debug $ do
     root <- doExtractCoreAt (const got) book 0
     core <- doExtractCoreAt (const got) book host
@@ -26,7 +28,9 @@ reduceAt debug book host = do
     -- putStrLn $ coreToString core
     putStrLn $ "---------------- ROOT: "
     putStrLn $ coreToString (doLiftDups root)
+
   case tagT tag of
+
     LET -> do
       case modeT lab of
         LAZY -> do
@@ -37,6 +41,7 @@ reduceAt debug book host = do
           cont host (reduceLet term val)
         PARA -> do
           error "TODO"
+
     APP -> do
       fun <- reduceAt debug book (loc + 0)
       case tagT (termTag fun) of
@@ -47,6 +52,7 @@ reduceAt debug book host = do
         W32 -> cont host (reduceAppW32 term fun)
         CHR -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
+
     MAT -> do
       val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
@@ -57,6 +63,7 @@ reduceAt debug book host = do
         W32 -> cont host (reduceMatW32 term val)
         CHR -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
+
     OPX -> do
       val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
@@ -67,6 +74,7 @@ reduceAt debug book host = do
         W32 -> cont host (reduceOpxW32 term val)
         CHR -> cont host (reduceOpxW32 term val)
         _   -> set (loc + 0) val >> return term
+
     OPY -> do
       val <- reduceAt debug book (loc + 1)
       case tagT (termTag val) of
@@ -77,6 +85,7 @@ reduceAt debug book host = do
         W32 -> cont host (reduceOpyW32 term val)
         CHR -> cont host (reduceOpyW32 term val)
         _   -> set (loc + 1) val >> return term
+
     DP0 -> do
       sb0 <- got (loc + 0)
       if termGetBit sb0 == 0
@@ -93,6 +102,7 @@ reduceAt debug book host = do
         else do
           set host (termRemBit sb0)
           reduceAt debug book host
+
     DP1 -> do
       sb1 <- got (loc + 1)
       if termGetBit sb1 == 0
@@ -109,6 +119,7 @@ reduceAt debug book host = do
         else do
           set host (termRemBit sb1)
           reduceAt debug book host
+
     VAR -> do
       sub <- got (loc + 0)
       if termGetBit sub == 0
@@ -116,11 +127,14 @@ reduceAt debug book host = do
         else do
           set host (termRemBit sub)
           reduceAt debug book host
+
     REF -> do
       reduceRefAt book host
       reduceAt debug book host
+
     otherwise -> do
       return term
+
   where
     cont host action = do
       ret <- action

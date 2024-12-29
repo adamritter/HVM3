@@ -13,7 +13,6 @@ typedef uint32_t Loc;
 typedef uint64_t Term;
 typedef uint32_t u32;
 typedef uint64_t u64;
-
 typedef _Atomic(Term) ATerm;
 
 // Runtime Types
@@ -863,7 +862,9 @@ Term reduce(Term term) {
   Term next = term;
   u64  stop = *HVM.spos;
   u64* spos = HVM.spos;
+
   while (1) {
+
     //printf("NEXT "); print_term(term); printf("\n");
     //printf("PATH ");
     //for (u64 i = 0; i < *spos; ++i) {
@@ -875,7 +876,9 @@ Term reduce(Term term) {
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
+
     switch (tag) {
+
       case LET: {
         switch (lab) {
           case LAZY: {
@@ -893,26 +896,31 @@ Term reduce(Term term) {
           }
         }
       }
+
       case APP: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
+
       case MAT: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
+
       case OPX: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
+
       case OPY: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 1);
         continue;
       }
+
       case DP0: {
         Term sb0 = got(loc + 0);
         if (term_get_bit(sb0) == 0) {
@@ -924,6 +932,7 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case DP1: {
         Term sb1 = got(loc + 1);
         if (term_get_bit(sb1) == 0) {
@@ -935,6 +944,7 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case VAR: {
         Term sub = got(loc);
         if (term_get_bit(sub) == 0) {
@@ -944,11 +954,14 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case REF: {
         next = reduce_ref(next); // TODO
         continue;
       }
+
       default: {
+
         if ((*spos) == stop) {
           break;
         } else {
@@ -957,10 +970,12 @@ Term reduce(Term term) {
           Lab  plab = term_lab(prev);
           Loc  ploc = term_loc(prev);
           switch (ptag) {
+
             case LET: {
               next = reduce_let(prev, next);
               continue;
             }
+
             case APP: {
               switch (tag) {
                 case ERA: next = reduce_app_era(prev, next); continue;
@@ -973,6 +988,7 @@ Term reduce(Term term) {
               }
               break;
             }
+
             case DP0:
             case DP1: {
               switch (tag) {
@@ -986,6 +1002,7 @@ Term reduce(Term term) {
               }
               break;
             }
+
             case MAT: {
               switch (tag) {
                 case ERA: next = reduce_mat_era(prev, next); continue;
@@ -997,6 +1014,7 @@ Term reduce(Term term) {
                 default: break;
               }
             }
+
             case OPX: {
               switch (tag) {
                 case ERA: next = reduce_opx_era(prev, next); continue;
@@ -1008,6 +1026,7 @@ Term reduce(Term term) {
                 default: break;
               }
             }
+
             case OPY: {
               switch (tag) {
                 case ERA: next = reduce_opy_era(prev, next); continue;
@@ -1018,13 +1037,15 @@ Term reduce(Term term) {
                 case CHR: next = reduce_opy_w32(prev, next); continue;
                 default: break;
               }
-            } 
+            }
+
             default: break;
           }
           break;
         }
       }
     }
+
     if ((*HVM.spos) == stop) {
       return next;
     } else {
@@ -1043,6 +1064,7 @@ Term reduce(Term term) {
       *HVM.spos = stop;
       return HVM.sbuf[stop];
     }
+
   }
   printf("retr: ERR\n");
   return 0;
@@ -1060,12 +1082,14 @@ Term normal(Term term) {
   Lab lab = term_lab(wnf);
   Loc loc = term_loc(wnf);
   switch (tag) {
+
     case LAM: {
       Term bod = got(loc + 0);
       bod = normal(bod);
       set(loc + 1, bod);
       return wnf;
     }
+
     case APP: {
       Term fun = got(loc + 0);
       Term arg = got(loc + 1);
@@ -1075,6 +1099,7 @@ Term normal(Term term) {
       set(loc + 1, arg);
       return wnf;
     }
+
     case SUP: {
       Term tm0 = got(loc + 0);
       Term tm1 = got(loc + 1);
@@ -1084,6 +1109,7 @@ Term normal(Term term) {
       set(loc + 1, tm1);
       return wnf;
     }
+
     case DP0:
     case DP1: {
       Term val = got(loc + 0);
@@ -1091,6 +1117,7 @@ Term normal(Term term) {
       set(loc + 0, val);
       return wnf;
     }
+
     case CTR: {
       u64 cid = u12v2_x(lab);
       u64 ari = u12v2_y(lab);
@@ -1101,6 +1128,7 @@ Term normal(Term term) {
       }
       return wnf;
     }
+
     case MAT: {
       u64 mat_len = u12v2_x(lab);
       for (u64 i = 0; i <= mat_len; i++) {
@@ -1110,8 +1138,10 @@ Term normal(Term term) {
       }
       return wnf;
     }
+
     default:
       return wnf;
+
   }
 }
 

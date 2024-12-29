@@ -37,14 +37,17 @@ parseCore = do
   skip
   head <- lookAhead anyChar
   case head of
+
     '*' -> do
       consume "*"
       return Era
+
     'λ' -> do
       consume "λ"
       vr0 <- parseName1
       bod <- parseCore
       return $ Lam vr0 bod
+
     '(' -> do
       next <- lookAhead (anyChar >> anyChar)
       case next of
@@ -78,8 +81,10 @@ parseCore = do
             parseCore
           char ')'
           return $ foldl App fun args
+
     '@' -> do
       parseRef
+
     '&' -> do
       consume "&"
       name <- parseName
@@ -99,11 +104,13 @@ parseCore = do
               return $ Ref "SUP" _SUP_F_ [Var ("&" ++ name), tm0, tm1]
         Nothing -> do
           return $ Var ("&" ++ name)
+
     '!' -> do
       consume "!"
       skip
       next <- lookAhead anyChar
       case next of
+
         '&' -> do
           consume "&"
           nam <- parseName
@@ -122,6 +129,7 @@ parseCore = do
               return $ Dup num dp0 dp1 val bod
             otherwise -> do
               return $ Ref "DUP" _DUP_F_ [Var ("&" ++ nam), val, Lam dp0 (Lam dp1 bod)]
+
         '!' -> do
           consume "!"
           nam <- optionMaybe $ try $ do
@@ -133,6 +141,7 @@ parseCore = do
           case nam of
             Just nam -> return $ Let STRI nam val bod
             Nothing  -> return $ Let STRI "_" val bod
+
         '^' -> do
           consume "^"
           nam <- parseName1
@@ -140,17 +149,24 @@ parseCore = do
           val <- parseCore
           bod <- parseCore
           return $ Let PARA nam val bod
+
         _ -> do
           nam <- parseName1
           consume "="
           val <- parseCore
           bod <- parseCore
           return $ Let LAZY nam val bod
+
     '#' -> parseCtr
+
     '~' -> parseMat
+
     '[' -> parseLst
+
     '\'' -> parseChr
+
     '"' -> parseStr
+
     _ -> do
       name <- parseName1
       case reads (filter (/= '_') name) of
@@ -251,7 +267,6 @@ parseMat = do
         return $ Right $ fromMaybe maxBound $ MS.lookup ctr (parsedCtrToCid st)
     return (cid, (ctr, fds, bod))
   css <- return $ map snd $ sortOn fst css
-
   -- Transform matches with default cases into nested chain of matches
   if length css == 1 && (let (ctr, _, _) = head css in ctr == "_") then do
     fail "Match with only a default case is not allowed."
@@ -454,11 +469,6 @@ genFreshLabel = do
 -- Adjusting
 -- ---------
 
--- TODO: create a 'registerPrim' function that adds the following entries to the nameToId map:
--- "SUP" -> 0xFFFFFE
--- "DUP" -> 0xFFFFFF
--- its type must receive/return a map
-
 createBook :: [(String, ((Bool,[(Bool,String)]), Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
 createBook defs ctrToCid ctrToAri =
   let withPrims = \n2i -> MS.union n2i $ MS.fromList primitives
@@ -519,31 +529,39 @@ lexify term = evalState (go term MS.empty) 0 where
   extend old         new ctx = return $ MS.insert old new ctx
 
   go :: Core -> MS.Map String String -> State Int Core
+
   go term ctx = case term of
+
     Var nam -> 
       return $ Var (MS.findWithDefault nam nam ctx)
+
     Ref nam fid arg -> do
       arg <- mapM (\x -> go x ctx) arg
       return $ Ref nam fid arg
+
     Let mod nam val bod -> do
       val  <- go val ctx
       nam' <- fresh nam
       ctx  <- extend nam nam' ctx
       bod  <- go bod ctx
       return $ Let mod nam' val bod
+
     Lam nam bod -> do
       nam' <- fresh nam
       ctx  <- extend nam nam' ctx
       bod  <- go bod ctx
       return $ Lam nam' bod
+
     App fun arg -> do
       fun <- go fun ctx
       arg <- go arg ctx
       return $ App fun arg
+
     Sup lab tm0 tm1 -> do
       tm0 <- go tm0 ctx
       tm1 <- go tm1 ctx
       return $ Sup lab tm0 tm1
+
     Dup lab dp0 dp1 val bod -> do
       val  <- go val ctx
       dp0' <- fresh dp0
@@ -552,9 +570,11 @@ lexify term = evalState (go term MS.empty) 0 where
       ctx  <- extend dp1 dp1' ctx
       bod  <- go bod ctx
       return $ Dup lab dp0' dp1' val bod
+
     Ctr cid fds -> do
       fds <- mapM (\x -> go x ctx) fds
       return $ Ctr cid fds
+
     Mat val mov css -> do
       val' <- go val ctx
       mov' <- forM mov $ \ (k,v) -> do
@@ -568,14 +588,18 @@ lexify term = evalState (go term MS.empty) 0 where
         bod <- go bod ctx
         return (ctr, fds', bod)
       return $ Mat val' mov' css'
+
     Op2 op nm0 nm1 -> do
       nm0 <- go nm0 ctx
       nm1 <- go nm1 ctx
       return $ Op2 op nm0 nm1
+
     U32 n -> 
       return $ U32 n
+
     Chr c ->
       return $ Chr c
+
     Era -> 
       return Era
 
@@ -599,4 +623,3 @@ showParseError filename input err = do
   putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
   putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
-

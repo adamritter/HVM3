@@ -7,6 +7,7 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
+--show--
 data Core
   = Var String -- x
   | Ref String Word64 [Core] -- @fn
@@ -23,12 +24,14 @@ data Core
   | Let Mode String Core Core -- ! x = v body
   deriving (Show, Eq)
 
+--show--
 data Mode
   = LAZY
   | STRI
   | PARA
   deriving (Show, Eq, Enum)
 
+--show--
 data Oper
   = OP_ADD | OP_SUB | OP_MUL | OP_DIV
   | OP_MOD | OP_EQ  | OP_NE  | OP_LT
@@ -36,6 +39,7 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
+--show--
 -- A top-level function, including:
 -- - copy: true when ref-copy mode is enabled
 -- - args: a list of (isArgStrict, argName) pairs
@@ -43,6 +47,7 @@ data Oper
 -- Note: ref-copy improves C speed, but increases interaction count
 type Func = ((Bool, [(Bool,String)]), Core)
 
+--show--
 -- NOTE: the new idToLabs field is a map from a function id to a set of all
 -- DUP/SUP labels used in its body. note that, when a function uses either
 -- HVM.SUP or HVM.DUP internally, this field is set to Nothing. this will be
@@ -59,11 +64,13 @@ data Book = Book
 -- Runtime Types
 -- -------------
 
+--show--
 type Tag  = Word64
 type Lab  = Word64
 type Loc  = Word64
 type Term = Word64
 
+--show--
 data TAG
   = DP0
   | DP1
@@ -83,8 +90,10 @@ data TAG
   | OPY
   deriving (Eq, Show)
 
+--show--
 type HVM = IO
 
+--show--
 type ReduceAt = Book -> Loc -> HVM Term
 
 -- C Functions
@@ -92,166 +101,115 @@ type ReduceAt = Book -> Loc -> HVM Term
 
 foreign import ccall unsafe "Runtime.c hvm_init"
   hvmInit :: IO ()
-
 foreign import ccall unsafe "Runtime.c hvm_free"
   hvmFree :: IO ()
-
 foreign import ccall unsafe "Runtime.c alloc_node"
   allocNode :: Word64 -> IO Word64
-
 foreign import ccall unsafe "Runtime.c set"
   set :: Word64 -> Term -> IO ()
-
 foreign import ccall unsafe "Runtime.c got"
   got :: Word64 -> IO Term
-
 foreign import ccall unsafe "Runtime.c take"
   take :: Word64 -> IO Term
-
 foreign import ccall unsafe "Runtime.c swap"
   swap :: Word64 -> IO Term
-
 foreign import ccall unsafe "Runtime.c term_new"
   termNew :: Tag -> Lab -> Loc -> Term
-
 foreign import ccall unsafe "Runtime.c term_tag"
   termTag :: Term -> Tag
-
 foreign import ccall unsafe "Runtime.c term_get_bit"
   termGetBit :: Term -> Tag
-
 foreign import ccall unsafe "Runtime.c term_lab"
   termLab :: Term -> Lab
-
 foreign import ccall unsafe "Runtime.c term_loc"
   termLoc :: Term -> Loc
-
 foreign import ccall unsafe "Runtime.c term_set_bit"
   termSetBit :: Term -> Tag
-
 foreign import ccall unsafe "Runtime.c term_rem_bit"
   termRemBit :: Term -> Tag
-
 foreign import ccall unsafe "Runtime.c get_len"
   getLen :: IO Word64
-
 foreign import ccall unsafe "Runtime.c get_itr"
   getItr :: IO Word64
-
 foreign import ccall unsafe "Runtime.c inc_itr"
   incItr :: IO Word64
-
 foreign import ccall unsafe "Runtime.c fresh"
   fresh :: IO Word64
-
 foreign import ccall unsafe "Runtime.c reduce"
   reduceC :: Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_let"
   reduceLet :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_era"
   reduceAppEra :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_lam"
   reduceAppLam :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_sup"
   reduceAppSup :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_ctr"
   reduceAppCtr :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_app_w32"
   reduceAppW32 :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_era"
   reduceDupEra :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_lam"
   reduceDupLam :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_sup"
   reduceDupSup :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_ctr"
   reduceDupCtr :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_w32"
   reduceDupW32 :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_dup_ref"
   reduceDupRef :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_era"
   reduceMatEra :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_lam"
   reduceMatLam :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_sup"
   reduceMatSup :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_ctr"
   reduceMatCtr :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_mat_w32"
   reduceMatW32 :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_era"
   reduceOpxEra :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_lam"
   reduceOpxLam :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_sup"
   reduceOpxSup :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_ctr"
   reduceOpxCtr :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opx_w32"
   reduceOpxW32 :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_era"
   reduceOpyEra :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_lam"
   reduceOpyLam :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_sup"
   reduceOpySup :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_ctr"
   reduceOpyCtr :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_opy_w32"
   reduceOpyW32 :: Term -> Term -> IO Term
-
 foreign import ccall unsafe "Runtime.c reduce_ref_sup"
   reduceRefSup :: Term -> Word64 -> IO Term
-
 foreign import ccall unsafe "Runtime.c hvm_define"
   hvmDefine :: Word64 -> FunPtr (IO Term) -> IO ()
-
 foreign import ccall unsafe "Runtime.c hvm_get_state"
   hvmGetState :: IO (Ptr ())
-
 foreign import ccall unsafe "Runtime.c hvm_set_state"
   hvmSetState :: Ptr () -> IO ()
-
 foreign import ccall unsafe "Runtime.c u12v2_new"
   u12v2New :: Word64 -> Word64 -> Word64
-
 foreign import ccall unsafe "Runtime.c u12v2_x"
   u12v2X :: Word64 -> Word64
-
 foreign import ccall unsafe "Runtime.c u12v2_y"
   u12v2Y :: Word64 -> Word64
 
 -- Constants
 -- ---------
 
+--show--
 tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
@@ -319,6 +277,7 @@ _W32_ = 0x10
 _CHR_ :: Tag
 _CHR_ = 0x11
 
+--show--
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY
 modeT 0x01 = STRI

@@ -21,6 +21,7 @@ emptyState :: InjectState
 emptyState = InjectState Map.empty []
 
 injectCore :: Book -> Core -> Loc -> InjectM ()
+
 injectCore _ Era loc = do
   lift $ set loc (termNew _ERA_ 0 0)
 

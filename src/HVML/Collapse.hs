@@ -1,7 +1,3 @@
--- //./Type.hs//
-
--- FIXME: when SUP labels have large vals, this takes a lot of time.
-
 module HVML.Collapse where
 
 import Control.Monad (ap, forM, forM_)
@@ -16,7 +12,6 @@ import System.Exit (exitFailure)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
-
 import Debug.Trace
 
 -- The Collapse Monad
@@ -43,7 +38,6 @@ bind k f = fork k IM.empty where
     let lft = fork x $ IM.alter (\x -> Just (maybe (putO id) putO x)) (fromIntegral k) paths in
     let rgt = fork y $ IM.alter (\x -> Just (maybe (putI id) putI x)) (fromIntegral k) paths in
     CSup k lft rgt 
-
   -- pass :: Collapse b -> IntMap Bin -> Collapse b
   pass CEra         paths = CEra
   pass (CVal v)     paths = CVal v
@@ -52,10 +46,8 @@ bind k f = fork k IM.empty where
     Just (I p) -> pass y (IM.insert (fromIntegral k) p paths)
     Just E     -> CSup k x y
     Nothing    -> CSup k x y
-
   -- putO :: (Bin -> Bin) -> (Bin -> Bin)
   putO bs = \x -> bs (O x)
-
   -- putI :: (Bin -> Bin) -> (Bin -> Bin) 
   putI bs = \x -> bs (I x)
 
@@ -82,9 +74,11 @@ instance Monad Collapse where
 -- -------------
 
 collapseDupsAt :: IM.IntMap [Int] -> ReduceAt -> Book -> Loc -> HVM Core
+
 collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
+
     ERA -> do
       return Era
 
@@ -214,25 +208,34 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
 -- -------------
 
 collapseSups :: Book -> Core -> Collapse Core
+
 collapseSups book core = case core of
-  Var name -> return $ Var name
+
+  Var name -> do
+    return $ Var name
+
   Ref name fid args -> do
     args <- mapM (collapseSups book) args
     return $ Ref name fid args
+
   Lam name body -> do
     body <- collapseSups book body
     return $ Lam name body
+
   App fun arg -> do
     fun <- collapseSups book fun
     arg <- collapseSups book arg
     return $ App fun arg
+
   Dup lab x y val body -> do
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Dup lab x y val body
+
   Ctr cid fields -> do
     fields <- mapM (collapseSups book) fields
     return $ Ctr cid fields
+
   Mat val mov css -> do
     val <- collapseSups book val
     mov <- mapM (\(key, expr) -> do
@@ -242,20 +245,26 @@ collapseSups book core = case core of
       bod <- collapseSups book bod
       return (ctr, fds, bod)) css
     return $ Mat val mov css
+
   U32 val -> do
     return $ U32 val
+    
   Chr val -> do
     return $ Chr val
+
   Op2 op x y -> do
     x <- collapseSups book x
     y <- collapseSups book y
     return $ Op2 op x y
+
   Let mode name val body -> do
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Let mode name val body
+
   Era -> do
     CEra
+
   Sup lab tm0 tm1 -> do
     let tm0' = collapseSups book tm0
     let tm1' = collapseSups book tm1
