@@ -7,7 +7,7 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
---λ
+--X--
 data Core
   = Var String -- x
   | Ref String Word64 [Core] -- @fn
@@ -24,14 +24,14 @@ data Core
   | Let Mode String Core Core -- ! x = v body
   deriving (Show, Eq)
 
---λ
+--X--
 data Mode
   = LAZY
   | STRI
   | PARA
   deriving (Show, Eq, Enum)
 
---λ
+--X--
 data Oper
   = OP_ADD | OP_SUB | OP_MUL | OP_DIV
   | OP_MOD | OP_EQ  | OP_NE  | OP_LT
@@ -39,7 +39,7 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
---λ
+--X--
 -- A top-level function, including:
 -- - copy: true when ref-copy mode is enabled
 -- - args: a list of (isArgStrict, argName) pairs
@@ -47,7 +47,7 @@ data Oper
 -- Note: ref-copy improves C speed, but increases interaction count
 type Func = ((Bool, [(Bool,String)]), Core)
 
---λ
+--X--
 -- NOTE: the new idToLabs field is a map from a function id to a set of all
 -- DUP/SUP labels used in its body. note that, when a function uses either
 -- HVM.SUP or HVM.DUP internally, this field is set to Nothing. this will be
@@ -64,13 +64,13 @@ data Book = Book
 -- Runtime Types
 -- -------------
 
---λ
+--X--
 type Tag  = Word64
 type Lab  = Word64
 type Loc  = Word64
 type Term = Word64
 
---λ
+--X--
 data TAG
   = DP0
   | DP1
@@ -90,10 +90,10 @@ data TAG
   | OPY
   deriving (Eq, Show)
 
---λ
+--X--
 type HVM = IO
 
---λ
+--X--
 type ReduceAt = Book -> Loc -> HVM Term
 
 -- C Functions
@@ -209,7 +209,7 @@ foreign import ccall unsafe "Runtime.c u12v2_y"
 -- Constants
 -- ---------
 
---λ
+--X--
 tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
@@ -277,7 +277,7 @@ _W32_ = 0x10
 _CHR_ :: Tag
 _CHR_ = 0x11
 
---λ
+--X--
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY
 modeT 0x01 = STRI
