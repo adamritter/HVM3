@@ -248,7 +248,7 @@ collapseSups book core = case core of
 
   U32 val -> do
     return $ U32 val
-    
+
   Chr val -> do
     return $ Chr val
 
