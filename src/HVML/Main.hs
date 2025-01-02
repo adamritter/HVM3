@@ -7,7 +7,10 @@
 module Main where
 
 import Control.Monad (when, forM_)
+-- import Control.Parallel
+import GHC.Conc
 import Data.FileEmbed
+import Data.Word
 import Foreign.C.Types
 import Foreign.LibFFI
 import Foreign.LibFFI.Types
@@ -20,10 +23,10 @@ import System.Posix.DynamicLinker
 import System.Process (callCommand)
 import Text.Printf
 import qualified Data.Map.Strict as MS
+import Data.Time.Clock
 
 import HVML.Collapse
 import HVML.Compile
-import HVML.Equal
 import HVML.Extract
 import HVML.Inject
 import HVML.Parse
@@ -50,14 +53,13 @@ main = do
     ("run" : file : args) -> do
       let compiled = "-c" `elem` args
       let collapse = "-C" `elem` args
-      let typed    = "-t" `elem` args
       let search   = "-S" `elem` args
       let stats    = "-s" `elem` args
       let debug    = "-d" `elem` args
       let mode | collapse  = Collapse
                | search    = Search
                | otherwise = Normalize
-      cliRun file typed debug compiled mode stats
+      cliRun file debug compiled mode stats
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -83,8 +85,8 @@ printHelp = do
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
-cliRun filePath typed debug compiled mode showStats = do
+cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
+cliRun filePath debug compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
 
@@ -140,17 +142,11 @@ cliRun filePath typed debug compiled mode showStats = do
   -- Print all collapsed results
   when (mode == Collapse) $ do
     forM_ vals $ \ term -> do
-      putStrLn $ coreToString term
-      when typed $ do
-        chk <- check term
-        if chk then do
-          putStrLn "✓ check"
-        else do
-          putStrLn "✗ error"
+      putStrLn $ showCore term
 
   -- Prints just the first collapsed result
   when (mode == Search || mode == Normalize) $ do
-    putStrLn $ coreToString (head vals)
+    putStrLn $ showCore (head vals)
 
   when (mode /= Normalize) $ do
     putStrLn ""

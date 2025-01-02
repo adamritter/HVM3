@@ -15,26 +15,8 @@ import qualified Data.Map.Strict as MS
 
 import Debug.Trace
 
-type ExtractState = (IORef IS.IntSet, IORef (MS.Map Loc String))
-
-genName :: ExtractState -> Loc -> HVM String
-genName (_, namsRef) loc = do
-  nams <- readIORef namsRef
-  case MS.lookup loc nams of
-    Just name -> return name
-    Nothing -> do
-      let newName = genNameFromIndex (MS.size nams)
-      modifyIORef' namsRef (MS.insert loc newName)
-      return newName
-
-genNameFromIndex :: Int -> String
-genNameFromIndex n = go (n + 1) "" where
-  go n ac | n == 0    = ac
-          | otherwise = go q (chr (ord 'a' + r) : ac)
-          where (q,r) = quotRem (n - 1) 26
-
-extractCoreAt :: ExtractState -> ReduceAt -> Book -> Loc -> HVM Core
-extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
+extractCoreAt :: IORef IS.IntSet -> ReduceAt -> Book -> Loc -> HVM Core
+extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
     ERA -> do
@@ -43,51 +25,40 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
     LET -> do
       let loc  = termLoc term
       let mode = modeT (termLab term)
-      name <- genName state (loc + 0)
-      val  <- extractCoreAt state reduceAt book (loc + 1)
-      bod  <- extractCoreAt state reduceAt book (loc + 2)
+      name <- return $ "$" ++ show (loc + 0)
+      val  <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      bod  <- extractCoreAt dupsRef reduceAt book (loc + 1)
       return $ Let mode name val bod
 
     LAM -> do
       let loc = termLoc term
-      name <- genName state (loc + 0)
-      bod  <- extractCoreAt state reduceAt book (loc + 1)
+      name <- return $ "$" ++ show (loc + 0)
+      bod  <- extractCoreAt dupsRef reduceAt book (loc + 0)
       return $ Lam name bod
     
     APP -> do
       let loc = termLoc term
-      fun <- extractCoreAt state reduceAt book (loc + 0)
-      arg <- extractCoreAt state reduceAt book (loc + 1)
+      fun <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      arg <- extractCoreAt dupsRef reduceAt book (loc + 1)
       return $ App fun arg
     
     SUP -> do
       let loc = termLoc term
       let lab = termLab term
-      tm0 <- extractCoreAt state reduceAt book (loc + 0)
-      tm1 <- extractCoreAt state reduceAt book (loc + 1)
+      tm0 <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      tm1 <- extractCoreAt dupsRef reduceAt book (loc + 1)
       return $ Sup lab tm0 tm1
 
-    TYP -> do
-      let loc = termLoc term
-      name <- genName state (loc + 0)
-      bod  <- extractCoreAt state reduceAt book (loc + 1)
-      return $ Typ name bod
-    
-    ANN -> do
-      let loc = termLoc term
-      val <- extractCoreAt state reduceAt book (loc + 0)
-      typ <- extractCoreAt state reduceAt book (loc + 1)
-      return $ Ann val typ
-    
     VAR -> do
       let loc = termLoc term
       sub <- got (loc + 0)
-      if termTag sub == _SUB_
+      if termGetBit sub == 0
         then do
-          name <- genName state loc
+          name <- return $ "$" ++ show (loc + 0)
           return $ Var name
         else do
-          extractCoreAt state reduceAt book (loc + 0)
+          set (loc + 0) (termRemBit sub)
+          extractCoreAt dupsRef reduceAt book (loc + 0)
 
     DP0 -> do
       let loc = termLoc term
@@ -95,12 +66,12 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- genName state (loc + 0)
+        name <- return $ "$" ++ show (loc + 0)
         return $ Var name
       else do
-        dp0 <- genName state (loc + 0)
-        dp1 <- genName state (loc + 1)
-        val <- extractCoreAt state reduceAt book loc
+        dp0 <- return $ "$" ++ show (loc + 0)
+        dp1 <- return $ "$" ++ show (loc + 1)
+        val <- extractCoreAt dupsRef reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp0)
     
@@ -110,12 +81,12 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- genName state (loc + 1)
+        name <- return $ "$" ++ show (loc + 1)
         return $ Var name
       else do
-        dp0 <- genName state (loc + 0)
-        dp1 <- genName state (loc + 1)
-        val <- extractCoreAt state reduceAt book loc
+        dp0 <- return $ "$" ++ show (loc + 0)
+        dp1 <- return $ "$" ++ show (loc + 1)
+        val <- extractCoreAt dupsRef reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp1)
 
@@ -125,14 +96,14 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       let cid = u12v2X lab
       let ari = u12v2Y lab
       let ars = if ari == 0 then [] else [0..ari-1]
-      fds <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) ars
+      fds <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + i)) ars
       return $ Ctr cid fds
     
     MAT -> do
       let loc = termLoc term
       let len = u12v2X $ termLab term
-      val <- extractCoreAt state reduceAt book (loc + 0)
-      css <- mapM (\i -> extractCoreAt state reduceAt book (loc + 1 + i)) [0..len-1]
+      val <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      css <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + 1 + i)) [0..len-1]
       css <- mapM (\c -> return ("#", [], c)) css -- FIXME: recover names and fields on extraction (must store id)
       return $ Mat val [] css
     
@@ -147,15 +118,15 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
     OPX -> do
       let loc = termLoc term
       let opr = toEnum (fromIntegral (termLab term))
-      nm0 <- extractCoreAt state reduceAt book (loc + 0)
-      nm1 <- extractCoreAt state reduceAt book (loc + 1)
+      nm0 <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      nm1 <- extractCoreAt dupsRef reduceAt book (loc + 1)
       return $ Op2 opr nm0 nm1
     
     OPY -> do
       let loc = termLoc term
       let opr = toEnum (fromIntegral (termLab term))
-      nm0 <- extractCoreAt state reduceAt book (loc + 0)
-      nm1 <- extractCoreAt state reduceAt book (loc + 1)
+      nm0 <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      nm1 <- extractCoreAt dupsRef reduceAt book (loc + 1)
       return $ Op2 opr nm0 nm1
     
     REF -> do
@@ -164,7 +135,7 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
       let fid = u12v2X lab
       let ari = u12v2Y lab
       let aux = if ari == 0 then [] else [0..ari-1]
-      arg <- mapM (\i -> extractCoreAt state reduceAt book (loc + i)) aux
+      arg <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + i)) aux
       let name = MS.findWithDefault "?" fid (idToName book)
       return $ Ref name fid arg
     
@@ -174,9 +145,7 @@ extractCoreAt state@(dupsRef, _) reduceAt book host = unsafeInterleaveIO $ do
 doExtractCoreAt :: ReduceAt -> Book -> Loc -> HVM Core
 doExtractCoreAt reduceAt book loc = do
   dupsRef <- newIORef IS.empty
-  namsRef <- newIORef MS.empty
-  let state = (dupsRef, namsRef)
-  core <- extractCoreAt state reduceAt book loc
+  core    <- extractCoreAt dupsRef reduceAt book loc
   return core
   -- return $ doLiftDups core
 
@@ -206,13 +175,6 @@ liftDups (Dup lab dp0 dp1 val bod) =
   let (valT, valD) = liftDups val
       (bodT, bodD) = liftDups bod
   in (bodT, \x -> valD (bodD (Dup lab dp0 dp1 valT x)))
-liftDups (Typ nam bod) =
-  let (bodT, bodD) = liftDups bod
-  in (Typ nam bodT, bodD)
-liftDups (Ann val typ) =
-  let (valT, valD) = liftDups val
-      (typT, typD) = liftDups typ
-  in (Ann valT typT, valD . typD)
 liftDups (Ctr cid fds) =
   let (fdsT, fdsD) = liftDupsList fds
   in (Ctr cid fdsT, fdsD)
@@ -264,3 +226,4 @@ doLiftDups term =
   let termBody = termDups (Var "") in
   -- hack to print expr before dups
   Let LAZY "" termExpr termBody
+

@@ -4,14 +4,21 @@ module HVML.Show where
 
 import Control.Applicative ((<|>))
 import Control.Monad.State
+import Data.Char (chr, ord)
 import Data.Char (intToDigit)
+import Data.IORef
 import Data.List
 import Data.Word
 import HVML.Type
 import Numeric (showIntAtBase)
+import System.IO.Unsafe (unsafePerformIO)
+import qualified Data.Map.Strict as MS
 
 -- Core Stringification
 -- --------------------
+
+showCore :: Core -> String
+showCore = coreToString . prettyRename
 
 coreToString :: Core -> String
 coreToString core =
@@ -37,10 +44,6 @@ coreToString core =
         let val' = coreToString val in
         let bod' = coreToString bod in
         "! &" ++ show lab ++ "{" ++ dp0 ++ " " ++ dp1 ++ "} = " ++ val' ++ "\n" ++ bod'
-      Typ nam typ ->
-        "%" ++ nam ++ " " ++ coreToString typ
-      Ann val typ ->
-        "{" ++ coreToString val ++ " :: " ++ coreToString typ ++ "}"
       Ref nam fid arg ->
         let arg' = intercalate " " (map coreToString arg) in
         "@" ++ nam ++ "(" ++ arg' ++ ")"
@@ -110,6 +113,82 @@ termToString term =
       lab = labToString (termLab term)
       loc = locToString (termLoc term)
   in "term_new(" ++ tag ++ ",0x" ++ lab ++ ",0x" ++ loc ++ ")"
+
+-- Pretty Renaming
+-- ---------------
+
+prettyRename :: Core -> Core
+prettyRename core = unsafePerformIO $ do
+  namesRef <- newIORef MS.empty
+  go namesRef core
+  where
+    go namesRef core = case core of
+      Var name -> do
+        name' <- genName namesRef name
+        return $ Var name'
+        
+      Lam name body -> do
+        name' <- genName namesRef name
+        body' <- go namesRef body
+        return $ Lam name' body'
+        
+      Let mode name val body -> do
+        name' <- genName namesRef name
+        val' <- go namesRef val
+        body' <- go namesRef body
+        return $ Let mode name' val' body'
+        
+      App fun arg -> do
+        fun' <- go namesRef fun
+        arg' <- go namesRef arg
+        return $ App fun' arg'
+        
+      Sup lab x y -> do
+        x' <- go namesRef x
+        y' <- go namesRef y
+        return $ Sup lab x' y'
+        
+      Dup lab x y val body -> do
+        x' <- genName namesRef x
+        y' <- genName namesRef y
+        val' <- go namesRef val
+        body' <- go namesRef body
+        return $ Dup lab x' y' val' body'
+        
+      Ctr cid args -> do
+        args' <- mapM (go namesRef) args
+        return $ Ctr cid args'
+        
+      Mat val mov css -> do
+        val' <- go namesRef val
+        mov' <- mapM (\(k,v) -> do v' <- go namesRef v; return (k,v')) mov
+        css' <- mapM (\(c,vs,t) -> do t' <- go namesRef t; return (c,vs,t')) css
+        return $ Mat val' mov' css'
+        
+      Op2 op x y -> do
+        x' <- go namesRef x
+        y' <- go namesRef y
+        return $ Op2 op x' y'
+        
+      Ref name fid args -> do
+        args' <- mapM (go namesRef) args
+        return $ Ref name fid args'
+        
+      other -> return other
+
+    genName namesRef name = do
+      nameMap <- readIORef namesRef
+      case MS.lookup name nameMap of
+        Just name' -> return name'
+        Nothing -> do
+          let newName = genNameFromIndex (MS.size nameMap)
+          modifyIORef' namesRef (MS.insert name newName)
+          return newName
+          
+    genNameFromIndex n = go (n + 1) "" where
+      go n ac | n == 0    = ac
+              | otherwise = go q (chr (ord 'a' + r) : ac)
+              where (q,r) = quotRem (n - 1) 26
 
 -- Pretty Printers
 -- ---------------

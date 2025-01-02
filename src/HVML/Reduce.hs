@@ -30,10 +30,10 @@ reduceAt debug book host = do
     LET -> do
       case modeT lab of
         LAZY -> do
-          val <- got (loc + 1)
+          val <- got (loc + 0)
           cont host (reduceLet term val)
         STRI -> do
-          val <- reduceAt debug book (loc + 1)
+          val <- reduceAt debug book (loc + 0)
           cont host (reduceLet term val)
         PARA -> do
           error "TODO"
@@ -43,65 +43,16 @@ reduceAt debug book host = do
         ERA -> cont host (reduceAppEra term fun)
         LAM -> cont host (reduceAppLam term fun)
         SUP -> cont host (reduceAppSup term fun)
-        TYP -> cont host (reduceAppTyp term fun)
         CTR -> cont host (reduceAppCtr term fun)
         W32 -> cont host (reduceAppW32 term fun)
         CHR -> cont host (reduceAppW32 term fun)
         _   -> set (loc + 0) fun >> return term
-    DP0 -> do
-      sb0 <- got (loc + 0)
-      sb1 <- got (loc + 1)
-      if termTag sb1 == _SUB_
-        then do
-          val <- reduceAt debug book (loc + 0)
-          case tagT (termTag val) of
-            ERA -> cont host (reduceDupEra term val)
-            LAM -> cont host (reduceDupLam term val)
-            SUP -> cont host (reduceDupSup term val)
-            TYP -> cont host (reduceDupTyp term val)
-            CTR -> cont host (reduceDupCtr term val)
-            W32 -> cont host (reduceDupW32 term val)
-            CHR -> cont host (reduceDupW32 term val)
-            _   -> set (loc + 0) val >> return term
-        else do
-          set host sb0
-          reduceAt debug book host
-    DP1 -> do
-      sb0 <- got (loc + 0)
-      sb1 <- got (loc + 1)
-      if termTag sb1 == _SUB_
-        then do
-          val <- reduceAt debug book (loc + 0)
-          case tagT (termTag val) of
-            ERA -> cont host (reduceDupEra term val)
-            LAM -> cont host (reduceDupLam term val)
-            SUP -> cont host (reduceDupSup term val)
-            TYP -> cont host (reduceDupTyp term val)
-            CTR -> cont host (reduceDupCtr term val)
-            W32 -> cont host (reduceDupW32 term val)
-            CHR -> cont host (reduceDupW32 term val)
-            _   -> set (loc + 0) val >> return term
-        else do
-          set host sb1
-          reduceAt debug book host
-    ANN -> do
-      typ <- reduceAt debug book (loc + 1)
-      case tagT (termTag typ) of
-        ERA -> cont host (reduceAnnEra term typ)
-        LAM -> cont host (reduceAnnLam term typ)
-        SUP -> cont host (reduceAnnSup term typ)
-        TYP -> cont host (reduceAnnTyp term typ)
-        CTR -> cont host (reduceAnnCtr term typ)
-        W32 -> cont host (reduceAnnW32 term typ)
-        CHR -> cont host (reduceAnnW32 term typ)
-        _   -> set (loc + 1) typ >> return term
     MAT -> do
       val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of
         ERA -> cont host (reduceMatEra term val)
         LAM -> cont host (reduceMatLam term val)
         SUP -> cont host (reduceMatSup term val)
-        TYP -> cont host (reduceMatTyp term val)
         CTR -> cont host (reduceMatCtr term val)
         W32 -> cont host (reduceMatW32 term val)
         CHR -> cont host (reduceMatW32 term val)
@@ -112,7 +63,6 @@ reduceAt debug book host = do
         ERA -> cont host (reduceOpxEra term val)
         LAM -> cont host (reduceOpxLam term val)
         SUP -> cont host (reduceOpxSup term val)
-        TYP -> cont host (reduceOpxTyp term val)
         CTR -> cont host (reduceOpxCtr term val)
         W32 -> cont host (reduceOpxW32 term val)
         CHR -> cont host (reduceOpxW32 term val)
@@ -123,17 +73,48 @@ reduceAt debug book host = do
         ERA -> cont host (reduceOpyEra term val)
         LAM -> cont host (reduceOpyLam term val)
         SUP -> cont host (reduceOpySup term val)
-        TYP -> cont host (reduceOpyTyp term val)
         CTR -> cont host (reduceOpyCtr term val)
         W32 -> cont host (reduceOpyW32 term val)
         CHR -> cont host (reduceOpyW32 term val)
         _   -> set (loc + 1) val >> return term
+    DP0 -> do
+      sb0 <- got (loc + 0)
+      if termGetBit sb0 == 0
+        then do
+          val <- reduceAt debug book (loc + 0)
+          case tagT (termTag val) of
+            ERA -> cont host (reduceDupEra term val)
+            LAM -> cont host (reduceDupLam term val)
+            SUP -> cont host (reduceDupSup term val)
+            CTR -> cont host (reduceDupCtr term val)
+            W32 -> cont host (reduceDupW32 term val)
+            CHR -> cont host (reduceDupW32 term val)
+            _   -> set (loc + 0) val >> return term
+        else do
+          set host (termRemBit sb0)
+          reduceAt debug book host
+    DP1 -> do
+      sb1 <- got (loc + 1)
+      if termGetBit sb1 == 0
+        then do
+          val <- reduceAt debug book (loc + 0)
+          case tagT (termTag val) of
+            ERA -> cont host (reduceDupEra term val)
+            LAM -> cont host (reduceDupLam term val)
+            SUP -> cont host (reduceDupSup term val)
+            CTR -> cont host (reduceDupCtr term val)
+            W32 -> cont host (reduceDupW32 term val)
+            CHR -> cont host (reduceDupW32 term val)
+            _   -> set (loc + 0) val >> return term
+        else do
+          set host (termRemBit sb1)
+          reduceAt debug book host
     VAR -> do
       sub <- got (loc + 0)
-      if termTag sub == _SUB_
+      if termGetBit sub == 0
         then return term
         else do
-          set host sub
+          set host (termRemBit sub)
           reduceAt debug book host
     REF -> do
       reduceRefAt book host

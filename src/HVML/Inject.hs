@@ -35,18 +35,17 @@ injectCore _ (Var nam) loc = do
       modify $ \s -> s { vars = (nam, loc) : vars s }
 
 injectCore book (Let mod nam val bod) loc = do
-  let_node <- lift $ allocNode 3
-  lift $ set (let_node + 0) (termNew _SUB_ 0 0)
+  let_node <- lift $ allocNode 2
   modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (let_node + 0)) (args s) }
-  injectCore book val (let_node + 1)
-  injectCore book bod (let_node + 2)
+  injectCore book val (let_node + 0)
+  injectCore book bod (let_node + 1)
   lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mod) let_node)
 
 injectCore book (Lam vr0 bod) loc = do
-  lam <- lift $ allocNode 2
-  lift $ set (lam + 0) (termNew _SUB_ 0 0)
+  lam <- lift $ allocNode 1
+  -- lift $ set (lam + 0) (termNew _SUB_ 0 0)
   modify $ \s -> s { args = Map.insert vr0 (termNew _VAR_ 0 (lam + 0)) (args s) }
-  injectCore book bod (lam + 1)
+  injectCore book bod (lam + 0)
   lift $ set loc (termNew _LAM_ 0 lam)
 
 injectCore book (App fun arg) loc = do
@@ -71,19 +70,6 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
     }
   injectCore book val (dup + 0)
   injectCore book bod loc
-
-injectCore book (Typ nam bod) loc = do
-  typ <- lift $ allocNode 2
-  lift $ set (typ + 0) (termNew _SUB_ 0 0)
-  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (typ + 0)) (args s) }
-  injectCore book bod (typ + 1)
-  lift $ set loc (termNew _TYP_ 0 typ)
-
-injectCore book (Ann val typ) loc = do
-  ann <- lift $ allocNode 2
-  injectCore book val (ann + 0)
-  injectCore book typ (ann + 1)
-  lift $ set loc (termNew _ANN_ 0 ann)
 
 injectCore book (Ref nam fid arg) loc = do
   -- lift $ set loc (termNew _REF_ 0 fid)

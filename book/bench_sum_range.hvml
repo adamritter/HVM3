@@ -5,7 +5,7 @@ data List { #Nil #Cons{ head tail } }
   #Cons{head tail}: @sum(tail (+ head r))
 }
 
-@range(!n xs) = ~n !xs {
+@range(n xs) = ~n !xs {
   0: xs
   p: !&0{p0 p1}=p @range(p0 #Cons{p1 xs})
 }
@@ -13,7 +13,7 @@ data List { #Nil #Cons{ head tail } }
 //@main = @sum(@range(50_000_000 #Nil) 0)
 @main = @sum(@range(50_000_000 #Nil) 0)
 
-//WORK: 1200000007 interactions
-//TIME: 0.5031900 seconds
-//SIZE: 400000005 nodes
-//PERF: 2384.785 MIPS
+//WORK: 600000007 interactions
+//TIME: 0.1968570 seconds
+//SIZE: 100000005 nodes
+//PERF: 3047.898 MIPS

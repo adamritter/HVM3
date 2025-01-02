@@ -9,6 +9,7 @@ import Control.Monad.IO.Class
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
+import GHC.Conc
 import HVML.Show
 import HVML.Type
 import System.Exit (exitFailure)
@@ -80,10 +81,8 @@ instance Monad Collapse where
 -- Dup Collapser
 -- -------------
 
-type CollapseDupsState = (IM.IntMap [Int], IORef (MS.Map Loc String))
-
-collapseDupsAt :: CollapseDupsState -> ReduceAt -> Book -> Loc -> HVM Core
-collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $ do
+collapseDupsAt :: IM.IntMap [Int] -> ReduceAt -> Book -> Loc -> HVM Core
+collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
     ERA -> do
@@ -92,15 +91,15 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
     LET -> do
       let loc = termLoc term
       let mode = modeT (termLab term)
-      name <- genName namesRef (loc + 0)
+      name <- return $ "$" ++ show (loc + 0)
       val0 <- collapseDupsAt state reduceAt book (loc + 1)
       bod0 <- collapseDupsAt state reduceAt book (loc + 2)
       return $ Let mode name val0 bod0
 
     LAM -> do
       let loc = termLoc term
-      name <- genName namesRef (loc + 0)
-      bod0 <- collapseDupsAt state reduceAt book (loc + 1)
+      name <- return $ "$" ++ show (loc + 0)
+      bod0 <- collapseDupsAt state reduceAt book (loc + 0)
       return $ Lam name bod0
 
     APP -> do
@@ -115,57 +114,46 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
       case IM.lookup (fromIntegral lab) paths of
         Just (p:ps) -> do
           let newPaths = IM.insert (fromIntegral lab) ps paths
-          collapseDupsAt (newPaths, namesRef) reduceAt book (loc + fromIntegral p)
+          collapseDupsAt (newPaths) reduceAt book (loc + fromIntegral p)
         _ -> do
           tm00 <- collapseDupsAt state reduceAt book (loc + 0)
           tm11 <- collapseDupsAt state reduceAt book (loc + 1)
           return $ Sup lab tm00 tm11
 
-    TYP -> do
-      let loc = termLoc term
-      name <- genName namesRef (loc + 0)
-      bod0 <- collapseDupsAt state reduceAt book (loc + 1)
-      return $ Typ name bod0
-
-    ANN -> do
-      let loc = termLoc term
-      val0 <- collapseDupsAt state reduceAt book (loc + 0)
-      typ0 <- collapseDupsAt state reduceAt book (loc + 1)
-      return $ Ann val0 typ0
-
     VAR -> do
       let loc = termLoc term
       sub <- got loc
-      if termTag sub /= _SUB_
+      if termGetBit sub /= 0
       then do
+        set (loc + 0) (termRemBit sub)
         collapseDupsAt state reduceAt book (loc + 0)
       else do
-        name <- genName namesRef loc
+        name <- return $ "$" ++ show loc
         return $ Var name
 
     DP0 -> do
       let loc = termLoc term
       let lab = termLab term
       sb0 <- got (loc+0)
-      sb1 <- got (loc+1)
-      if termTag sb1 /= _SUB_
+      if termGetBit sb0 /= 0
       then do
+        set (loc + 0) (termRemBit sb0)
         collapseDupsAt state reduceAt book (loc + 0)
       else do
         let newPaths = IM.alter (Just . maybe [0] (0:)) (fromIntegral lab) paths
-        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)
+        collapseDupsAt (newPaths) reduceAt book (loc + 0)
 
     DP1 -> do
       let loc = termLoc term
       let lab = termLab term
-      sb0 <- got (loc+0)
       sb1 <- got (loc+1)
-      if termTag sb1 /= _SUB_
+      if termGetBit sb1 /= 0
       then do
+        set (loc + 1) (termRemBit sb1)
         collapseDupsAt state reduceAt book (loc + 1)
       else do
         let newPaths = IM.alter (Just . maybe [1] (1:)) (fromIntegral lab) paths
-        collapseDupsAt (newPaths, namesRef) reduceAt book (loc + 0)
+        collapseDupsAt (newPaths) reduceAt book (loc + 0)
 
     CTR -> do
       let loc = termLoc term
@@ -219,23 +207,8 @@ collapseDupsAt state@(paths, namesRef) reduceAt book host = unsafeInterleaveIO $
 
     tag -> do
       putStrLn ("unexpected-tag:" ++ show tag)
-      exitFailure
-
-genName :: IORef (MS.Map Loc String) -> Loc -> HVM String
-genName namesRef loc = do
-  nameMap <- readIORef namesRef
-  case MS.lookup loc nameMap of
-    Just name -> return name
-    Nothing -> do
-      let newName = genNameFromIndex (MS.size nameMap)
-      modifyIORef' namesRef (MS.insert loc newName)
-      return newName
-
-genNameFromIndex :: Int -> String
-genNameFromIndex n = go (n + 1) "" where
-  go n ac | n == 0    = ac
-          | otherwise = go q (chr (ord 'a' + r) : ac)
-          where (q,r) = quotRem (n - 1) 26
+      return $ Var "?"
+      -- exitFailure
 
 -- Sup Collapser
 -- -------------
@@ -257,13 +230,6 @@ collapseSups book core = case core of
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Dup lab x y val body
-  Typ nam bod -> do
-    body <- collapseSups book bod
-    return $ Typ nam body
-  Ann val typ -> do
-    val <- collapseSups book val
-    typ <- collapseSups book typ
-    return $ Ann val typ
   Ctr cid fields -> do
     fields <- mapM (collapseSups book) fields
     return $ Ctr cid fields
@@ -300,8 +266,8 @@ collapseSups book core = case core of
 
 doCollapseAt :: ReduceAt -> Book -> Loc -> HVM (Collapse Core)
 doCollapseAt reduceAt book host = do
-  namesRef <- newIORef MS.empty
-  let state = (IM.empty, namesRef)
+  -- namesRef <- newIORef MS.empty
+  let state = (IM.empty)
   core <- collapseDupsAt state reduceAt book host
   return $ collapseSups book core
 
