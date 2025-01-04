@@ -112,12 +112,14 @@ cliRun filePath debug compiled mode showStats = do
     hvmSetState <- dlsym bookLib "hvm_set_state"
     callFFI hvmSetState retVoid [argPtr hvmGotState]
   -- Set constructor arities, case length and ADT ids
-  forM_ (MS.toList (cidToAri book)) $ \(cid, ari) -> do
+  forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
     hvmSetCari cid (fromIntegral ari)
-  forM_ (MS.toList (cidToLen book)) $ \(cid, len) -> do
+  forM_ (MS.toList (cidToLen book)) $ \ (cid, len) -> do
     hvmSetClen cid (fromIntegral len)
-  forM_ (MS.toList (cidToADT book)) $ \(cid, adt) -> do
+  forM_ (MS.toList (cidToADT book)) $ \ (cid, adt) -> do
     hvmSetCadt cid (fromIntegral adt)
+  forM_ (MS.toList (fidToFun book)) $ \ (fid, ((_, args), _)) -> do
+    hvmSetFari fid (fromIntegral $ length args)
   -- Abort when main isn't present
   when (not $ MS.member "main" (namToFid book)) $ do
     putStrLn "Error: 'main' not found."
@@ -168,7 +170,7 @@ genMain book =
     , "  hvm_init();"
     , registerFuncs
     , "  clock_t start = clock();"
-    , "  Term root = term_new(REF, u12v2_new("++show mainFid++",0), 0);"
+    , "  Term root = term_new(REF, "++show mainFid++", 0);"
     , "  normal(root);"
     , "  double time = (double)(clock() - start) / CLOCKS_PER_SEC * 1000;"
     , "  printf(\"WORK: %llu interactions\\n\", get_itr());"

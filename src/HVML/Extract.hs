@@ -20,7 +20,7 @@ extractCoreAt :: IORef IS.IntSet -> ReduceAt -> Book -> Loc -> HVM Core
 
 extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
-  case tagT (termTag term) of
+  trace ("extract " ++ show host ++ " " ++ termToString term) $ case tagT (termTag term) of
 
     ERA -> do
       return Era
@@ -160,8 +160,8 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
     REF -> do
       let loc = termLoc term
       let lab = termLab term
-      let fid = u12v2X lab
-      let ari = u12v2Y lab
+      let fid = lab
+      let ari = funArity book fid
       let aux = if ari == 0 then [] else [0..ari-1]
       arg <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + i)) aux
       let name = MS.findWithDefault "?" fid (fidToNam book)

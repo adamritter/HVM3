@@ -218,6 +218,8 @@ foreign import ccall unsafe "Runtime.c hvm_set_clen"
   hvmSetClen :: Word64 -> Word16 -> IO ()
 foreign import ccall unsafe "Runtime.c hvm_set_cadt"
   hvmSetCadt :: Word64 -> Word16 -> IO ()
+foreign import ccall unsafe "Runtime.c hvm_set_fari"
+  hvmSetFari :: Word64 -> Word16 -> IO ()
 
 -- Constants
 -- ---------
@@ -315,15 +317,11 @@ _SUP_F_ = 0xFFE
 _LOG_F_ :: Lab
 _LOG_F_ = 0xFFD
 
-_FRESH_F_ :: Lab
-_FRESH_F_ = 0xFFC
-
 primitives :: [(String, Lab)]
 primitives = 
   [ ("SUP", _SUP_F_)
   , ("DUP", _DUP_F_)
   , ("LOG", _LOG_F_)
-  , ("FRESH", _FRESH_F_)
   ]
 
 -- Utils
@@ -353,3 +351,12 @@ matType book (Mat _ _ css) =
     cs | all (\(c,_,_) -> c /= "_") cs -> Match
     _                                  -> error "invalid match"
 matType _ _ = error "not a match"
+
+funArity :: Book -> Word64 -> Word64
+funArity book fid
+  | fid == _SUP_F_ = 3
+  | fid == _DUP_F_ = 3
+  | fid == _LOG_F_ = 1
+  | otherwise = case MS.lookup fid (fidToFun book) of
+      Just ((_, args), _) -> fromIntegral (length args)
+      Nothing -> error $ "Function ID not found: " ++ show fid

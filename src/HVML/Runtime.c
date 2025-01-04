@@ -26,10 +26,11 @@ typedef struct {
   u64*   size; // global node length
   u64*   itrs; // interaction count
   u64*   frsh; // fresh dup label count
-  Term (*book[4096])(Term); // functions
+  Term (*book[65536])(Term); // functions
   u16    cari[65536]; // arity of each constructor
   u16    clen[65536]; // case length of each constructor
   u16    cadt[65536]; // ADT id of each constructor
+  u16    fari[65536]; // arity of each function
 } State;
 
 static State HVM = {
@@ -43,6 +44,7 @@ static State HVM = {
   .cari = {0},
   .clen = {0},
   .cadt = {0},
+  .fari = {0},
 };
 
 // Constants
@@ -87,7 +89,6 @@ static State HVM = {
 #define DUP_F 0xFFF
 #define SUP_F 0xFFE
 #define LOG_F 0xFFD
-#define FRESH_F 0xFFC
 
 #define LAZY 0x0
 #define STRI 0x1
@@ -279,8 +280,8 @@ Term reduce_ref_sup(Term ref, u32 idx) {
   inc_itr();
   Loc ref_loc = term_loc(ref);
   Lab ref_lab = term_lab(ref);
-  u64 fun_id = u12v2_x(ref_lab);
-  u64 arity  = u12v2_y(ref_lab);
+  u64 fun_id = ref_lab;
+  u64 arity  = HVM.fari[fun_id];
   if (idx >= arity) {
     printf("ERROR: Invalid index in reduce_ref_sup\n");
     exit(1);
@@ -570,9 +571,9 @@ Term reduce_dup_ref(Term dup, Term ref) {
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ref_loc = term_loc(ref);
   Lab ref_lab = term_lab(ref);
-  u64 ref_ari = u12v2_y(ref_lab);
+  u64 ref_ari = HVM.fari[ref_lab];
   Loc ref0    = ref_loc;
-  Loc ref1    = alloc_node(1 + ref_ari);
+  Loc ref1    = alloc_node(ref_ari);
   for (u64 i = 0; i < ref_ari; i++) {
     Loc du0 = alloc_node(2);
     set(du0 + 0, got(ref_loc + i));
@@ -1225,11 +1226,6 @@ Term LOG_f(Term ref) {
   exit(0);
 }
 
-Term FRESH_f(Term ref) {
-  printf("TODO: FRESH_f");
-  exit(0);
-}
-
 // Runtime Memory
 // --------------
 
@@ -1248,11 +1244,11 @@ void hvm_init() {
   HVM.book[SUP_F] = SUP_f;
   HVM.book[DUP_F] = DUP_f;
   HVM.book[LOG_F] = LOG_f;
-  HVM.book[FRESH_F] = FRESH_f;
   for (int i = 0; i < 65536; i++) {
     HVM.cari[i] = 0;
     HVM.clen[i] = 0;
     HVM.cadt[i] = 0;
+    HVM.fari[i] = 0;
   }
 }
 
@@ -1276,10 +1272,9 @@ void hvm_set_state(State* hvm) {
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;
   HVM.frsh = hvm->frsh;
-  for (int i = 0; i < 4096; i++) {
-    HVM.book[i] = hvm->book[i];
-  }
   for (int i = 0; i < 65536; i++) {
+    HVM.book[i] = hvm->book[i];
+    HVM.fari[i] = hvm->fari[i];
     HVM.cari[i] = hvm->cari[i];
     HVM.clen[i] = hvm->clen[i];
     HVM.cadt[i] = hvm->cadt[i];
@@ -1293,6 +1288,10 @@ void hvm_define(u64 fid, Term (*func)()) {
 
 void hvm_set_cari(u64 cid, u16 arity) {
   HVM.cari[cid] = arity;
+}
+
+void hvm_set_fari(u64 fid, u16 arity) {
+  HVM.fari[fid] = arity;
 }
 
 void hvm_set_clen(u64 cid, u16 cases) {

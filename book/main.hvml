@@ -28,6 +28,9 @@ data Term {
 
 
 
+@foo = 7
+@main = @foo
+
 
 
 

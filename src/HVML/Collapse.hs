@@ -220,8 +220,8 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     REF -> do
       let loc = termLoc term
       let lab = termLab term
-      let fid = u12v2X lab
-      let ari = u12v2Y lab
+      let fid = lab
+      let ari = funArity book fid
       arg0 <- mapM (collapseDupsAt state reduceAt book) [loc + i | i <- [0..ari-1]]
       let name = MS.findWithDefault "?" fid (fidToNam book)
       return $ Ref name fid arg0

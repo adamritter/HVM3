@@ -295,15 +295,15 @@ data Pair { #Pair{fst snd} }
 //@B = @cat(@bin(@H 19489) @bin(@H 0))
 //@P = @bin(@S 485724347)
 
-// 32:
-@K = 15
-@H = 16
-@S = 32
-@X = @cat(@all1(@H) @bin(@H 0))
-@Y = @cat(@all2(@H) @bin(@H 0))
-@A = @cat(@bin(@K 47791) @bin(@H 0))
-@B = @cat(@bin(@H 54881) @bin(@H 0))
-@P = @bin(@S 2622817871)
+//// 32:
+//@K = 15
+//@H = 16
+//@S = 32
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 47791) @bin(@H 0))
+//@B = @cat(@bin(@H 54881) @bin(@H 0))
+//@P = @bin(@S 2622817871)
 
 @main = 
   ! cond = @eq(@mul(@X @Y) @P)

@@ -206,7 +206,7 @@ compileFullCore book fid (Ref rNam rFid rArg) host = do
   emit $ "Loc " ++ refNam ++ " = alloc_node(" ++ show arity ++ ");"
   argsT <- mapM (\ (i,arg) -> compileFullCore book fid arg (refNam ++ " + " ++ show i)) (zip [0..] rArg)
   sequence_ [emit $ "set(" ++ refNam ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
-  return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refNam ++ ")"
+  return $ "term_new(REF, " ++ show rFid ++ ", " ++ refNam ++ ")"
 
 -- Fast Compiler
 -- -------------
@@ -676,7 +676,7 @@ compileFastCore book fid (Ref rNam rFid rArg) reuse = do
     emit $ "Loc " ++ refNam ++ " = " ++ refLoc ++ ";"
     argsT <- mapM (\ (i,arg) -> compileFastCore book fid arg reuse) (zip [0..] rArg)
     sequence_ [emit $ "set(" ++ refNam ++ " + " ++ show i ++ ", " ++ argT ++ ");" | (i,argT) <- zip [0..] argsT]
-    return $ "term_new(REF, u12v2_new(" ++ show rFid ++ ", " ++ show arity ++ "), " ++ refNam ++ ")"
+    return $ "term_new(REF, " ++ show rFid ++ ", " ++ refNam ++ ")"
 
 -- Compiles a variable in fast mode
 compileFastVar :: String -> Compile String

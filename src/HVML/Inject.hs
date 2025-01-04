@@ -76,11 +76,10 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
   injectCore book bod loc
 
 injectCore book (Ref nam fid arg) loc = do
-  -- lift $ set loc (termNew _REF_ 0 fid)
-  let arity = length arg
-  ref <- lift $ allocNode (fromIntegral arity)
+  let ari = funArity book fid
+  ref <- lift $ allocNode (fromIntegral ari)
   sequence_ [injectCore book x (ref + i) | (i,x) <- zip [0..] arg]
-  lift $ set loc (termNew _REF_ (u12v2New fid (fromIntegral arity)) ref)
+  lift $ set loc (termNew _REF_ fid ref)
 
 injectCore book (Ctr nam fds) loc = do
   let ari = length fds

@@ -168,13 +168,12 @@ reduceRefAt book host = do
   term <- got host
   let lab = termLab term
   let loc = termLoc term
-  let fid = u12v2X lab
-  let ari = u12v2Y lab
+  let fid = lab
+  let ari = funArity book fid
   case fid of
     x | x == _DUP_F_ -> reduceRefAt_DupF book host loc ari
     x | x == _SUP_F_ -> reduceRefAt_SupF book host loc ari
     x | x == _LOG_F_ -> reduceRefAt_LogF book host loc ari
-    x | x == _FRESH_F_ -> reduceRefAt_FreshF book host loc ari
     oterwise -> case MS.lookup fid (fidToFun book) of
       Just ((copy, args), core) -> do
         incItr
@@ -182,38 +181,13 @@ reduceRefAt book host = do
           putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (fidToNam book) fid ++ "'."
           exitFailure
         argTerms <- if ari == 0
-          then return [] 
+          then return []
           else forM (zip [0..] args) $ \(i, (strict, _)) -> do
             term <- got (loc + i)
             if strict
               then reduceAt False book (loc + i)
               else return term
         doInjectCoreAt book core host $ zip (map snd args) argTerms
-        -- TODO: I disabled Fast Copy Optimization on interpreted mode because I
-        -- don't think it is relevant here. We use it for speed, to trigger the
-        -- hot paths on compiled functions, which don't happen when interpreted.
-        -- I think leaving it out is good because it ensures interpreted mode is
-        -- always optimal (minimizing interactions). This also allows the dev to
-        -- see how Fast Copy Mode affects the interaction count.
-        -- let inject = doInjectCoreAt book core host $ zip (map snd args) argTerms
-        -- Fast Copy Optimization
-        -- if copy then do
-          -- let supGet = \x (idx,sup) -> if tagT (termTag sup) == SUP then Just (idx,sup) else x
-          -- let supGot = foldl' supGet Nothing $ zip [0..] argTerms
-          -- case supGot of
-            -- Just (idx,sup) -> do
-              -- let isCopySafe = case MS.lookup fid (idToLabs book) of
-                    -- Nothing   -> False
-                    -- Just labs -> not $ MS.member (termLab sup) labs
-              -- if isCopySafe then do
-                -- term <- reduceRefSup term idx
-                -- set host term
-                -- return term
-              -- else inject
-            -- otherwise -> inject
-        -- else inject
-      Nothing -> do
-        return term
 
 -- Primitive: Dynamic Dup `@DUP(lab val λdp0λdp1(bod))`
 reduceRefAt_DupF :: Book -> Loc -> Loc -> Word64 -> HVM Term  
@@ -357,3 +331,27 @@ reduceCAt = \ _ _ host -> do
 
 -- normalCAt :: Book -> Loc -> HVM Term
 -- normalCAt = normalAtWith (reduceCAt False)
+
+-- TODO: I disabled Fast Copy Optimization on interpreted mode because I
+-- don't think it is relevant here. We use it for speed, to trigger the
+-- hot paths on compiled functions, which don't happen when interpreted.
+-- I think leaving it out is good because it ensures interpreted mode is
+-- always optimal (minimizing interactions). This also allows the dev to
+-- see how Fast Copy Mode affects the interaction count.
+-- let inject = doInjectCoreAt book core host $ zip (map snd args) argTerms
+-- Fast Copy Optimization
+-- if copy then do
+  -- let supGet = \x (idx,sup) -> if tagT (termTag sup) == SUP then Just (idx,sup) else x
+  -- let supGot = foldl' supGet Nothing $ zip [0..] argTerms
+  -- case supGot of
+    -- Just (idx,sup) -> do
+      -- let isCopySafe = case MS.lookup fid (idToLabs book) of
+            -- Nothing   -> False
+            -- Just labs -> not $ MS.member (termLab sup) labs
+      -- if isCopySafe then do
+        -- term <- reduceRefSup term idx
+        -- set host term
+        -- return term
+      -- else inject
+    -- otherwise -> inject
+-- else inject
