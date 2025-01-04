@@ -11,6 +11,7 @@ typedef uint8_t  Tag;
 typedef uint32_t Lab;
 typedef uint32_t Loc;
 typedef uint64_t Term;
+typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 typedef _Atomic(Term) ATerm;
@@ -18,7 +19,6 @@ typedef _Atomic(Term) ATerm;
 // Runtime Types
 // -------------
 
-// Global State Type
 typedef struct {
   Term*  sbuf; // reduction stack buffer
   u64*   spos; // reduction stack position
@@ -27,9 +27,11 @@ typedef struct {
   u64*   itrs; // interaction count
   u64*   frsh; // fresh dup label count
   Term (*book[4096])(Term); // functions
+  u16    cari[65536]; // arity of each constructor
+  u16    clen[65536]; // case length of each constructor
+  u16    cadt[65536]; // ADT id of each constructor
 } State;
 
-// Global State Value
 static State HVM = {
   .sbuf = NULL,
   .spos = NULL,
@@ -37,7 +39,10 @@ static State HVM = {
   .size = NULL,
   .itrs = NULL,
   .frsh = NULL,
-  .book = {NULL}
+  .book = {NULL},
+  .cari = {0},
+  .clen = {0},
+  .cadt = {0},
 };
 
 // Constants
@@ -51,14 +56,16 @@ static State HVM = {
 #define LET 0x05
 #define APP 0x06
 #define MAT 0x08
-#define OPX 0x09
-#define OPY 0x0A
-#define ERA 0x0B
-#define LAM 0x0C
-#define SUP 0x0D
-#define CTR 0x0F
-#define W32 0x10
-#define CHR 0x11
+#define IFL 0x09
+#define SWI 0x0A
+#define OPX 0x0B
+#define OPY 0x0C
+#define ERA 0x0D
+#define LAM 0x0E
+#define SUP 0x0F
+#define CTR 0x10
+#define W32 0x11
+#define CHR 0x12
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -226,6 +233,8 @@ void print_tag(Tag tag) {
     case LET: printf("LET"); break;
     case CTR: printf("CTR"); break;
     case MAT: printf("MAT"); break;
+    case IFL: printf("IFL"); break;
+    case SWI: printf("SWI"); break;
     case W32: printf("W32"); break;
     case CHR: printf("CHR"); break;
     case OPX: printf("OPX"); break;
@@ -515,7 +524,7 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ctr_loc = term_loc(ctr);
   Lab ctr_lab = term_lab(ctr);
-  u64 ctr_ari = u12v2_y(ctr_lab);
+  u64 ctr_ari = HVM.cari[ctr_lab];
   //Loc ctr0    = alloc_node(ctr_ari);
   Loc ctr0    = ctr_loc;
   Loc ctr1    = alloc_node(ctr_ari);
@@ -605,13 +614,14 @@ Term reduce_mat_lam(Term mat, Term lam) {
 Term reduce_mat_sup(Term mat, Term sup) {
   //printf("reduce_mat_sup "); print_term(mat); printf("\n");
   inc_itr();
+  Tag mat_tag = term_tag(mat);
+  Lab mat_lab = term_lab(mat);
   Loc mat_loc = term_loc(mat);
   Loc sup_loc = term_loc(sup);
   Lab sup_lab = term_lab(sup);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Lab mat_lab = term_lab(mat);
-  u64 mat_len = u12v2_x(mat_lab);
+  u64 mat_len = mat_tag == SWI ? mat_lab : mat_tag == IFL ? 2 : HVM.clen[mat_lab];
   Loc mat1    = alloc_node(1 + mat_len);
   //Loc mat0    = alloc_node(1 + mat_len);
   //Loc sup0    = alloc_node(2);
@@ -626,26 +636,23 @@ Term reduce_mat_sup(Term mat, Term sup) {
     set(mat0 + 1 + i, term_new(DP0, sup_lab, du0));
     set(mat1 + 1 + i, term_new(DP1, sup_lab, du0));
   }
-  set(sup0 + 0, term_new(MAT, mat_lab, mat0));
-  set(sup0 + 1, term_new(MAT, mat_lab, mat1));
+  set(sup0 + 0, term_new(mat_tag, mat_lab, mat0));
+  set(sup0 + 1, term_new(mat_tag, mat_lab, mat1));
   return term_new(SUP, sup_lab, sup0);
 }
 
-// ~ #N{x y z ...} {K0 K1 K2 ...} 
-// ------------------------------ MAT-CTR
-// (((KN x) y) z ...)
 Term reduce_mat_ctr(Term mat, Term ctr) {
-  //printf("reduce_mat_ctr "); print_term(mat); printf("\n");
   inc_itr();
+  Tag mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
   Lab mat_lab = term_lab(mat);
   // If-Let
-  if (u12v2_y(mat_lab) > 0) {
+  if (mat_tag == IFL) {
     Loc ctr_loc = term_loc(ctr);
     Lab ctr_lab = term_lab(ctr);
-    u64 mat_ctr = u12v2_y(mat_lab) - 1;
-    u64 ctr_num = u12v2_x(ctr_lab);
-    u64 ctr_ari = u12v2_y(ctr_lab);
+    u64 mat_ctr = mat_lab;
+    u64 ctr_num = ctr_lab;
+    u64 ctr_ari = HVM.cari[ctr_num];
     if (mat_ctr == ctr_num) {
       Term app = got(mat_loc + 1);
       for (u64 i = 0; i < ctr_ari; i++) {
@@ -667,9 +674,12 @@ Term reduce_mat_ctr(Term mat, Term ctr) {
   } else {
     Loc ctr_loc = term_loc(ctr);
     Lab ctr_lab = term_lab(ctr);
-    u64 ctr_num = u12v2_x(ctr_lab);
-    u64 ctr_ari = u12v2_y(ctr_lab);
-    Term app = got(mat_loc + 1 + ctr_num);
+    u64 ctr_num = ctr_lab;
+    u64 ctr_ari = HVM.cari[ctr_num];
+    u64 adt_id  = HVM.cadt[ctr_num];
+    u64 mat_ctr = mat_lab;
+    u64 cse_idx = ctr_num - mat_ctr;
+    Term app = got(mat_loc + 1 + cse_idx);
     for (u64 i = 0; i < ctr_ari; i++) {
       Loc new_app = alloc_node(2);
       set(new_app + 0, app);
@@ -690,7 +700,7 @@ Term reduce_mat_w32(Term mat, Term w32) {
   Lab mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
   Lab mat_lab = term_lab(mat);
-  u64 mat_len = u12v2_x(mat_lab);
+  u64 mat_len = mat_lab;
   u64 w32_val = term_loc(w32);
   if (w32_val < mat_len - 1) {
     return got(mat_loc + 1 + w32_val);
@@ -887,7 +897,7 @@ Term reduce(Term term) {
           }
           case STRI: {
             HVM.sbuf[(*spos)++] = next;
-            next = got(loc + 1);
+            next = got(loc + 0);
             continue;
           }
           case PARA: {
@@ -903,7 +913,9 @@ Term reduce(Term term) {
         continue;
       }
 
-      case MAT: {
+      case MAT:
+      case IFL:
+      case SWI: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
@@ -1003,7 +1015,9 @@ Term reduce(Term term) {
               break;
             }
 
-            case MAT: {
+            case MAT:
+            case IFL:
+            case SWI: {
               switch (tag) {
                 case ERA: next = reduce_mat_era(prev, next); continue;
                 case LAM: next = reduce_mat_lam(prev, next); continue;
@@ -1057,7 +1071,10 @@ Term reduce(Term term) {
         case APP: set(hloc + 0, next); break;
         case DP0: set(hloc + 0, next); break;
         case DP1: set(hloc + 0, next); break;
-        case MAT: set(hloc + 0, next); break;
+        case LET: set(hloc + 0, next); break;
+        case MAT:
+        case IFL:
+        case SWI: set(hloc + 0, next); break;
         case OPX: set(hloc + 0, next); break;
         case OPY: set(hloc + 1, next); break;
       }
@@ -1119,8 +1136,8 @@ Term normal(Term term) {
     }
 
     case CTR: {
-      u64 cid = u12v2_x(lab);
-      u64 ari = u12v2_y(lab);
+      u64 cid = lab;
+      u64 ari = HVM.cari[cid];
       for (u64 i = 0; i < ari; i++) {
         Term arg = got(loc + i);
         arg = normal(arg);
@@ -1129,9 +1146,11 @@ Term normal(Term term) {
       return wnf;
     }
 
-    case MAT: {
-      u64 mat_len = u12v2_x(lab);
-      for (u64 i = 0; i <= mat_len; i++) {
+    case MAT:
+    case IFL:
+    case SWI: {
+      u64 len = tag == SWI ? lab : tag == IFL ? 2 : HVM.clen[lab];
+      for (u64 i = 0; i <= len; i++) {
         Term arg = got(loc + i);
         arg = normal(arg);
         set(loc + i, arg);
@@ -1230,6 +1249,11 @@ void hvm_init() {
   HVM.book[DUP_F] = DUP_f;
   HVM.book[LOG_F] = LOG_f;
   HVM.book[FRESH_F] = FRESH_f;
+  for (int i = 0; i < 65536; i++) {
+    HVM.cari[i] = 0;
+    HVM.clen[i] = 0;
+    HVM.cadt[i] = 0;
+  }
 }
 
 void hvm_free() {
@@ -1255,9 +1279,25 @@ void hvm_set_state(State* hvm) {
   for (int i = 0; i < 4096; i++) {
     HVM.book[i] = hvm->book[i];
   }
+  for (int i = 0; i < 65536; i++) {
+    HVM.cari[i] = hvm->cari[i];
+    HVM.clen[i] = hvm->clen[i];
+    HVM.cadt[i] = hvm->cadt[i];
+  }
 }
 
 void hvm_define(u64 fid, Term (*func)()) {
   //printf("defined %llu %p\n", fid, func);
   HVM.book[fid] = func;
+}
+
+void hvm_set_cari(u64 cid, u16 arity) {
+  HVM.cari[cid] = arity;
+}
+
+void hvm_set_clen(u64 cid, u16 cases) {
+  HVM.clen[cid] = cases;
+}
+void hvm_set_cadt(u64 cid, u16 adt) {
+  HVM.cadt[cid] = adt;
 }

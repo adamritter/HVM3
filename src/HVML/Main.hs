@@ -111,6 +111,13 @@ cliRun filePath debug compiled mode showStats = do
     hvmGotState <- hvmGetState
     hvmSetState <- dlsym bookLib "hvm_set_state"
     callFFI hvmSetState retVoid [argPtr hvmGotState]
+  -- Set constructor arities, case length and ADT ids
+  forM_ (MS.toList (cidToAri book)) $ \(cid, ari) -> do
+    hvmSetCari cid (fromIntegral ari)
+  forM_ (MS.toList (cidToLen book)) $ \(cid, len) -> do
+    hvmSetClen cid (fromIntegral len)
+  forM_ (MS.toList (cidToADT book)) $ \(cid, adt) -> do
+    hvmSetCadt cid (fromIntegral adt)
   -- Abort when main isn't present
   when (not $ MS.member "main" (nameToId book)) $ do
     putStrLn "Error: 'main' not found."

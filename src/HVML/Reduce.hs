@@ -64,6 +64,28 @@ reduceAt debug book host = do
         CHR -> cont host (reduceMatW32 term val)
         _   -> set (loc + 0) val >> return term
 
+    IFL -> do
+      val <- reduceAt debug book (loc + 0)
+      case tagT (termTag val) of
+        ERA -> cont host (reduceMatEra term val)
+        LAM -> cont host (reduceMatLam term val)
+        SUP -> cont host (reduceMatSup term val)
+        CTR -> cont host (reduceMatCtr term val)
+        W32 -> cont host (reduceMatW32 term val)
+        CHR -> cont host (reduceMatW32 term val)
+        _   -> set (loc + 0) val >> return term
+
+    SWI -> do
+      val <- reduceAt debug book (loc + 0)
+      case tagT (termTag val) of
+        ERA -> cont host (reduceMatEra term val)
+        LAM -> cont host (reduceMatLam term val)
+        SUP -> cont host (reduceMatSup term val)
+        CTR -> cont host (reduceMatCtr term val)
+        W32 -> cont host (reduceMatW32 term val)
+        CHR -> cont host (reduceMatW32 term val)
+        _   -> set (loc + 0) val >> return term
+
     OPX -> do
       val <- reduceAt debug book (loc + 0)
       case tagT (termTag val) of

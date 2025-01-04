@@ -1,18 +1,20 @@
 -- //./Type.hs//
+-- //./Inject.hs//
 
 module HVML.Extract where
 
 import Control.Monad (foldM)
 import Control.Monad.State
+import Data.Bits (shiftR)
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
+import Debug.Trace
 import HVML.Show
 import HVML.Type
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntSet as IS
 import qualified Data.Map.Strict as MS
-import Debug.Trace
 
 extractCoreAt :: IORef IS.IntSet -> ReduceAt -> Book -> Loc -> HVM Core
 
@@ -95,18 +97,43 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
       let loc = termLoc term
       let lab = termLab term
       let cid = u12v2X lab
-      let ari = u12v2Y lab
+      let nam = mget (cidToCtr book) cid
+      let ari = mget (cidToAri book) cid
       let ars = if ari == 0 then [] else [0..ari-1]
       fds <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + i)) ars
-      return $ Ctr cid fds
+      return $ Ctr nam fds
 
     MAT -> do
       let loc = termLoc term
-      let len = u12v2X $ termLab term
+      let lab = termLab term
+      let cid = lab `shiftR` 1
+      let len = fromIntegral $ mget (cidToLen book) cid
       val <- extractCoreAt dupsRef reduceAt book (loc + 0)
-      css <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + 1 + i)) [0..len-1]
-      css <- mapM (\c -> return ("#", [], c)) css -- FIXME: recover names and fields on extraction (must store id)
-      return $ Mat val [] css
+      css <- foldM (\css i -> do
+        let ctr = mget (cidToCtr book) (cid + i)
+        let ari = fromIntegral $ mget (cidToAri book) (cid + i)
+        let fds = if ari == 0 then [] else ["$" ++ show (loc + 1 + j) | j <- [0..ari-1]]
+        bod <- extractCoreAt dupsRef reduceAt book (loc + 1 + i)
+        return $ (ctr,fds,bod):css) [] [0..len-1]
+      return $ Mat val [] (reverse css)
+
+    IFL -> do
+      let loc = termLoc term
+      let lab = termLab term
+      val <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      cs0 <- extractCoreAt dupsRef reduceAt book (loc + 1)
+      cs1 <- extractCoreAt dupsRef reduceAt book (loc + 2)
+      return $ Mat val [] [(mget (cidToCtr book) lab, [], cs0), ("_", [], cs1)]
+
+    SWI -> do
+      let loc = termLoc term
+      let lab = termLab term
+      let len = fromIntegral $ mget (cidToLen book) lab
+      val <- extractCoreAt dupsRef reduceAt book (loc + 0)
+      css <- foldM (\css i -> do
+        bod <- extractCoreAt dupsRef reduceAt book (loc + 1 + i)
+        return $ (show i, [], bod):css) [] [0..len-1]
+      return $ Mat val [] (reverse css)
 
     W32 -> do
       let val = termLoc term
@@ -184,9 +211,9 @@ liftDups (Dup lab dp0 dp1 val bod) =
       (bodT, bodD) = liftDups bod
   in (bodT, \x -> valD (bodD (Dup lab dp0 dp1 valT x)))
 
-liftDups (Ctr cid fds) =
+liftDups (Ctr nam fds) =
   let (fdsT, fdsD) = liftDupsList fds
-  in (Ctr cid fdsT, fdsD)
+  in (Ctr nam fdsT, fdsD)
 
 liftDups (Mat val mov css) =
   let (valT, valD) = liftDups val

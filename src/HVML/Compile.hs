@@ -1,10 +1,11 @@
 -- //./Type.hs//
--- //./Reduce.hs//
+-- //./Inject.hs//
 
 module HVML.Compile where
 
 import Control.Monad (forM_, forM, foldM, when)
 import Control.Monad.State
+import Data.Bits (shiftL, (.|.))
 import Data.List
 import Data.Word
 import Debug.Trace
@@ -151,36 +152,38 @@ compileFullCore book fid (Dup lab dp0 dp1 val bod) host = do
   bodT <- compileFullCore book fid bod host
   return bodT
 
-compileFullCore book fid (Ctr cid fds) host = do
+compileFullCore book fid (Ctr nam fds) host = do
   ctrNam <- fresh "ctr"
   let arity = length fds
+  let cid = mget (ctrToCid book) nam
   emit $ "Loc " ++ ctrNam ++ " = alloc_node(" ++ show arity ++ ");"
   fdsT <- mapM (\ (i,fd) -> compileFullCore book fid fd (ctrNam ++ " + " ++ show i)) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
-  return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
+  return $ "term_new(CTR, " ++ show cid ++ ", " ++ ctrNam ++ ")"
 
 compileFullCore book fid tm@(Mat val mov css) host = do
+  let typ = matType book tm
   matNam <- fresh "mat"
-  let arity = length css
-  emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + arity) ++ ");"
+  emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + length css) ++ ");"
   valT <- compileFullCore book fid val (matNam ++ " + 0")
   emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
-  forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
-    -- Create a chain of lambdas for fields and moved vars
+  forM_ (zip [0..] css) $ \(i,(ctr,fds,bod)) -> do
     let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
     bodT <- compileFullCore book fid bod' (matNam ++ " + " ++ show (i+1))
     emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
-  -- Create the base Mat term
-  let mat = "term_new(MAT, u12v2_new(" ++ show arity ++ "," ++ show (ifLetLab book tm) ++ "), " ++ matNam ++ ")"
-  -- Apply moved values
-  foldM (\term (key, val) -> do
+  let tag = case typ of { Switch -> "SWI" ; IfLet  -> "IFL" ; Match  -> "MAT" }
+  let lab = case typ of { Switch -> fromIntegral (length css) ; _ -> matFirstCid book tm }
+  retNam <- fresh "ret"
+  emit $ "Term " ++ retNam ++ " = term_new(" ++ tag ++ ", " ++ show lab ++ ", " ++ matNam ++ ");"
+  foldM (\acc (_, val) -> do
     appNam <- fresh "app"
     emit $ "Loc " ++ appNam ++ " = alloc_node(2);"
+    emit $ "set(" ++ appNam ++ " + 0, " ++ acc ++ ");"
     valT <- compileFullCore book fid val (appNam ++ " + 1")
-    emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
     emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
-    return $ "term_new(APP, 0, " ++ appNam ++ ")"
-    ) mat mov
+    emit $ acc ++ " = term_new(APP, 0, " ++ appNam ++ ");"
+    return acc) retNam mov
+  return retNam
 
 compileFullCore book fid (U32 val) _ =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
@@ -306,10 +309,10 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
 
   -- Constructor Pattern-Matching (with IfLet)
   else do
-    if ifLetLab book term > 0 then do
+    if matType book term == IfLet then do
       emit $ "if (term_tag(" ++ valNam ++ ") == CTR) {"
       tabInc
-      emit $ "if (u12v2_x(term_lab(" ++ valNam ++ ")) == " ++ show (ifLetLab book term - 1) ++ ") {"
+      emit $ "if (u12v2_x(term_lab(" ++ valNam ++ ")) == " ++ show (matFirstCid book term) ++ ") {"
       tabInc
       let (ctr,fds,bod) = css !! 0
       let reuse' = MS.insertWith (++) (length fds) ["term_loc(" ++ valNam ++ ")"] reuse
@@ -545,36 +548,67 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) reuse = do
   bind dp1 dp1Nam
   compileFastCore book fid bod reuse
 
-compileFastCore book fid (Ctr cid fds) reuse = do
+compileFastCore book fid (Ctr nam fds) reuse = do
   ctrNam <- fresh "ctr"
   let arity = length fds
+  let cid = mget (ctrToCid book) nam
   ctrLoc <- compileFastAlloc arity reuse
   emit $ "Loc " ++ ctrNam ++ " = " ++ ctrLoc ++ ";"
   fdsT <- mapM (\ (i,fd) -> compileFastCore book fid fd reuse) (zip [0..] fds)
   sequence_ [emit $ "set(" ++ ctrNam ++ " + " ++ show i ++ ", " ++ fdT ++ ");" | (i,fdT) <- zip [0..] fdsT]
-  return $ "term_new(CTR, u12v2_new(" ++ show cid ++ ", " ++ show arity ++ "), " ++ ctrNam ++ ")"
+  return $ "term_new(CTR, " ++ show cid ++ ", " ++ ctrNam ++ ")"
+
+-- compileFastCore book fid tm@(Mat val mov css) reuse = do
+  -- matNam <- fresh "mat"
+  -- let cid = matFirstCid book tm
+  -- let len = fromIntegral $ mget (cidToLen book) cid
+  -- matLoc <- compileFastAlloc (1 + len) reuse
+  -- emit $ "Loc " ++ matNam ++ " = " ++ matLoc ++ ";"
+  -- valT <- compileFastCore book fid val reuse
+  -- emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
+  -- forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
+    -- let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
+    -- bodT <- compileFastCore book fid bod' reuse
+    -- emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
+  -- let lab = (cid `shiftL` 1) .|. matIsIfLet book tm
+  -- let mat = "term_new(MAT, " ++ show lab ++ ", " ++ matNam ++ ")"
+  -- foldM (\term (key, val) -> do
+    -- appNam <- fresh "app"
+    -- appLoc <- compileFastAlloc 2 reuse
+    -- emit $ "Loc " ++ appNam ++ " = " ++ appLoc ++ ";"
+    -- valT <- compileFastCore book fid val reuse
+    -- emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
+    -- emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
+    -- return $ "term_new(APP, 0, " ++ appNam ++ ")"
+    -- ) mat mov
+
+-- TODO: the code above is outdated. now, Mat constructors (Haskell side) become
+-- either MAT, IFL or SWO on C side. read the Inject code for Mat to understand
+-- that logic. then, update the compileFullCore case above.
 
 compileFastCore book fid tm@(Mat val mov css) reuse = do
+  let typ = matType book tm
   matNam <- fresh "mat"
-  let arity = length css
-  matLoc <- compileFastAlloc (1 + arity) reuse
+  matLoc <- compileFastAlloc (1 + length css) reuse
   emit $ "Loc " ++ matNam ++ " = " ++ matLoc ++ ";"
   valT <- compileFastCore book fid val reuse
   emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
-  forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
+  forM_ (zip [0..] css) $ \(i,(ctr,fds,bod)) -> do
     let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
     bodT <- compileFastCore book fid bod' reuse
     emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
-  let mat = "term_new(MAT, u12v2_new(" ++ show arity ++ "," ++ show (ifLetLab book tm) ++ "), " ++ matNam ++ ")"
-  foldM (\term (key, val) -> do
+  let tag = case typ of { Switch -> "SWI" ; IfLet -> "IFL" ; Match -> "MAT" }
+  let lab = case typ of { Switch -> fromIntegral (length css) ; _ -> matFirstCid book tm }
+  retNam <- fresh "ret"
+  emit $ "Term " ++ retNam ++ " = term_new(" ++ tag ++ ", " ++ show lab ++ ", " ++ matNam ++ ");"
+  foldM (\acc (_, val) -> do
     appNam <- fresh "app"
     appLoc <- compileFastAlloc 2 reuse
     emit $ "Loc " ++ appNam ++ " = " ++ appLoc ++ ";"
+    emit $ "set(" ++ appNam ++ " + 0, " ++ acc ++ ");"
     valT <- compileFastCore book fid val reuse
-    emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
     emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
-    return $ "term_new(APP, 0, " ++ appNam ++ ")"
-    ) mat mov
+    return $ "term_new(APP, 0, " ++ appNam ++ ")") retNam mov
 
 compileFastCore book fid (U32 val) reuse =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"

@@ -4,21 +4,24 @@ module HVML.Inject where
 
 import Control.Monad (foldM, when, forM_)
 import Control.Monad.State
+import Data.Bits (shiftL, (.|.))
 import Data.Char (ord)
+import Data.List (foldr, take)
 import Data.Word
+import Debug.Trace
 import HVML.Show
 import HVML.Type
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as MS
 
 type InjectM a = StateT InjectState HVM a
 
 data InjectState = InjectState
-  { args :: Map.Map String Term -- maps var names to binder locations
+  { args :: MS.Map String Term -- maps var names to binder locations
   , vars :: [(String, Loc)]     -- list of (var name, usage location) pairs
   }
 
 emptyState :: InjectState
-emptyState = InjectState Map.empty []
+emptyState = InjectState MS.empty []
 
 injectCore :: Book -> Core -> Loc -> InjectM ()
 
@@ -27,17 +30,17 @@ injectCore _ Era loc = do
 
 injectCore _ (Var nam) loc = do
   argsMap <- gets args
-  case Map.lookup nam argsMap of
+  case MS.lookup nam argsMap of
     Just term -> do
       lift $ set loc term
       when (head nam /= '&') $ do
-        modify $ \s -> s { args = Map.delete nam (args s) }
+        modify $ \s -> s { args = MS.delete nam (args s) }
     Nothing -> do
       modify $ \s -> s { vars = (nam, loc) : vars s }
 
 injectCore book (Let mod nam val bod) loc = do
   let_node <- lift $ allocNode 2
-  modify $ \s -> s { args = Map.insert nam (termNew _VAR_ 0 (let_node + 0)) (args s) }
+  modify $ \s -> s { args = MS.insert nam (termNew _VAR_ 0 (let_node + 0)) (args s) }
   injectCore book val (let_node + 0)
   injectCore book bod (let_node + 1)
   lift $ set loc (termNew _LET_ (fromIntegral $ fromEnum mod) let_node)
@@ -45,7 +48,7 @@ injectCore book (Let mod nam val bod) loc = do
 injectCore book (Lam vr0 bod) loc = do
   lam <- lift $ allocNode 1
   -- lift $ set (lam + 0) (termNew _SUB_ 0 0)
-  modify $ \s -> s { args = Map.insert vr0 (termNew _VAR_ 0 (lam + 0)) (args s) }
+  modify $ \s -> s { args = MS.insert vr0 (termNew _VAR_ 0 (lam + 0)) (args s) }
   injectCore book bod (lam + 0)
   lift $ set loc (termNew _LAM_ 0 lam)
 
@@ -66,8 +69,8 @@ injectCore book (Dup lab dp0 dp1 val bod) loc = do
   -- lift $ set (dup + 0) (termNew _SUB_ 0 0)
   lift $ set (dup + 1) (termNew _SUB_ 0 0)
   modify $ \s -> s 
-    { args = Map.insert dp0 (termNew _DP0_ lab dup) 
-           $ Map.insert dp1 (termNew _DP1_ lab dup) (args s) 
+    { args = MS.insert dp0 (termNew _DP0_ lab dup) 
+           $ MS.insert dp1 (termNew _DP1_ lab dup) (args s) 
     }
   injectCore book val (dup + 0)
   injectCore book bod loc
@@ -79,22 +82,22 @@ injectCore book (Ref nam fid arg) loc = do
   sequence_ [injectCore book x (ref + i) | (i,x) <- zip [0..] arg]
   lift $ set loc (termNew _REF_ (u12v2New fid (fromIntegral arity)) ref)
 
-injectCore book (Ctr cid fds) loc = do
-  let arity = length fds
-  ctr <- lift $ allocNode (fromIntegral arity)
+injectCore book (Ctr nam fds) loc = do
+  let ari = length fds
+  let cid = mget (ctrToCid book) nam
+  ctr <- lift $ allocNode (fromIntegral ari)
   sequence_ [injectCore book fd (ctr + ix) | (ix,fd) <- zip [0..] fds]
-  lift $ set loc (termNew _CTR_ (u12v2New cid (fromIntegral arity)) ctr)
+  lift $ set loc (termNew _CTR_ cid ctr)
 
 injectCore book tm@(Mat val mov css) loc = do
-  -- Allocate space for the Mat term
+  typ <- return $ matType book tm
   mat <- lift $ allocNode (1 + fromIntegral (length css))
-  -- Inject the value being matched
   injectCore book val (mat + 0)
-  -- Inject each case body
   forM_ (zip [0..] css) $ \ (idx, (ctr, fds, bod)) -> do
-    injectCore book (foldr Lam (foldr Lam bod (map fst mov)) fds) (mat + 1 + idx)
-  -- After processing all cases, create the Mat term
-  trm <- return $ termNew _MAT_ (u12v2New (fromIntegral (length css)) (ifLetLab book tm)) mat
+    injectCore book (foldr Lam (foldr Lam bod (map fst mov)) fds) (mat + 1 + fromIntegral idx)
+  let tag = case typ of { Switch -> _SWI_ ; Match  -> _MAT_ ; IfLet -> _IFL_ }
+  let lab = case typ of { Switch -> fromIntegral $ length css ; _ -> matFirstCid book tm }
+  trm <- return $ termNew tag lab mat
   ret <- foldM (\mat (_, val) -> do
       app <- lift $ allocNode 2
       lift $ set (app + 0) mat
@@ -118,13 +121,13 @@ injectCore book (Op2 opr nm0 nm1) loc = do
 
 doInjectCoreAt :: Book -> Core -> Loc -> [(String,Term)] -> HVM Term
 doInjectCoreAt book core host argList = do
-  (_, state) <- runStateT (injectCore book core host) (emptyState { args = Map.fromList argList })
+  (_, state) <- runStateT (injectCore book core host) (emptyState { args = MS.fromList argList })
   foldM (\m (name, loc) -> do
-    case Map.lookup name (args state) of
+    case MS.lookup name (args state) of
       Just term -> do
         set loc term
         if (head name /= '&') then do
-          return $ Map.delete name m
+          return $ MS.delete name m
         else do
           return $ m
       Nothing -> do

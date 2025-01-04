@@ -1,10 +1,15 @@
+-- //./Type.hs//
+-- //./Extract.hs//
+
 module HVML.Collapse where
 
 import Control.Monad (ap, forM, forM_)
 import Control.Monad.IO.Class
+import Data.Bits (shiftR)
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
+import Debug.Trace
 import GHC.Conc
 import HVML.Show
 import HVML.Type
@@ -12,7 +17,6 @@ import System.Exit (exitFailure)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
-import Debug.Trace
 
 -- The Collapse Monad
 -- ------------------
@@ -153,19 +157,42 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
       let loc = termLoc term
       let lab = termLab term
       let cid = u12v2X lab
-      let ari = u12v2Y lab
+      let nam = MS.findWithDefault "?" cid (cidToCtr book)
+      let ari = mget (cidToAri book) cid
       let aux = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]
       fds0 <- forM aux (collapseDupsAt state reduceAt book)
-      return $ Ctr cid fds0
+      return $ Ctr nam fds0
 
     MAT -> do
       let loc = termLoc term
-      let len = u12v2X $ termLab term
-      let aux = if len == 0 then [] else [loc + 1 + i | i <- [0..len-1]]
+      let lab = termLab term
+      let cid = lab `shiftR` 1
+      let len = fromIntegral $ mget (cidToLen book) cid
       val0 <- collapseDupsAt state reduceAt book (loc + 0)
-      css0 <- forM aux $ \h -> do
-        bod <- collapseDupsAt state reduceAt book h
-        return $ ("#", [], bod) -- TODO: recover constructor and fields
+      css0 <- forM [0..len-1] $ \i -> do
+        let ctr = mget (cidToCtr book) (cid + i)
+        let ari = fromIntegral $ mget (cidToAri book) (cid + i)
+        let fds = if ari == 0 then [] else ["$" ++ show (loc + 1 + j) | j <- [0..ari-1]]
+        bod0 <- collapseDupsAt state reduceAt book (loc + 1 + i)
+        return (ctr, fds, bod0)
+      return $ Mat val0 [] css0
+
+    IFL -> do
+      let loc = termLoc term
+      let lab = termLab term
+      val0 <- collapseDupsAt state reduceAt book (loc + 0)
+      cs00 <- collapseDupsAt state reduceAt book (loc + 1)
+      cs10 <- collapseDupsAt state reduceAt book (loc + 2)
+      return $ Mat val0 [] [(mget (cidToCtr book) lab, [], cs00), ("_", [], cs10)]
+
+    SWI -> do
+      let loc = termLoc term
+      let lab = termLab term
+      let len = fromIntegral $ mget (cidToLen book) lab
+      val0 <- collapseDupsAt state reduceAt book (loc + 0)
+      css0 <- forM [0..len-1] $ \i -> do
+        bod0 <- collapseDupsAt state reduceAt book (loc + 1 + i)
+        return (show i, [], bod0)
       return $ Mat val0 [] css0
 
     W32 -> do
@@ -232,9 +259,9 @@ collapseSups book core = case core of
     body <- collapseSups book body
     return $ Dup lab x y val body
 
-  Ctr cid fields -> do
+  Ctr nam fields -> do
     fields <- mapM (collapseSups book) fields
-    return $ Ctr cid fields
+    return $ Ctr nam fields
 
   Mat val mov css -> do
     val <- collapseSups book val

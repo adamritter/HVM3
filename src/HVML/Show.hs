@@ -56,9 +56,9 @@ coreToString core =
         let arg' = intercalate " " (map coreToString arg) in
         "@" ++ nam ++ "(" ++ arg' ++ ")"
 
-      Ctr cid fds ->
+      Ctr nam fds ->
         let fds' = unwords (map coreToString fds) in
-        "#" ++ show cid ++ "{" ++ fds' ++ "}"
+        "#" ++ nam ++ "{" ++ fds' ++ "}"
 
       Mat val mov css ->
         let val' = coreToString val in
@@ -171,9 +171,9 @@ prettyRename core = unsafePerformIO $ do
         body' <- go namesRef body
         return $ Dup lab x' y' val' body'
 
-      Ctr cid args -> do
+      Ctr nam args -> do
         args' <- mapM (go namesRef) args
-        return $ Ctr cid args'
+        return $ Ctr nam args'
 
       Mat val mov css -> do
         val' <- go namesRef val
@@ -214,15 +214,15 @@ pretty core = prettyStr core <|> prettyLst core
 -- pretty core = prettyStr core
 
 prettyStr :: Core -> Maybe String
-prettyStr (Ctr 0 []) = Just "\"\""
-prettyStr (Ctr 1 [Chr h, t]) = do
+prettyStr (Ctr "Nil" []) = Just "\"\""
+prettyStr (Ctr "Cons" [Chr h, t]) = do
   rest <- prettyStr t
   return $ "\"" ++ h : tail rest
 prettyStr _ = Nothing
 
 prettyLst :: Core -> Maybe String
-prettyLst (Ctr 0 []) = Just "[]"
-prettyLst (Ctr 1 [x, xs]) = do
+prettyLst (Ctr "Nil" []) = Just "[]"
+prettyLst (Ctr "Cons" [x, xs]) = do
   rest <- prettyLst xs
   return $ "[" ++ coreToString x ++ if rest == "[]" then "]" else " " ++ tail rest
 prettyLst _ = Nothing

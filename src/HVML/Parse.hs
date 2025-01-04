@@ -2,7 +2,7 @@
 
 module HVML.Parse where
 
-import Control.Monad (foldM, forM)
+import Control.Monad (foldM, forM, forM_, when)
 import Control.Monad.State
 import Data.Either (isLeft)
 import Data.List
@@ -25,9 +25,11 @@ import qualified Data.Map.Strict as MS
 -- ------------
 
 data ParserState = ParserState
-  { parsedCtrToAri :: MS.Map String Int
-  , parsedCtrToCid :: MS.Map String Word64
-  , freshLabel     :: Word64
+  { pCidToAri  :: MS.Map Word64 Word64
+  , pCidToLen  :: MS.Map Word64 Word64
+  , pCtrToCid  :: MS.Map String Word64
+  , pCidToADT  :: MS.Map Word64 Word64
+  , freshLabel :: Word64
   }
 
 type ParserM = Parsec String ParserState
@@ -190,15 +192,6 @@ parseCtr :: ParserM Core
 parseCtr = do
   consume "#"
   nam <- parseName1
-  cid <- if length nam == 0
-    then return 0
-    else do
-      cids <- parsedCtrToCid <$> getState
-      case MS.lookup nam cids of
-        Just id -> return id
-        Nothing -> case reads nam of
-          [(num, "")] -> return (fromIntegral (num :: Integer))
-          otherwise   -> fail $ "Unknown constructor: " ++ nam
   fds <- option [] $ do
     try $ consume "{"
     fds <- many $ do
@@ -206,7 +199,7 @@ parseCtr = do
       parseCore
     consume "}"
     return fds
-  return $ Ctr cid fds
+  return $ Ctr nam fds
 
 parseMat :: ParserM Core
 parseMat = do
@@ -264,11 +257,13 @@ parseMat = do
         return $ Left (read num :: Word64)
       otherwise -> do
         st <- getState
-        return $ Right $ fromMaybe maxBound $ MS.lookup ctr (parsedCtrToCid st)
+        return $ Right $ fromMaybe maxBound $ MS.lookup ctr (pCtrToCid st)
     return (cid, (ctr, fds, bod))
   css <- return $ map snd $ sortOn fst css
   -- Transform matches with default cases into nested chain of matches
-  if length css == 1 && (let (ctr, _, _) = head css in ctr == "_") then do
+  if (let (ctr, _, _) = head css in ctr == "0") then do
+    return $ Mat val mov css
+  else if length css == 1 && (let (ctr, _, _) = head css in ctr == "_") then do
     fail "Match with only a default case is not allowed."
   else if (let (ctr, _, _) = last css in ctr == "_") then do
     let defName = (let (_,[nm],_) = last css in nm)
@@ -329,7 +324,7 @@ parseStr = do
   char '"'
   str <- many (noneOf "\"")
   char '"'
-  return $ foldr (\c acc -> Ctr 1 [Chr c, acc]) (Ctr 0 []) str
+  return $ foldr (\c acc -> Ctr "Cons" [Chr c, acc]) (Ctr "Nil" []) str
 
 parseLst :: ParserM Core
 parseLst = do
@@ -339,7 +334,7 @@ parseLst = do
     closeWith "]"
     parseCore
   char ']'
-  return $ foldr (\x acc -> Ctr 1 [x, acc]) (Ctr 0 []) elems
+  return $ foldr (\x acc -> Ctr "Cons" [x, acc]) (Ctr "Nil" []) elems
 
 parseName :: ParserM String
 parseName = skip >> many (alphaNum <|> char '_' <|> char '$' <|> char '&')
@@ -373,6 +368,7 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
+  -- trace ("parsed: " ++ showCore core) $
   return (name, ((copy,args), core))
 
 parseADT :: ParserM ()
@@ -385,16 +381,25 @@ parseADT = do
   consume "{"
   constructors <- many parseADTCtr
   consume "}"
-  let ctrCids = zip (map fst constructors) [0..]
-  let ctrAris = zip (map fst constructors) (map (fromIntegral . length . snd) constructors)
-  modifyState (\s -> s { parsedCtrToCid = MS.union (MS.fromList ctrCids) (parsedCtrToCid s),
-                         parsedCtrToAri = MS.union (MS.fromList ctrAris) (parsedCtrToAri s) })
+  st <- getState
+  let baseCid  = fromIntegral $ MS.size (pCtrToCid st)
+  let ctrToCid = zip (map fst constructors) [baseCid..]
+  let cidToAri = map (\(ctr, cid) -> (cid, fromIntegral . length . snd $ head $ filter ((== ctr) . fst) constructors)) ctrToCid
+  let cidToLen = (baseCid, fromIntegral $ length constructors)
+  let cidToADT = map (\(_, cid) -> (cid, baseCid)) ctrToCid
+  modifyState (\s -> s { pCtrToCid = MS.union (MS.fromList ctrToCid) (pCtrToCid s),
+                         pCidToAri = MS.union (MS.fromList cidToAri) (pCidToAri s),
+                         pCidToLen = MS.insert (fst cidToLen) (snd cidToLen) (pCidToLen s),
+                         pCidToADT = MS.union (MS.fromList cidToADT) (pCidToADT s) })
 
 parseADTCtr :: ParserM (String, [String])
 parseADTCtr = do
   skip
   consume "#"
   name <- parseName
+  st <- getState
+  when (MS.member name (pCtrToCid st)) $ do
+    fail $ "Constructor '" ++ name ++ "' redefined"
   fields <- option [] $ do
     try $ consume "{"
     fds <- many $ do
@@ -416,20 +421,20 @@ parseBook = do
   return defs
 
 doParseCore :: String -> IO Core
-doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty 0) "" code of
+doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" code of
   Right core -> do
-    return $ core
-  Left  err  -> do
+    return core
+  Left err -> do
     showParseError "" code err
     return $ Ref "⊥" 0 []
 
 doParseBook :: String -> IO Book 
-doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty 0) "" code of
+doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" code of
   Right (defs, st) -> do
-    return $ createBook defs (parsedCtrToCid st) (parsedCtrToAri st)
+    return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
   Left err -> do
     showParseError "" code err
-    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
+    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
   where
     parseBookWithState :: ParserM ([(String, ((Bool,[(Bool,String)]), Core))], ParserState)
     parseBookWithState = do
@@ -469,14 +474,26 @@ genFreshLabel = do
 -- Adjusting
 -- ---------
 
-createBook :: [(String, ((Bool,[(Bool,String)]), Core))] -> MS.Map String Word64 -> MS.Map String Int -> Book
-createBook defs ctrToCid ctrToAri =
-  let withPrims = \n2i -> MS.union n2i $ MS.fromList primitives
-      nameToId' = withPrims $ MS.fromList $ zip (map fst defs) [0..]
-      idToName' = MS.fromList $ map (\(k,v) -> (v,k)) $ MS.toList nameToId'
-      idToFunc' = MS.fromList $ map (\(name, ((copy,args), core)) -> (mget nameToId' name, ((copy,args), lexify (setRefIds nameToId' core)))) defs
-      idToLabs' = MS.fromList $ map (\(name, (_, core)) -> (mget nameToId' name, collectLabels core)) defs
-  in Book idToFunc' idToName' idToLabs' nameToId' ctrToAri ctrToCid
+createBook :: [(String, ((Bool,[(Bool,String)]), Core))] -> MS.Map String Word64 -> MS.Map Word64 Word64 -> MS.Map Word64 Word64 -> MS.Map Word64 Word64 -> Book
+createBook defs ctrToCid cidToAri cidToLen cidToADT =
+  let withPrims = \n2i -> MS.union n2i (MS.fromList primitives)
+      nameList  = zip (map fst defs) (map fromIntegral [0..]) :: [(String, Word64)]
+      nameToId' = withPrims (MS.fromList nameList)
+      idToName' = MS.fromList (map (\(k,v) -> (v,k)) (MS.toList nameToId'))
+      idToFunc' = MS.fromList (map (\(fn, ((cp,ars), cr)) -> (mget nameToId' fn, ((cp, ars), lexify (setRefIds nameToId' cr)))) defs)
+      idToLabs' = MS.fromList (map (\(fn, ((_, _), cr)) -> (mget nameToId' fn, collectLabels cr)) defs)
+      cidToCtr' = MS.fromList (map (\(ctr, cid) -> (cid, ctr)) (MS.toList ctrToCid))
+  in Book
+       { idToFunc = idToFunc'
+       , idToName = idToName'
+       , idToLabs = idToLabs'
+       , nameToId = nameToId'
+       , cidToAri = cidToAri
+       , cidToCtr = cidToCtr'
+       , ctrToCid = ctrToCid
+       , cidToLen = cidToLen
+       , cidToADT = cidToADT
+       }
 
 -- Adds the function id to Ref constructors
 setRefIds :: MS.Map String Word64 -> Core -> Core
@@ -487,7 +504,7 @@ setRefIds fids term = case term of
   App f x       -> App (setRefIds fids f) (setRefIds fids x)
   Sup l x y     -> Sup l (setRefIds fids x) (setRefIds fids y)
   Dup l x y v b -> Dup l x y (setRefIds fids v) (setRefIds fids b)
-  Ctr cid fds   -> Ctr cid (map (setRefIds fids) fds)
+  Ctr nam fds   -> Ctr nam (map (setRefIds fids) fds)
   Mat x mov css -> Mat (setRefIds fids x) (map (\ (k,v) -> (k, setRefIds fids v)) mov) (map (\ (ctr,fds,cs) -> (ctr, fds, setRefIds fids cs)) css)
   Op2 op x y    -> Op2 op (setRefIds fids x) (setRefIds fids y)
   U32 n         -> U32 n
@@ -571,9 +588,9 @@ lexify term = evalState (go term MS.empty) 0 where
       bod  <- go bod ctx
       return $ Dup lab dp0' dp1' val bod
 
-    Ctr cid fds -> do
+    Ctr nam fds -> do
       fds <- mapM (\x -> go x ctx) fds
-      return $ Ctr cid fds
+      return $ Ctr nam fds
 
     Mat val mov css -> do
       val' <- go val ctx
@@ -609,8 +626,14 @@ lexify term = evalState (go term MS.empty) 0 where
 -- Error handling
 extractExpectedTokens :: ParseError -> String
 extractExpectedTokens err =
-    let expectedMsgs = [msg | Expect msg <- errorMessages err, msg /= "space", msg /= "Comment"]
-    in intercalate " | " expectedMsgs
+    let msgs = errorMessages err
+        failMsg = [msg | Message msg <- msgs]
+        expectedMsgs = [msg | Expect msg <- msgs, msg /= "space", msg /= "Comment"]
+    in if not (null failMsg)
+       then head failMsg 
+       else if null expectedMsgs
+            then "syntax error"
+            else intercalate " | " expectedMsgs
 
 showParseError :: String -> String -> ParseError -> IO ()
 showParseError filename input err = do
@@ -619,7 +642,13 @@ showParseError filename input err = do
   let col = sourceColumn pos
   let errorMsg = extractExpectedTokens err
   putStrLn $ setSGRCode [SetConsoleIntensity BoldIntensity] ++ "\nPARSE_ERROR" ++ setSGRCode [Reset]
-  putStrLn $ "- expected: " ++ errorMsg
-  putStrLn $ "- detected:"
+  if any isMessage (errorMessages err)
+    then putStrLn $ "- " ++ errorMsg
+    else do
+      putStrLn $ "- expected: " ++ errorMsg
+      putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
   putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
+  where
+    isMessage (Message _) = True
+    isMessage _ = False

@@ -7,7 +7,7 @@ import Foreign.Ptr
 -- Core Types
 -- ----------
 
---X--
+--show--
 data Core
   = Var String -- x
   | Ref String Word64 [Core] -- @fn
@@ -16,7 +16,7 @@ data Core
   | App Core Core -- (f x)
   | Sup Word64 Core Core -- &L{a b}
   | Dup Word64 String String Core Core -- ! &L{a b} = v body
-  | Ctr Word64 [Core] -- #Ctr{a b ...}
+  | Ctr String [Core] -- #Ctr{a b ...}
   | Mat Core [(String,Core)] [(String,[String],Core)] -- ~ v { #A{a b ...}: ... #B{a b ...}: ... ... }
   | U32 Word32 -- 123
   | Chr Char -- 'a'
@@ -24,14 +24,21 @@ data Core
   | Let Mode String Core Core -- ! x = v body
   deriving (Show, Eq)
 
---X--
+--show--
 data Mode
   = LAZY
   | STRI
   | PARA
   deriving (Show, Eq, Enum)
 
---X--
+--show--
+data MatchType
+  = Switch
+  | Match
+  | IfLet
+  deriving (Show, Eq, Enum)
+
+--show--
 data Oper
   = OP_ADD | OP_SUB | OP_MUL | OP_DIV
   | OP_MOD | OP_EQ  | OP_NE  | OP_LT
@@ -39,7 +46,7 @@ data Oper
   | OP_OR  | OP_XOR | OP_LSH | OP_RSH
   deriving (Show, Eq, Enum)
 
---X--
+--show--
 -- A top-level function, including:
 -- - copy: true when ref-copy mode is enabled
 -- - args: a list of (isArgStrict, argName) pairs
@@ -47,30 +54,28 @@ data Oper
 -- Note: ref-copy improves C speed, but increases interaction count
 type Func = ((Bool, [(Bool,String)]), Core)
 
---X--
--- NOTE: the new idToLabs field is a map from a function id to a set of all
--- DUP/SUP labels used in its body. note that, when a function uses either
--- HVM.SUP or HVM.DUP internally, this field is set to Nothing. this will be
--- used to apply the fast DUP-REF and REF-SUP interactions, when safe to do so
 data Book = Book
-  { idToFunc :: MS.Map Word64 Func
-  , idToName :: MS.Map Word64 String
-  , idToLabs :: MS.Map Word64 (MS.Map Word64 ())
-  , nameToId :: MS.Map String Word64
-  , ctrToAri :: MS.Map String Int
-  , ctrToCid :: MS.Map String Word64
+  { idToFunc :: MS.Map Word64 Func -- function id to Function object
+  , idToLabs :: MS.Map Word64 (MS.Map Word64 ()) -- function id to dup labels used in its body
+  , idToName :: MS.Map Word64 String -- function id to name
+  , nameToId :: MS.Map String Word64 -- function name to id
+  , cidToAri :: MS.Map Word64 Word64 -- constructor id to field count (arity)
+  , cidToLen :: MS.Map Word64 Word64 -- constructor id to cases length (ADT constructor count)
+  , cidToCtr :: MS.Map Word64 String -- constructor id to name
+  , ctrToCid :: MS.Map String Word64 -- constructor name to id
+  , cidToADT :: MS.Map Word64 Word64 -- constructor id to ADT id (first cid of its datatype)
   } deriving (Show, Eq)
 
 -- Runtime Types
 -- -------------
 
---X--
+--show--
 type Tag  = Word64
 type Lab  = Word64
 type Loc  = Word64
 type Term = Word64
 
---X--
+--show--
 data TAG
   = DP0
   | DP1
@@ -84,16 +89,18 @@ data TAG
   | LET
   | CTR
   | MAT
+  | IFL
+  | SWI
   | W32
   | CHR
   | OPX
   | OPY
   deriving (Eq, Show)
 
---X--
+--show--
 type HVM = IO
 
---X--
+--show--
 type ReduceAt = Book -> Loc -> HVM Term
 
 -- C Functions
@@ -205,11 +212,17 @@ foreign import ccall unsafe "Runtime.c u12v2_x"
   u12v2X :: Word64 -> Word64
 foreign import ccall unsafe "Runtime.c u12v2_y"
   u12v2Y :: Word64 -> Word64
+foreign import ccall unsafe "Runtime.c hvm_set_cari"
+  hvmSetCari :: Word64 -> Word16 -> IO ()
+foreign import ccall unsafe "Runtime.c hvm_set_clen"
+  hvmSetClen :: Word64 -> Word16 -> IO ()
+foreign import ccall unsafe "Runtime.c hvm_set_cadt"
+  hvmSetCadt :: Word64 -> Word16 -> IO ()
 
 -- Constants
 -- ---------
 
---X--
+--show--
 tagT :: Tag -> TAG
 tagT 0x00 = DP0
 tagT 0x01 = DP1
@@ -219,14 +232,16 @@ tagT 0x04 = REF
 tagT 0x05 = LET
 tagT 0x06 = APP
 tagT 0x08 = MAT
-tagT 0x09 = OPX
-tagT 0x0A = OPY
-tagT 0x0B = ERA
-tagT 0x0C = LAM
-tagT 0x0D = SUP
-tagT 0x0F = CTR
-tagT 0x10 = W32
-tagT 0x11 = CHR
+tagT 0x09 = IFL
+tagT 0x0A = SWI
+tagT 0x0B = OPX
+tagT 0x0C = OPY
+tagT 0x0D = ERA
+tagT 0x0E = LAM
+tagT 0x0F = SUP
+tagT 0x10 = CTR
+tagT 0x11 = W32
+tagT 0x12 = CHR
 tagT tag  = error $ "unknown tag: " ++ show tag
 
 _DP0_ :: Tag
@@ -253,31 +268,37 @@ _APP_ = 0x06
 _MAT_ :: Tag
 _MAT_ = 0x08
 
+_IFL_ :: Tag
+_IFL_ = 0x09
+
+_SWI_ :: Tag
+_SWI_ = 0x0A
+
 _OPX_ :: Tag
-_OPX_ = 0x09
+_OPX_ = 0x0B
 
 _OPY_ :: Tag
-_OPY_ = 0x0A
+_OPY_ = 0x0C
 
 _ERA_ :: Tag
-_ERA_ = 0x0B
+_ERA_ = 0x0D
 
 _LAM_ :: Tag
-_LAM_ = 0x0C
+_LAM_ = 0x0E
 
 _SUP_ :: Tag
-_SUP_ = 0x0D
+_SUP_ = 0x0F
 
 _CTR_ :: Tag
-_CTR_ = 0x0F
+_CTR_ = 0x10
 
 _W32_ :: Tag
-_W32_ = 0x10
+_W32_ = 0x11
 
 _CHR_ :: Tag
-_CHR_ = 0x11
+_CHR_ = 0x12
 
---X--
+--show--
 modeT :: Lab -> Mode
 modeT 0x00 = LAZY
 modeT 0x01 = STRI
@@ -309,15 +330,26 @@ primitives =
 -- -----
 
 -- Getter function for maps
+-- TODO: add the type annotatino for mget
+mget :: (Ord k, Show k) => MS.Map k a -> k -> a
 mget map key =
   case MS.lookup key map of
     Just val -> val
     Nothing  -> error $ "key not found: " ++ show key
 
--- The if-let match stores its target ctr id
-ifLetLab :: Book -> Core -> Word64
-ifLetLab book (Mat _ _ [(ctr,_,_),("_",_,_)]) =
+-- Returns the first constructor ID in a pattern-match
+matFirstCid :: Book -> Core -> Word64
+matFirstCid book (Mat _ _ ((ctr,_,_):_)) =
   case MS.lookup ctr (ctrToCid book) of
-    Just cid -> 1 + cid
+    Just cid -> cid
     Nothing  -> 0
-ifLetLab book _ = 0
+matFirstCid _ _ = 0
+
+matType :: Book -> Core -> MatchType
+matType book (Mat _ _ css) =
+  case css of
+    ((ctr,_,_):_) | ctr == "0"         -> Switch
+    [(ctr,_,_),("_",_,_)]              -> IfLet
+    cs | all (\(c,_,_) -> c /= "_") cs -> Match
+    _                                  -> error "invalid match"
+matType _ _ = error "not a match"

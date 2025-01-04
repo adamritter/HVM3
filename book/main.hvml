@@ -1,3 +1,97 @@
+data List{ #Nil #Cons{head tail} }
+data Foo{ #A #B }
+data Bar{ #C #D }
+
+data Term {
+  #Var{idx}
+  #Pol{bod}
+  #All{inp bod}
+  #Lam{bod}
+  #App{fun arg}
+  #U32
+  #Num{val}
+}
+
+
+
+@main = ~ (#Pol{123}) {
+  #Var{idx}: *
+  #Pol{bod}: 123
+  #All{inp bod}: *
+  #Lam{bod}: *
+  #App{fun arg}: *
+  #U32: *
+  #Num{val}: *
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+////@main = ~ (#A) {
+  ////#A: 1
+  ////#B: 2
+////}
+
+////@main = ~ 3 {
+  ////0: 10
+  ////1: 20
+  ////p: p
+////}
+
+
+//@main = 
+  //~ [1 2] {
+    //#Cons{a b}: a
+    //#Nil: 0
+  //}
+
+
+
+
+
+
+
 //!@foo(k a) =
   //! &0{x y} = a
   //! &1{_ _} = 1
@@ -6,17 +100,17 @@
 //@main = @foo(1 &0{1 2})
 
 
-data Foo {
-  #A{k}
-  #B{k}
-}
+//data Foo {
+  //#A{k}
+  //#B{k}
+//}
 
-@bar(x) = ~ x {
-  #A{k}: (+ 1 k)
-  #B{k}: (+ 2 k)
-}
+//@bar(x) = ~ x {
+  //#A{k}: (+ 1 k)
+  //#B{k}: (+ 2 k)
+//}
 
-@main = @bar(*)
+//@main = @bar(*)
 
 
 

@@ -309,35 +309,3 @@ data Pair { #Pair{fst snd} }
   ! cond = @eq(@mul(@X @Y) @P)
   ! not1 = @not(@eq(@X @bin(@S 1)))
   @if(@and(cond not1) λt(t @u32(@X) @u32(@Y)) *)
-
-  //λt(t @u32(@X) @u32(@mul(@X @B)))
-
-// Solve: X * Y = P mod 2^32
-//@main =
-  //! solved = @eq(@mul(@X @Y) @P)
-  //@if(solved λt(t (@X) (@Y)) *)
-
-//@main = @lt(@bin(32 155) @bin(32 155))
-
-//@main = @u32(@mul(@bin(32 1234) @bin(32 4321)))
-
-
-
-
-// printing all solutions
-//    4 bits ->     23416 itrs ~ 
-//    8 bits ->    137738 itrs ~ 538
-//    9 bits ->    334663 itrs ~ 653
-//   10 bits ->    813044 itrs ~ 793
-//   11 bits ->   2002681 itrs ~ 977
-//   12 bits ->   4799018 itrs ~ 1171
-//   16 bits -> 138896024 itrs ~ 2119
-
-//    8 bits ->      3813 itrs
-//   16 bits ->     26944 itrs
-//   32 bits ->    250514 itrs
-//   64 bits ->   2652646 itrs
-//  128 bits ->  31219719 itrs (1 second)
-//  256 bits -> 430236928 itrs (10 seconds)
-
-//2048 bits -> 

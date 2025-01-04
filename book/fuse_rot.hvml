@@ -1,6 +1,8 @@
 // Relevant discussion:
 // https://discord.com/channels/912426566838013994/915345481675186197/1312147864373301329
 
+data List { #Nil #Cons{head tail} }
+
 // Repeated Application
 @rep(n f x) = ~ n !f !x {
   0: x
