@@ -156,7 +156,7 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     CTR -> do
       let loc = termLoc term
       let lab = termLab term
-      let cid = u12v2X lab
+      let cid = lab
       let nam = MS.findWithDefault "?" cid (cidToCtr book)
       let ari = mget (cidToAri book) cid
       let aux = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]

@@ -96,7 +96,7 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
     CTR -> do
       let loc = termLoc term
       let lab = termLab term
-      let cid = u12v2X lab
+      let cid = lab
       let nam = mget (cidToCtr book) cid
       let ari = mget (cidToAri book) cid
       let ars = if ari == 0 then [] else [0..ari-1]
