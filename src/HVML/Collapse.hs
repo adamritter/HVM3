@@ -5,7 +5,6 @@ module HVML.Collapse where
 
 import Control.Monad (ap, forM, forM_)
 import Control.Monad.IO.Class
-import Data.Bits (shiftR)
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
@@ -166,7 +165,7 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     MAT -> do
       let loc = termLoc term
       let lab = termLab term
-      let cid = lab `shiftR` 1
+      let cid = lab
       let len = fromIntegral $ mget (cidToLen book) cid
       val0 <- collapseDupsAt state reduceAt book (loc + 0)
       css0 <- forM [0..len-1] $ \i -> do

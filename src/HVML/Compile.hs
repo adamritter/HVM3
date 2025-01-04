@@ -167,23 +167,20 @@ compileFullCore book fid tm@(Mat val mov css) host = do
   emit $ "Loc " ++ matNam ++ " = alloc_node(" ++ show (1 + length css) ++ ");"
   valT <- compileFullCore book fid val (matNam ++ " + 0")
   emit $ "set(" ++ matNam ++ " + 0, " ++ valT ++ ");"
-  forM_ (zip [0..] css) $ \(i,(ctr,fds,bod)) -> do
+  forM_ (zip [0..] css) $ \ (i,(ctr,fds,bod)) -> do
     let bod' = foldr Lam (foldr Lam bod (map fst mov)) fds
     bodT <- compileFullCore book fid bod' (matNam ++ " + " ++ show (i+1))
     emit $ "set(" ++ matNam ++ " + " ++ show (i+1) ++ ", " ++ bodT ++ ");"
   let tag = case typ of { Switch -> "SWI" ; IfLet  -> "IFL" ; Match  -> "MAT" }
   let lab = case typ of { Switch -> fromIntegral (length css) ; _ -> matFirstCid book tm }
-  retNam <- fresh "ret"
-  emit $ "Term " ++ retNam ++ " = term_new(" ++ tag ++ ", " ++ show lab ++ ", " ++ matNam ++ ");"
-  foldM (\acc (_, val) -> do
+  let mat = "term_new(" ++ tag ++ ", " ++ show lab ++ ", " ++ matNam ++ ")"
+  foldM (\term (key, val) -> do
     appNam <- fresh "app"
     emit $ "Loc " ++ appNam ++ " = alloc_node(2);"
-    emit $ "set(" ++ appNam ++ " + 0, " ++ acc ++ ");"
     valT <- compileFullCore book fid val (appNam ++ " + 1")
+    emit $ "set(" ++ appNam ++ " + 0, " ++ term ++ ");"
     emit $ "set(" ++ appNam ++ " + 1, " ++ valT ++ ");"
-    emit $ acc ++ " = term_new(APP, 0, " ++ appNam ++ ");"
-    return acc) retNam mov
-  return retNam
+    return $ "term_new(APP, 0, " ++ appNam ++ ")") mat mov
 
 compileFullCore book fid (U32 val) _ =
   return $ "term_new(W32, 0, " ++ show (fromIntegral val) ++ ")"
@@ -346,7 +343,7 @@ compileFastBody book fid term@(Mat val mov css) ctx stop@False itr reuse = do
     else do
       emit $ "if (term_tag(" ++ valNam ++ ") == CTR) {"
       tabInc
-      emit $ "switch (term_lab(" ++ valNam ++ ")) {"
+      emit $ "switch (term_lab(" ++ valNam ++ ") - " ++ show (matFirstCid book term) ++ ") {"
       tabInc
       forM_ (zip [0..] css) $ \ (i, (ctr,fds,bod)) -> do
         emit $ "case " ++ show i ++ ": {"

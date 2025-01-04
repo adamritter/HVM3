@@ -93,6 +93,15 @@ cliRun filePath debug compiled mode showStats = do
   -- Create the C file content
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
   let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
+  -- Set constructor arities, case length and ADT ids
+  forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
+    hvmSetCari cid (fromIntegral ari)
+  forM_ (MS.toList (cidToLen book)) $ \ (cid, len) -> do
+    hvmSetClen cid (fromIntegral len)
+  forM_ (MS.toList (cidToADT book)) $ \ (cid, adt) -> do
+    hvmSetCadt cid (fromIntegral adt)
+  forM_ (MS.toList (fidToFun book)) $ \ (fid, ((_, args), _)) -> do
+    hvmSetFari fid (fromIntegral $ length args)
   -- Compile to native
   when compiled $ do
     -- Write the C file
@@ -111,15 +120,6 @@ cliRun filePath debug compiled mode showStats = do
     hvmGotState <- hvmGetState
     hvmSetState <- dlsym bookLib "hvm_set_state"
     callFFI hvmSetState retVoid [argPtr hvmGotState]
-  -- Set constructor arities, case length and ADT ids
-  forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
-    hvmSetCari cid (fromIntegral ari)
-  forM_ (MS.toList (cidToLen book)) $ \ (cid, len) -> do
-    hvmSetClen cid (fromIntegral len)
-  forM_ (MS.toList (cidToADT book)) $ \ (cid, adt) -> do
-    hvmSetCadt cid (fromIntegral adt)
-  forM_ (MS.toList (fidToFun book)) $ \ (fid, ((_, args), _)) -> do
-    hvmSetFari fid (fromIntegral $ length args)
   -- Abort when main isn't present
   when (not $ MS.member "main" (namToFid book)) $ do
     putStrLn "Error: 'main' not found."

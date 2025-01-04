@@ -106,7 +106,7 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
     MAT -> do
       let loc = termLoc term
       let lab = termLab term
-      let cid = lab `shiftR` 1
+      let cid = lab
       let len = fromIntegral $ mget (cidToLen book) cid
       val <- extractCoreAt dupsRef reduceAt book (loc + 0)
       css <- foldM (\css i -> do
