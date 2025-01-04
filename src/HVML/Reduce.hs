@@ -175,11 +175,11 @@ reduceRefAt book host = do
     x | x == _SUP_F_ -> reduceRefAt_SupF book host loc ari
     x | x == _LOG_F_ -> reduceRefAt_LogF book host loc ari
     x | x == _FRESH_F_ -> reduceRefAt_FreshF book host loc ari
-    oterwise -> case MS.lookup fid (idToFunc book) of
+    oterwise -> case MS.lookup fid (fidToFun book) of
       Just ((copy, args), core) -> do
         incItr
         when (length args /= fromIntegral ari) $ do
-          putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (idToName book) fid ++ "'."
+          putStrLn $ "RUNTIME_ERROR: arity mismatch on call to '@" ++ mget (fidToNam book) fid ++ "'."
           exitFailure
         argTerms <- if ari == 0
           then return [] 

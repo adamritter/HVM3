@@ -55,10 +55,10 @@ data Oper
 type Func = ((Bool, [(Bool,String)]), Core)
 
 data Book = Book
-  { idToFunc :: MS.Map Word64 Func -- function id to Function object
-  , idToLabs :: MS.Map Word64 (MS.Map Word64 ()) -- function id to dup labels used in its body
-  , idToName :: MS.Map Word64 String -- function id to name
-  , nameToId :: MS.Map String Word64 -- function name to id
+  { fidToFun :: MS.Map Word64 Func -- function id to Function object
+  , fidToLab :: MS.Map Word64 (MS.Map Word64 ()) -- function id to dup labels used in its body
+  , fidToNam :: MS.Map Word64 String -- function id to name
+  , namToFid :: MS.Map String Word64 -- function name to id
   , cidToAri :: MS.Map Word64 Word64 -- constructor id to field count (arity)
   , cidToLen :: MS.Map Word64 Word64 -- constructor id to cases length (ADT constructor count)
   , cidToCtr :: MS.Map Word64 String -- constructor id to name

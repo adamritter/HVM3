@@ -91,7 +91,7 @@ cliRun filePath debug compiled mode showStats = do
   code <- readFile filePath
   book <- doParseBook code
   -- Create the C file content
-  let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (idToFunc book))
+  let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
   let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
   -- Compile to native
   when compiled $ do
@@ -104,8 +104,8 @@ cliRun filePath debug compiled mode showStats = do
     -- Remove both generated files
     callCommand "rm .main.so"
     -- Register compiled functions
-    forM_ (MS.keys (idToFunc book)) $ \ fid -> do
-      funPtr <- dlsym bookLib (mget (idToName book) fid ++ "_f")
+    forM_ (MS.keys (fidToFun book)) $ \ fid -> do
+      funPtr <- dlsym bookLib (mget (fidToNam book) fid ++ "_f")
       hvmDefine fid funPtr
     -- Link compiled state
     hvmGotState <- hvmGetState
@@ -119,12 +119,12 @@ cliRun filePath debug compiled mode showStats = do
   forM_ (MS.toList (cidToADT book)) $ \(cid, adt) -> do
     hvmSetCadt cid (fromIntegral adt)
   -- Abort when main isn't present
-  when (not $ MS.member "main" (nameToId book)) $ do
+  when (not $ MS.member "main" (namToFid book)) $ do
     putStrLn "Error: 'main' not found."
     exitWith (ExitFailure 1)
   -- Normalize main
   init <- getCPUTime
-  root <- doInjectCoreAt book (Ref "main" (mget (nameToId book) "main") []) 0 []
+  root <- doInjectCoreAt book (Ref "main" (mget (namToFid book) "main") []) 0 []
   rxAt <- if compiled
     then return (reduceCAt debug)
     else return (reduceAt debug)
@@ -161,8 +161,8 @@ cliRun filePath debug compiled mode showStats = do
 
 genMain :: Book -> String
 genMain book =
-  let mainFid = mget (nameToId book) "main"
-      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ mget (idToName book) fid ++ "_f);" | fid <- MS.keys (idToFunc book)]
+  let mainFid = mget (namToFid book) "main"
+      registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ mget (fidToNam book) fid ++ "_f);" | fid <- MS.keys (fidToFun book)]
   in unlines
     [ "int main() {"
     , "  hvm_init();"

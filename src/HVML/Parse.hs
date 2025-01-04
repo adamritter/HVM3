@@ -478,16 +478,16 @@ createBook :: [(String, ((Bool,[(Bool,String)]), Core))] -> MS.Map String Word64
 createBook defs ctrToCid cidToAri cidToLen cidToADT =
   let withPrims = \n2i -> MS.union n2i (MS.fromList primitives)
       nameList  = zip (map fst defs) (map fromIntegral [0..]) :: [(String, Word64)]
-      nameToId' = withPrims (MS.fromList nameList)
-      idToName' = MS.fromList (map (\(k,v) -> (v,k)) (MS.toList nameToId'))
-      idToFunc' = MS.fromList (map (\(fn, ((cp,ars), cr)) -> (mget nameToId' fn, ((cp, ars), lexify (setRefIds nameToId' cr)))) defs)
-      idToLabs' = MS.fromList (map (\(fn, ((_, _), cr)) -> (mget nameToId' fn, collectLabels cr)) defs)
+      namToFid' = withPrims (MS.fromList nameList)
+      fidToNam' = MS.fromList (map (\(k,v) -> (v,k)) (MS.toList namToFid'))
+      fidToFun' = MS.fromList (map (\(fn, ((cp,ars), cr)) -> (mget namToFid' fn, ((cp, ars), lexify (setRefIds namToFid' cr)))) defs)
+      fidToLab' = MS.fromList (map (\(fn, ((_, _), cr)) -> (mget namToFid' fn, collectLabels cr)) defs)
       cidToCtr' = MS.fromList (map (\(ctr, cid) -> (cid, ctr)) (MS.toList ctrToCid))
   in Book
-       { idToFunc = idToFunc'
-       , idToName = idToName'
-       , idToLabs = idToLabs'
-       , nameToId = nameToId'
+       { fidToFun = fidToFun'
+       , fidToNam = fidToNam'
+       , fidToLab = fidToLab'
+       , namToFid = namToFid'
        , cidToAri = cidToAri
        , cidToCtr = cidToCtr'
        , ctrToCid = ctrToCid

@@ -164,7 +164,7 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
       let ari = u12v2Y lab
       let aux = if ari == 0 then [] else [0..ari-1]
       arg <- mapM (\i -> extractCoreAt dupsRef reduceAt book (loc + i)) aux
-      let name = MS.findWithDefault "?" fid (idToName book)
+      let name = MS.findWithDefault "?" fid (fidToNam book)
       return $ Ref name fid arg
 
     _ -> do
