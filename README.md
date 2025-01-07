@@ -22,9 +22,11 @@ HVM3 is a work-in-progress. Its features are being actively implemented.
 Install
 -------
 
-1. Install Cabal.
 
-3. Clone this repository.
+> required GHC 9.10.1 and Cabal 3.12.1.0
+1. Install Cabal and GHC.
+
+2. Clone this repository.
 
 3. Run `cabal install`.
 

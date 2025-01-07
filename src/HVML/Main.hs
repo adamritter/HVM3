@@ -150,10 +150,10 @@ cliRun filePath debug compiled mode showStats = do
   when showStats $ do
     itrs <- getItr
     size <- getLen
-    let time = fromIntegral (end - init) / (10^12) :: Double
-    let mips = (fromIntegral itrs / 1000000.0) / time
+    let time = fromIntegral (end - init) / (10^9) :: Double
+    let mips = (fromIntegral itrs / 1000000.0) / (time/1000.0)
     printf "WORK: %llu interactions\n" itrs
-    printf "TIME: %.7f seconds\n" time
+    printf "TIME: %.7f ms\n" time
     printf "SIZE: %llu nodes\n" size
     printf "PERF: %.3f MIPS\n" mips
     return ()
@@ -174,7 +174,7 @@ genMain book =
     , "  normal(root);"
     , "  double time = (double)(clock() - start) / CLOCKS_PER_SEC * 1000;"
     , "  printf(\"WORK: %llu interactions\\n\", get_itr());"
-    , "  printf(\"TIME: %.3fs seconds\\n\", time / 1000.0);"
+    , "  printf(\"TIME: %.3fs ms\\n\", time);"
     , "  printf(\"SIZE: %u nodes\\n\", get_len());"
     , "  printf(\"PERF: %.3f MIPS\\n\", (get_itr() / 1000000.0) / (time / 1000.0));"
     , "  hvm_free();"
