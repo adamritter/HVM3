@@ -428,19 +428,32 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.em
     showParseError "" code err
     return $ Ref "⊥" 0 []
 
-doParseBook :: String -> IO Book 
-doParseBook code = case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" code of
-  Right (defs, st) -> do
-    return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
-  Left err -> do
-    showParseError "" code err
-    return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
+doParseBook :: String -> IO Book
+doParseBook code = do
+  resolvedCode <- resolve code
+  case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" resolvedCode of
+    Right (defs, st) -> do
+      return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
+    Left err -> do
+      showParseError "" resolvedCode err
+      return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
   where
     parseBookWithState :: ParserM ([(String, ((Bool,[(Bool,String)]), Core))], ParserState)
     parseBookWithState = do
       defs <- parseBook
       st <- getState
       return (defs, st)
+
+    resolve :: String -> IO String
+    resolve code = do
+      let ls = lines code
+      let (imports, rest) = span (isPrefixOf "import ") ls
+      resolvedImports <- forM imports $ \imp -> do
+        let file = drop 7 imp
+        content <- readFile file
+        resolve content
+      return $ unlines (resolvedImports ++ rest)
+
 
 -- Helper Parsers
 -- --------------
