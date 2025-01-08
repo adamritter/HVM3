@@ -30,6 +30,7 @@ import System.IO (readFile)
 import System.Posix.DynamicLinker
 import System.Process (callCommand)
 import Text.Printf
+import Data.IORef
 import qualified Data.Map.Strict as MS
 
 runtime_c :: String
@@ -137,8 +138,13 @@ cliRun filePath debug compiled mode showStats = do
       return [(doLiftDups core)]
   -- Print all collapsed results
   when (mode == Collapse) $ do
+    lastItrs <- newIORef 0
     forM_ vals $ \ term -> do
-      putStrLn $ showCore term
+      currItrs <- getItr
+      prevItrs <- readIORef lastItrs
+      -- printf "%012d %012d %s\n" currItrs (currItrs - prevItrs) (showCore term)
+      printf "%s\n" (showCore term)
+      writeIORef lastItrs currItrs
   -- Prints just the first collapsed result
   when (mode == Search || mode == Normalize) $ do
     putStrLn $ showCore (head vals)

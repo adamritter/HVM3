@@ -414,11 +414,11 @@ parseADTCtr = do
 parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do
   skip
-  many parseADT
-  defs <- many parseDef
-  skip
-  eof
-  return defs
+  defs <- manyTill (choice [parseADTBlock, parseDefBlock]) fileEnd
+  return $ catMaybes defs
+  where fileEnd       = try $ skip >> eof
+        parseADTBlock = do { parseADT; return Nothing }
+        parseDefBlock = do { def <- parseDef; return $ Just def }
 
 doParseCore :: String -> IO Core
 doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" code of
@@ -444,16 +444,19 @@ doParseBook code = do
       st <- getState
       return (defs, st)
 
-    resolve :: String -> IO String
-    resolve code = do
-      let ls = lines code
-      let (imports, rest) = span (isPrefixOf "import ") ls
-      resolvedImports <- forM imports $ \imp -> do
-        let file = drop 7 imp
-        content <- readFile file
-        resolve content
-      return $ unlines (resolvedImports ++ rest)
-
+resolve :: String -> IO String
+resolve code = do
+  let state = ParserState MS.empty MS.empty MS.empty MS.empty 0
+  let code' = case runParser (skip >> getInput) state "" code of
+        Right rem -> rem
+        Left _    -> code
+  let ls = lines code'
+  let (imports, rest) = span (isPrefixOf "import ") ls
+  resolvedImports <- forM imports $ \imp -> do
+    let file = drop 7 imp
+    content <- readFile file
+    resolve content
+  return $ unlines (resolvedImports ++ rest)
 
 -- Helper Parsers
 -- --------------
@@ -665,3 +668,14 @@ showParseError filename input err = do
   where
     isMessage (Message _) = True
     isMessage _ = False
+
+-- Debug
+-- -----
+
+parseLog :: String -> ParserM ()
+parseLog msg = do
+  pos <- getPosition
+  remaining <- getInput
+  let preview = "[[[" ++ Data.List.take 20 remaining ++ (if length remaining > 20 then "..." else "") ++ "]]]"
+  trace ("[" ++ show pos ++ "] " ++ msg ++ "\nRemaining code: " ++ preview) $ return ()
+
