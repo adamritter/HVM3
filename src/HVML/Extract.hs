@@ -20,7 +20,8 @@ extractCoreAt :: IORef IS.IntSet -> ReduceAt -> Book -> Loc -> HVM Core
 
 extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
-  trace ("extract " ++ show host ++ " " ++ termToString term) $ case tagT (termTag term) of
+  -- trace ("extract " ++ show host ++ " " ++ termToString term) $
+  case tagT (termTag term) of
 
     ERA -> do
       return Era
