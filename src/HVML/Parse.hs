@@ -330,7 +330,7 @@ parseStr = do
   char '"'
   str <- many (noneOf "\"")
   char '"'
-  return $ foldr (\c acc -> Ctr "Cons" [Chr c, acc]) (Ctr "Nil" []) str
+  return $ foldr (\c acc -> Ctr "#Cons" [Chr c, acc]) (Ctr "#Nil" []) str
 
 parseLst :: ParserM Core
 parseLst = do
@@ -340,7 +340,7 @@ parseLst = do
     closeWith "]"
     parseCore
   char ']'
-  return $ foldr (\x acc -> Ctr "Cons" [x, acc]) (Ctr "Nil" []) elems
+  return $ foldr (\x acc -> Ctr "#Cons" [x, acc]) (Ctr "#Nil" []) elems
 
 parseName :: ParserM String
 parseName = skip >> many (alphaNum <|> char '_' <|> char '$' <|> char '&')
