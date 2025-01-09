@@ -430,7 +430,7 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.em
 
 doParseBook :: String -> IO Book
 doParseBook code = do
-  resolvedCode <- resolve code
+  resolvedCode <- resolve code MS.empty
   case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" resolvedCode of
     Right (defs, st) -> do
       return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
@@ -444,19 +444,23 @@ doParseBook code = do
       st <- getState
       return (defs, st)
 
-resolve :: String -> IO String
-resolve code = do
+resolve :: String -> MS.Map String () -> IO String
+resolve code imported = do
   let state = ParserState MS.empty MS.empty MS.empty MS.empty 0
   let code' = case runParser (skip >> getInput) state "" code of
         Right rem -> rem
         Left _    -> code
   let ls = lines code'
   let (imports, rest) = span (isPrefixOf "import ") ls
-  resolvedImports <- forM imports $ \imp -> do
-    let file = drop 7 imp
-    content <- readFile file
-    resolve content
-  return $ unlines (resolvedImports ++ rest)
+  resolvedImports <- foldM (\ (acc, imp) imp' -> do
+    let file = drop 7 imp'
+    if MS.member file imp
+      then return (acc, imp)
+      else do
+        content <- readFile file
+        resolved <- resolve content (MS.insert file () imp)
+        return (resolved : acc, MS.insert file () imp)) ([], imported) imports
+  return $ unlines (filter (not . null) (reverse (fst resolvedImports)) ++ rest)
 
 -- Helper Parsers
 -- --------------
