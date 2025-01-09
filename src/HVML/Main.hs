@@ -92,8 +92,9 @@ cliRun filePath debug compiled mode showStats = do
   code <- readFile filePath
   book <- doParseBook code
   -- Create the C file content
+  let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
-  let mainC = unlines $ [runtime_c] ++ funcs ++ [genMain book]
+  let mainC = unlines $ [runtime_c] ++ [decls] ++ funcs ++ [genMain book]
   -- Set constructor arities, case length and ADT ids
   forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
     hvmSetCari cid (fromIntegral ari)

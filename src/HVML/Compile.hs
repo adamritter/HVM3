@@ -26,6 +26,13 @@ data CompileState = CompileState
 
 type Compile = State CompileState
 
+compileHeaders :: Book -> String
+compileHeaders book =
+  let funcs   = MS.toList (fidToNam book)
+      decls_f = map (\(_, name) -> "Term " ++ name ++ "_f(Term);") funcs
+      decls_t = map (\(_, name) -> "Term " ++ name ++ "_t(Term);") funcs
+  in unlines $ decls_f ++ decls_t
+
 compile :: Book -> Word64 -> String
 compile book fid =
   let full = compileWith compileFull book fid in
