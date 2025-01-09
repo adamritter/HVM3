@@ -5,6 +5,7 @@ module HVML.Parse where
 import Control.Monad (foldM, forM, forM_, when)
 import Control.Monad.State
 import Data.Either (isLeft)
+import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Word
@@ -430,7 +431,7 @@ doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.em
 
 doParseBook :: String -> IO Book
 doParseBook code = do
-  resolvedCode <- resolve code MS.empty
+  resolvedCode <- resolve code
   case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" resolvedCode of
     Right (defs, st) -> do
       return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
@@ -444,23 +445,30 @@ doParseBook code = do
       st <- getState
       return (defs, st)
 
-resolve :: String -> MS.Map String () -> IO String
-resolve code imported = do
+resolve :: String -> IO String
+resolve code = do
+  imported <- newIORef MS.empty
+  resolveGo code imported
+
+resolveGo :: String -> IORef (MS.Map String ()) -> IO String
+resolveGo code imported = do
   let state = ParserState MS.empty MS.empty MS.empty MS.empty 0
   let code' = case runParser (skip >> getInput) state "" code of
         Right rem -> rem
         Left _    -> code
   let ls = lines code'
   let (imports, rest) = span (isPrefixOf "import ") ls
-  resolvedImports <- foldM (\ (acc, imp) imp' -> do
+  resolvedImports <- foldM (\ acc imp' -> do
     let file = drop 7 imp'
+    imp <- readIORef imported
     if MS.member file imp
-      then return (acc, imp)
+      then return acc
       else do
         content <- readFile file
-        resolved <- resolve content (MS.insert file () imp)
-        return (resolved : acc, MS.insert file () imp)) ([], imported) imports
-  return $ unlines (filter (not . null) (reverse (fst resolvedImports)) ++ rest)
+        modifyIORef imported (MS.insert file ())
+        resolved <- resolveGo content imported
+        return (resolved : acc)) [] imports
+  return $ unlines (filter (not . null) (reverse resolvedImports) ++ rest)
 
 -- Helper Parsers
 -- --------------

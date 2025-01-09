@@ -17,7 +17,7 @@ type InjectM a = StateT InjectState HVM a
 
 data InjectState = InjectState
   { args :: MS.Map String Term -- maps var names to binder locations
-  , vars :: [(String, Loc)]     -- list of (var name, usage location) pairs
+  , vars :: [(String, Loc)]    -- list of (var name, usage location) pairs
   }
 
 emptyState :: InjectState
