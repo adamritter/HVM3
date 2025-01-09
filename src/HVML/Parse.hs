@@ -276,7 +276,13 @@ parseMat = do
     return $ Let LAZY defName val ifLets
   -- Match with all cases covered
   else do
-    return $ Mat val mov css
+    st <- getState
+    let adt = mget (pCtrToCid st) (let (ctr,_,_) = head css in ctr)
+    let len = mget (pCidToLen st) adt
+    if fromIntegral (length css) /= len then
+      fail $ "Incorrect number of cases"
+    else
+      return $ Mat val mov css
 
 intoIfLetChain :: Core -> [(String, Core)] -> [(String, [String], Core)] -> String -> (String, [String], Core) -> Core
 intoIfLetChain _ _ [] defName (_,_,defBody) = defBody
@@ -374,7 +380,7 @@ parseDef = do
   skip
   consume "="
   core <- parseCore
-  -- trace ("parsed: " ++ showCore core) $
+  -- trace ("parsed: " ++ showCore core) $ do
   return (name, ((copy,args), core))
 
 parseADT :: ParserM ()
