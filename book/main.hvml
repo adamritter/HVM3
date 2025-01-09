@@ -14,6 +14,7 @@ data Term {
 
 
 
+
 @main = ~ (#Pol{123}) {
   #Var{idx}: *
   #Pol{bod}: 123
@@ -23,17 +24,6 @@ data Term {
   #U32: *
   #Num{val}: *
 }
-
-
-
-
-
-@foo = 7
-@main = @foo
-
-
-
-
 
 
 

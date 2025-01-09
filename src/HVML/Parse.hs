@@ -200,7 +200,7 @@ parseCtr = do
       parseCore
     consume "}"
     return fds
-  return $ Ctr nam fds
+  return $ Ctr ('#':nam) fds
 
 parseMat :: ParserM Core
 parseMat = do
@@ -236,7 +236,7 @@ parseMat = do
         return fds
       consume ":"
       bod <- parseCore
-      return (ctr, fds, bod)
+      return ('#':ctr, fds, bod)
     -- Parse numeric or default case
     else do
       nam <- parseName1
@@ -253,23 +253,28 @@ parseMat = do
           return ("_", [nam], bod)
   consume "}"
   css <- forM css $ \ (ctr, fds, bod) -> do
-    cid <- case reads ctr of
-      [(num, "")] -> do
-        return $ Left (read num :: Word64)
-      otherwise -> do
-        st <- getState
-        return $ Right $ fromMaybe maxBound $ MS.lookup ctr (pCtrToCid st)
+    st <- getState
+    cid <- case ctr of
+      ('#':_) -> case MS.lookup ctr (pCtrToCid st) of
+        Nothing  -> fail $ "Constructor not defined: " ++ ctr
+        Just cid -> return $ cid -- Constructor Case: sort by CID
+      _ -> case reads ctr of
+        [(num :: Word64, "")] -> return $ num -- Numeric Case: sort by value
+        _                     -> return $ maxBound -- Default Case: always last
     return (cid, (ctr, fds, bod))
   css <- return $ map snd $ sortOn fst css
-  -- Transform matches with default cases into nested chain of matches
+  -- Switch
   if (let (ctr, _, _) = head css in ctr == "0") then do
     return $ Mat val mov css
+  -- Match with only 1 case: a default case (forbidden)
   else if length css == 1 && (let (ctr, _, _) = head css in ctr == "_") then do
     fail "Match with only a default case is not allowed."
+  -- Match with a default case: turn into If-Let chain
   else if (let (ctr, _, _) = last css in ctr == "_") then do
     let defName = (let (_,[nm],_) = last css in nm)
     let ifLets  = intoIfLetChain (Var defName) mov (init css) defName (last css)
     return $ Let LAZY defName val ifLets
+  -- Match with all cases covered
   else do
     return $ Mat val mov css
 
@@ -385,9 +390,9 @@ parseADT = do
   st <- getState
   let baseCid  = fromIntegral $ MS.size (pCtrToCid st)
   let ctrToCid = zip (map fst constructors) [baseCid..]
-  let cidToAri = map (\(ctr, cid) -> (cid, fromIntegral . length . snd $ head $ filter ((== ctr) . fst) constructors)) ctrToCid
+  let cidToAri = map (\ (ctr,cid) -> (cid, fromIntegral . length . snd $ head $ filter ((== ctr) . fst) constructors)) ctrToCid
   let cidToLen = (baseCid, fromIntegral $ length constructors)
-  let cidToADT = map (\(_, cid) -> (cid, baseCid)) ctrToCid
+  let cidToADT = map (\ (_,cid) -> (cid, baseCid)) ctrToCid
   modifyState (\s -> s { pCtrToCid = MS.union (MS.fromList ctrToCid) (pCtrToCid s),
                          pCidToAri = MS.union (MS.fromList cidToAri) (pCidToAri s),
                          pCidToLen = MS.insert (fst cidToLen) (snd cidToLen) (pCidToLen s),
@@ -399,7 +404,7 @@ parseADTCtr = do
   consume "#"
   name <- parseName
   st <- getState
-  when (MS.member name (pCtrToCid st)) $ do
+  when (MS.member ('#':name) (pCtrToCid st)) $ do
     fail $ "Constructor '" ++ name ++ "' redefined"
   fields <- option [] $ do
     try $ consume "{"
@@ -410,7 +415,7 @@ parseADTCtr = do
     consume "}"
     return fds
   skip
-  return (name, fields)
+  return ('#':name, fields)
 
 parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do

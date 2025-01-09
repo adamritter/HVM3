@@ -58,7 +58,7 @@ coreToString core =
 
       Ctr nam fds ->
         let fds' = unwords (map coreToString fds) in
-        "#" ++ nam ++ "{" ++ fds' ++ "}"
+        nam ++ "{" ++ fds' ++ "}"
 
       Mat val mov css ->
         let val' = coreToString val in
@@ -210,19 +210,22 @@ prettyRename core = unsafePerformIO $ do
 -- ---------------
 
 pretty :: Core -> Maybe String
-pretty core = prettyStr core <|> prettyLst core
--- pretty core = prettyStr core
+pretty core = prettyNil core <|> prettyStr core <|> prettyLst core
+
+prettyNil :: Core -> Maybe String
+prettyNil (Ctr "#Nil" []) = Just "[]"
+prettyNil _               = Nothing
 
 prettyStr :: Core -> Maybe String
-prettyStr (Ctr "Nil" []) = Just "\"\""
-prettyStr (Ctr "Cons" [Chr h, t]) = do
+prettyStr (Ctr "#Nil" []) = Just "\"\""
+prettyStr (Ctr "#Cons" [Chr h, t]) = do
   rest <- prettyStr t
   return $ "\"" ++ h : tail rest
 prettyStr _ = Nothing
 
 prettyLst :: Core -> Maybe String
-prettyLst (Ctr "Nil" []) = Just "[]"
-prettyLst (Ctr "Cons" [x, xs]) = do
+prettyLst (Ctr "#Nil" []) = Just "[]"
+prettyLst (Ctr "#Cons" [x, xs]) = do
   rest <- prettyLst xs
   return $ "[" ++ coreToString x ++ if rest == "[]" then "]" else " " ++ tail rest
 prettyLst _ = Nothing
