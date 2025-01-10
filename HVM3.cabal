@@ -39,8 +39,6 @@ executable hvml
                       libffi,
                       unix,
                       file-embed,
-                      cryptohash-md5,
-                      bytestring,
     hs-source-dirs:   src
     default-language: GHC2024
     c-sources:        src/HVML/Runtime.c
