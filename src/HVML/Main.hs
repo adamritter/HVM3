@@ -6,6 +6,7 @@
 
 module Main where
 
+import Crypto.Hash.MD5 (hash)
 import Control.Monad (when, forM_)
 import Data.FileEmbed
 import Data.Time.Clock
@@ -27,10 +28,12 @@ import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(ExitSuccess, ExitFailure))
 import System.IO
 import System.IO (readFile)
+import System.IO.Error (tryIOError)
 import System.Posix.DynamicLinker
 import System.Process (callCommand)
 import Text.Printf
 import Data.IORef
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as MS
 
 runtime_c :: String
@@ -88,13 +91,15 @@ cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
 cliRun filePath debug compiled mode showStats = do
   -- Initialize the HVM
   hvmInit
-  -- TASK: instead of parsing a core term out of the file, lets parse a Book.
   code <- readFile filePath
   book <- doParseBook code
+  -- Recompile if the cabal file has changed
+  cabal <- readFile "HVM3.cabal"
+  let md5 = "// md5 HVM3.cabal: " ++ show (hash (C8.pack cabal)) ++ "\n"
   -- Create the C file content
   let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
-  let mainC = unlines $ [runtime_c] ++ [decls] ++ funcs ++ [genMain book]
+  let mainC = unlines $ [md5] ++ [runtime_c] ++ [decls] ++ funcs ++ [genMain book]
   -- Set constructor arities, case length and ADT ids
   forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
     hvmSetCari cid (fromIntegral ari)
@@ -106,14 +111,23 @@ cliRun filePath debug compiled mode showStats = do
     hvmSetFari fid (fromIntegral $ length args)
   -- Compile to native
   when compiled $ do
-    -- Write the C file
-    writeFile "./.main.c" mainC
-    -- Compile to shared library
-    callCommand "gcc -O2 -fPIC -shared .main.c -o .main.so"
-    -- Load the dynamic library
-    bookLib <- dlopen "./.main.so" [RTLD_NOW]
-    -- Remove both generated files
-    callCommand "rm .main.so"
+    -- Try to use a cached .so file
+    callCommand "mkdir -p .build"
+    let fName = last $ words $ map (\c -> if c == '/' then ' ' else c) filePath
+    let cFile = ".build/" ++ fName ++ ".c"
+    let oFile = ".build/" ++ fName ++ ".so"
+    oldFile <- tryIOError (readFile cFile)
+    oldLib <- tryIOError (dlopen oFile [RTLD_NOW])
+    bookLib <- case (oldFile, oldLib) of
+      -- Use the cache if the hash of the .c file matches
+      (Right old, Right lib) | hash (C8.pack old) == hash (C8.pack mainC) -> 
+        return lib
+      -- Otherwise, recompile
+      (_, lib) -> do
+        either (\_ -> return ()) dlclose lib
+        writeFile cFile mainC
+        callCommand $ "gcc -O2 -fPIC -shared " ++ cFile ++ " -o " ++ oFile
+        dlopen oFile [RTLD_NOW]
     -- Register compiled functions
     forM_ (MS.keys (fidToFun book)) $ \ fid -> do
       funPtr <- dlsym bookLib (mget (fidToNam book) fid ++ "_f")
