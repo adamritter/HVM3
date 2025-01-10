@@ -30,10 +30,11 @@ data ParserState = ParserState
   , pCidToLen  :: MS.Map Word64 Word64
   , pCtrToCid  :: MS.Map String Word64
   , pCidToADT  :: MS.Map Word64 Word64
+  , imported   :: MS.Map String ()
   , freshLabel :: Word64
   }
 
-type ParserM = Parsec String ParserState
+type ParserM = ParsecT String ParserState IO
 
 parseCore :: ParserM Core
 parseCore = do
@@ -426,60 +427,73 @@ parseADTCtr = do
 parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do
   skip
-  defs <- manyTill (choice [parseADTBlock, parseDefBlock]) fileEnd
-  return $ catMaybes defs
-  where fileEnd       = try $ skip >> eof
-        parseADTBlock = do { parseADT; return Nothing }
-        parseDefBlock = do { def <- parseDef; return $ Just def }
+  defs <- many $ choice [parseTopImp, parseTopADT, parseTopDef]
+  try $ skip >> eof
+  return $ concat defs
 
-doParseCore :: String -> IO Core
-doParseCore code = case runParser parseCore (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" code of
-  Right core -> do
-    return core
-  Left err -> do
-    showParseError "" code err
-    return $ Ref "⊥" 0 []
+parseBookWithState :: ParserM ([(String, ((Bool, [(Bool,String)]), Core))], ParserState)
+parseBookWithState = do
+  defs <- parseBook
+  state <- getState
+  return (defs, state)
+
+parseTopADT :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
+parseTopADT = do
+  parseADT
+  return []
+
+parseTopDef :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
+parseTopDef = do
+  def <- parseDef
+  return [def]
+
+-- FIXME: this is ugly code, improve it
+parseTopImp :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
+parseTopImp = do
+  try $ do
+    skip
+    string "import"
+    skipMany1 space
+  path <- many1 (noneOf "\n\r")
+  skip
+  st <- getState
+  if MS.member path (imported st)
+    then return []
+    else do
+      contents <- liftIO $ readFile path
+      modifyState (\s -> s { imported = MS.insert path () (imported s) })
+      st <- getState
+      result <- liftIO $ runParserT parseBookWithState st path contents
+      case result of
+        Left err -> do
+          fail $ show err
+        Right (importedDefs, importedState) -> do
+          putState importedState
+          return importedDefs
 
 doParseBook :: String -> IO Book
 doParseBook code = do
-  resolvedCode <- resolve code
-  case runParser parseBookWithState (ParserState MS.empty MS.empty MS.empty MS.empty 0) "" resolvedCode of
+  result <- runParserT p (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
+  case result of
     Right (defs, st) -> do
       return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
     Left err -> do
-      showParseError "" resolvedCode err
+      showParseError "" code err
       return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
   where
-    parseBookWithState :: ParserM ([(String, ((Bool,[(Bool,String)]), Core))], ParserState)
-    parseBookWithState = do
+    p = do
       defs <- parseBook
       st <- getState
       return (defs, st)
 
-resolve :: String -> IO String
-resolve code = do
-  imported <- newIORef MS.empty
-  resolveGo code imported
-
-resolveGo :: String -> IORef (MS.Map String ()) -> IO String
-resolveGo code imported = do
-  let state = ParserState MS.empty MS.empty MS.empty MS.empty 0
-  let code' = case runParser (skip >> getInput) state "" code of
-        Right rem -> rem
-        Left _    -> code
-  let ls = lines code'
-  let (imports, rest) = span (isPrefixOf "import ") ls
-  resolvedImports <- foldM (\ acc imp' -> do
-    let file = drop 7 imp'
-    imp <- readIORef imported
-    if MS.member file imp
-      then return acc
-      else do
-        content <- readFile file
-        modifyIORef imported (MS.insert file ())
-        resolved <- resolveGo content imported
-        return (resolved : acc)) [] imports
-  return $ unlines (filter (not . null) (reverse resolvedImports) ++ rest)
+doParseCore :: String -> IO Core
+doParseCore code = do
+  result <- runParserT parseCore (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
+  case result of
+    Right core -> return core
+    Left err -> do
+      showParseError "" code err
+      return $ Ref "⊥" 0 []
 
 -- Helper Parsers
 -- --------------
@@ -701,4 +715,3 @@ parseLog msg = do
   remaining <- getInput
   let preview = "[[[" ++ Data.List.take 20 remaining ++ (if length remaining > 20 then "..." else "") ++ "]]]"
   trace ("[" ++ show pos ++ "] " ++ msg ++ "\nRemaining code: " ++ preview) $ return ()
-
