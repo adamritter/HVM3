@@ -169,7 +169,8 @@ parseCore = do
 
     '\'' -> parseChr
 
-    '"' -> parseStr
+    '"' -> parseStr '"'
+    '`' -> parseStr '`'
 
     _ -> do
       name <- parseName1
@@ -331,12 +332,12 @@ parseChr = do
   char '\''
   return $ Chr c
 
-parseStr :: ParserM Core
-parseStr = do
+parseStr :: Char -> ParserM Core
+parseStr delim = do
   skip
-  char '"'
-  str <- many (noneOf "\"")
-  char '"'
+  char delim
+  str <- many (noneOf [delim])
+  char delim
   return $ foldr (\c acc -> Ctr "#Cons" [Chr c, acc]) (Ctr "#Nil" []) str
 
 parseLst :: ParserM Core
