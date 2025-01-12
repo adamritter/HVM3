@@ -83,7 +83,6 @@ parseOper = do
   let operParser op = string' (operToString op) >> return op
   choice $ map operParser opers
 
-
 parseDex :: Parser Dex
 parseDex = do
   consume "&"
@@ -128,10 +127,10 @@ parseBook = do
 -- ---------
 
 peekNextChar :: Parser Char
-peekNextChar = spaces >> lookAhead anyChar
+peekNextChar = skip >> lookAhead anyChar
 
 parseName :: Parser String
-parseName = spaces >> many1 (alphaNum <|> char '_')
+parseName = skip >> many1 (alphaNum <|> char '_')
 
 parseNum :: Parser Word32
 parseNum = do
@@ -139,8 +138,19 @@ parseNum = do
   digits <- many1 digit
   return $ fromIntegral (read digits :: Integer)
 
+skip :: Parser ()
+skip = skipMany (parseSpace <|> parseComment) where
+  parseSpace = (try $ do
+    space
+    return ()) <?> "space"
+  parseComment = (try $ do
+    string "//"
+    skipMany (noneOf "\n")
+    char '\n'
+    return ()) <?> "comment"
+
 consume :: String -> Parser String
-consume str = spaces >> string str
+consume str = skip >> string str
 
 -- Main Entry Point
 -- ----------------
