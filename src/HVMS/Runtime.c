@@ -184,6 +184,10 @@ Loc rbag_end() {
   return RBAG + RBAG_END;
 }
 
+Loc rnod_end() {
+  return RNOD_END;
+}
+
 // Book operations
 
 // Moves the global buffer and redex bag into a new def and resets
@@ -467,22 +471,34 @@ static void interact_dupw32(Loc a_loc, u32 n) {
   move(dp2, term_new(W32, 0, n));
 }
 
-static void interact_matnul(Loc a_loc, Lab arity) {
+static void interact_matnul(Loc a_loc, Lab num_arms) {
   move(port(1, a_loc), term_new(NUL, 0, 0));
-  for (u32 i = 0; i < arity; i++) {
+  for (u32 i = 0; i < num_arms; i++) {
     link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
   }
 }
 
-static void interact_matw32(Loc a_loc, Lab arity, u32 n) {
-  for (u32 i = 0; i < arity; i++) {
-    if (i != n) {
-      link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
+static void interact_matw32(Loc a_loc, Lab num_arms, u32 n) {
+  u32 i_arm = (n < num_arms - 1) ? n : (num_arms - 1);
+  for (u32 i = 0; i < num_arms; i++) {
+    if (i != i_arm) {
+      link(term_new(ERA, 0, 0), take(port(2 + i, a_loc)));
     }
   }
 
-  Term ret = n < arity ? take(port(n + 2, a_loc)) : term_new(NUL, 0, 0);
-  move(port(1, a_loc), ret);
+  Loc ret = port(1, a_loc);
+  Term arm = take(port(2 + i_arm, a_loc));
+
+  if (i_arm < num_arms - 1) {
+    move(ret, arm);
+  } else {
+    Loc app = alloc_node(2);
+    set(app + 0, term_new(W32, 0, n - (num_arms - 1)));
+    set(app + 1, term_new(SUB, 0, 0));
+    move(ret, term_new(VAR, 0, port(2, app)));
+
+    link(term_new(APP, 0, app), arm);
+  }
 }
 
 static void interact_matsup(Loc a_loc, Loc b_loc) {
@@ -573,8 +589,12 @@ static void interact(Term neg, Term pos) {
 
 // Evaluation
 static int normal_step() {
+  // dump_buff();
+
   Loc loc = rbag_pop();
   if (loc == 0) {
+    // dump_buff();
+
     return 0;
   }
 
@@ -591,7 +611,7 @@ static int normal_step() {
 // FFI exports
 void hvm_init() {
   if (BUFF == NULL) {
-    BUFF = calloc((1ULL << 16), sizeof(a64));
+    BUFF = calloc((1ULL << 24), sizeof(a64));
   }
   RNOD_INI = 0;
   RNOD_END = 0;

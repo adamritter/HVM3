@@ -113,13 +113,13 @@ parseDef = do
   name <- parseName
   consume "="
   net <- parseNet
-  spaces
+  skip
   return (name, net)
 
 parseBook :: Parser Book
 parseBook = do
   defs <- many parseDef
-  spaces
+  skip
   eof
   return $ Book (MS.fromList defs)
 
