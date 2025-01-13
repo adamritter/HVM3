@@ -35,6 +35,7 @@ import Text.Printf
 import Data.IORef
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as MS
+import Data.Either (isRight)
 
 runtime_c :: String
 runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
@@ -93,13 +94,10 @@ cliRun filePath debug compiled mode showStats = do
   hvmInit
   code <- readFile filePath
   book <- doParseBook code
-  -- Recompile if the cabal file has changed
-  cabal <- readFile "HVM3.cabal"
-  let md5 = "// md5 HVM3.cabal: " ++ show (hash (C8.pack cabal)) ++ "\n"
   -- Create the C file content
   let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
-  let mainC = unlines $ [md5] ++ [runtime_c] ++ [decls] ++ funcs ++ [genMain book]
+  let mainC = unlines $ [runtime_c] ++ [decls] ++ funcs ++ [genMain book]
   -- Set constructor arities, case length and ADT ids
   forM_ (MS.toList (cidToAri book)) $ \ (cid, ari) -> do
     hvmSetCari cid (fromIntegral ari)
@@ -114,20 +112,20 @@ cliRun filePath debug compiled mode showStats = do
     -- Try to use a cached .so file
     callCommand "mkdir -p .build"
     let fName = last $ words $ map (\c -> if c == '/' then ' ' else c) filePath
-    let cFile = ".build/" ++ fName ++ ".c"
-    let oFile = ".build/" ++ fName ++ ".so"
-    oldFile <- tryIOError (readFile cFile)
-    oldLib <- tryIOError (dlopen oFile [RTLD_NOW])
+    let cPath = ".build/" ++ fName ++ ".c"
+    let oPath = ".build/" ++ fName ++ ".so"
+    oldFile <- tryIOError (readFile cPath)
+    oldLib  <- tryIOError (dlopen oPath [RTLD_NOW])
     bookLib <- case (oldFile, oldLib) of
       -- Use the cache if the hash of the .c file matches
-      (Right old, Right lib) | hash (C8.pack old) == hash (C8.pack mainC) -> 
+      (Right old, Right lib) | hash (C8.pack old) == hash (C8.pack mainC) -> do
         return lib
       -- Otherwise, recompile
-      (_, lib) -> do
+      (old, lib) -> do
         either (\_ -> return ()) dlclose lib
-        writeFile cFile mainC
-        callCommand $ "gcc -O2 -fPIC -shared " ++ cFile ++ " -o " ++ oFile
-        dlopen oFile [RTLD_NOW]
+        writeFile cPath mainC
+        callCommand $ "gcc -O2 -fPIC -shared " ++ cPath ++ " -o " ++ oPath
+        dlopen oPath [RTLD_NOW]
     -- Register compiled functions
     forM_ (MS.keys (fidToFun book)) $ \ fid -> do
       funPtr <- dlsym bookLib (mget (fidToNam book) fid ++ "_f")
