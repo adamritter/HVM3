@@ -27,6 +27,7 @@ typedef uint64_t u64;
 #define OPX 0x0A
 #define OPY 0x0B
 #define W32 0x0C
+#define MAT 0x0D
 
 const Term VOID = 0;
 
@@ -183,6 +184,10 @@ Loc rbag_end() {
   return RBAG + RBAG_END;
 }
 
+Loc rnod_end() {
+  return RNOD_END;
+}
+
 // Book operations
 
 // Moves the global buffer and redex bag into a new def and resets
@@ -221,6 +226,10 @@ void def_new(char* name) {
 
   BOOK.defs[BOOK.len] = def;
   BOOK.len++;
+}
+
+char* def_name(Loc def_idx) {
+  return BOOK.defs[def_idx].name;
 }
 
 // Expands a ref's data into a linear block of nodes with its nodes' locs
@@ -451,16 +460,78 @@ static void interact_duplam(Loc a_loc, Loc b_loc) {
 static void interact_dupnul(Loc a_loc) {
   Loc dp1 = port(1, a_loc);
   Loc dp2 = port(2, a_loc);
-  move(dp1, term_new(W32, 0, a_loc));
-  move(dp2, term_new(W32, 0, a_loc));
+  move(dp1, term_new(NUL, 0, a_loc));
+  move(dp2, term_new(NUL, 0, a_loc));
 }
 
-static void interact_dupw32(u64 a_loc) {
+static void interact_dupw32(Loc a_loc, u32 n) {
   Loc dp1 = port(1, a_loc);
   Loc dp2 = port(2, a_loc);
-  move(dp1, term_new(NUL, 0, 0));
-  move(dp2, term_new(NUL, 0, 0));
+  move(dp1, term_new(W32, 0, n));
+  move(dp2, term_new(W32, 0, n));
 }
+
+static void interact_dupref(Loc a_loc, Loc b_loc) {
+  move(port(1, a_loc), term_new(REF, 0, b_loc));
+  move(port(2, a_loc), term_new(REF, 0, b_loc));
+}
+
+static void interact_matnul(Loc a_loc, Lab mat_len) {
+  move(port(1, a_loc), term_new(NUL, 0, 0));
+  for (u32 i = 0; i < mat_len; i++) {
+    link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
+  }
+}
+
+static void interact_matw32(Loc mat_loc, Lab mat_len, u32 n) {
+  u32 i_arm = (n < mat_len - 1) ? n : (mat_len - 1);
+  for (u32 i = 0; i < mat_len; i++) {
+    if (i != i_arm) {
+      link(term_new(ERA, 0, 0), take(port(2 + i, mat_loc)));
+    }
+  }
+
+  Loc ret = port(1, mat_loc);
+  Term arm = take(port(2 + i_arm, mat_loc));
+
+  if (i_arm < mat_len - 1) {
+    move(ret, arm);
+  } else {
+    Loc app = alloc_node(2);
+    set(app + 0, term_new(W32, 0, n - (mat_len - 1)));
+    set(app + 1, term_new(SUB, 0, 0));
+    move(ret, term_new(VAR, 0, port(2, app)));
+
+    link(term_new(APP, 0, app), arm);
+  }
+}
+
+static void interact_matsup(Loc mat_loc, Lab mat_len, Loc sup_loc) {
+  Loc ma0 = alloc_node(1 + mat_len);
+  Loc ma1 = alloc_node(1 + mat_len);
+
+  Loc sup = alloc_node(2);
+
+  set(port(1, sup), term_new(VAR, 0, port(1, ma1)));
+  set(port(2, sup), term_new(VAR, 0, port(1, ma0)));
+  set(port(1, ma0), term_new(SUB, 0, 0));
+  set(port(1, ma1), term_new(SUB, 0, 0));
+
+  for (u64 i = 0; i < mat_len; i++) {
+    Loc dui = alloc_node(2);
+    set(port(1, dui),     term_new(SUB, 0, 0));
+    set(port(2, dui),     term_new(SUB, 0, 0));
+    set(port(2 + i, ma0), term_new(VAR, 0, port(2, dui)));
+    set(port(2 + i, ma1), term_new(VAR, 0, port(1, dui)));
+
+    link(term_new(DUP, 0, dui), take(port(2 + i, mat_loc)));
+  }
+
+  move(port(1, mat_loc), term_new(SUP, 0, sup));
+  link(term_new(MAT, mat_len, ma0), take(port(2, sup_loc)));
+  link(term_new(MAT, mat_len, ma1), take(port(1, sup_loc)));
+}
+
 
 static void interact_eralam(Loc b_loc) {
   Loc  var = port(1, b_loc);
@@ -516,10 +587,20 @@ static void interact(Term neg, Term pos) {
       switch (pos_tag) {
         case LAM: interact_duplam(neg_loc, pos_loc); break;
         case NUL: interact_dupnul(neg_loc); break;
-        case W32: interact_dupw32(neg_loc); break;
+        case W32: interact_dupw32(neg_loc, pos_loc); break;
         // TODO(enricozb): dup-ref optimization
-        case REF: link(neg, expand_ref(pos_loc)); break;
+        case REF: interact_dupref(neg_loc, pos_loc); break;
+        // case REF: link(neg, expand_ref(pos_loc)); break;
         case SUP: interact_dupsup(neg_loc, pos_loc); break;
+      }
+      break;
+    case MAT:
+      switch (pos_tag) {
+        case LAM: break;
+        case NUL: interact_matnul(neg_loc, term_lab(neg)); break;
+        case W32: interact_matw32(neg_loc, term_lab(neg), pos_loc); break;
+        case REF: link(neg, expand_ref(pos_loc)); break;
+        case SUP: interact_matsup(neg_loc, term_lab(neg), pos_loc); break;
       }
       break;
     case ERA:
@@ -536,15 +617,19 @@ static void interact(Term neg, Term pos) {
 
 // Evaluation
 static int normal_step() {
+  // dump_buff();
+
   Loc loc = rbag_pop();
   if (loc == 0) {
+    // dump_buff();
+
     return 0;
   }
 
   Term neg = take(loc + 0);
   Term pos = take(loc + 1);
 
-  // printf("\n\nINTERACT %s ~ %s\n\n", tag_to_str(neg), tag_to_str(pos));
+  // printf("\n\n%04lX: INTERACT %s ~ %s\n\n", inc_itr(), tag_to_str(neg), tag_to_str(pos));
 
   interact(neg, pos);
 
@@ -554,7 +639,7 @@ static int normal_step() {
 // FFI exports
 void hvm_init() {
   if (BUFF == NULL) {
-    BUFF = calloc((1ULL << 16), sizeof(a64));
+    BUFF = calloc((1ULL << 24), sizeof(a64));
   }
   RNOD_INI = 0;
   RNOD_END = 0;
@@ -608,6 +693,7 @@ static char* tag_to_str(Tag tag) {
     case OPX:  return "OPX";
     case OPY:  return "OPY";
     case W32:  return "W32";
+    case MAT:  return "MAT";
 
     default:   return "???";
   }

@@ -53,22 +53,6 @@ netToString (Net rot bag) = pcoreToString rot ++ "\n" ++ bagToString bag
 -- Runtime to String
 -- ----------------
 
-tagToString :: Tag -> String
-tagToString tag
-  | tag == _VAR_ = "VAR"
-  | tag == _SUB_ = "SUB"
-  | tag == _NUL_ = "NUL"
-  | tag == _ERA_ = "ERA"
-  | tag == _LAM_ = "LAM"
-  | tag == _APP_ = "APP"
-  | tag == _SUP_ = "SUP"
-  | tag == _DUP_ = "DUP"
-  | tag == _REF_ = "REF"
-  | tag == _OPX_ = "OPX"
-  | tag == _OPY_ = "OPY"
-  | tag == _W32_ = "W32"
-  | otherwise    = "???"
-
 labToString :: Lab -> String
 labToString lab = padLeft (showHex lab "") 6 '0'
 
@@ -76,7 +60,7 @@ locToString :: Loc -> String
 locToString loc = padLeft (showHex loc "") 9 '0'
 
 termToString :: Term -> String
-termToString term = tagToString (termTag term) ++ ":" ++ labToString (termLab term) ++ ":" ++ locToString (termLoc term)
+termToString term = show (termTag term) ++ ":" ++ labToString (termLab term) ++ ":" ++ locToString (termLoc term)
 
 -- Utilities
 -- ---------

@@ -67,6 +67,12 @@ parseNCore = do
       dp2 <- parseNCore
       consume "}"
       return $ NDup dp1 dp2
+    '?' -> do
+      consume "?("
+      ret  <- parseNCore
+      arms <- many1 parsePCore
+      consume ")"
+      return $ NMat ret arms
     _ -> do
       name <- parseName
       return $ NSub name
@@ -76,7 +82,6 @@ parseOper = do
   let opers :: [Oper] = enumFrom (toEnum 0)
   let operParser op = string' (operToString op) >> return op
   choice $ map operParser opers
-
 
 parseDex :: Parser Dex
 parseDex = do
@@ -108,13 +113,13 @@ parseDef = do
   name <- parseName
   consume "="
   net <- parseNet
-  spaces
+  skip
   return (name, net)
 
 parseBook :: Parser Book
 parseBook = do
   defs <- many parseDef
-  spaces
+  skip
   eof
   return $ Book (MS.fromList defs)
 
@@ -122,10 +127,10 @@ parseBook = do
 -- ---------
 
 peekNextChar :: Parser Char
-peekNextChar = spaces >> lookAhead anyChar
+peekNextChar = skip >> lookAhead anyChar
 
 parseName :: Parser String
-parseName = spaces >> many1 (alphaNum <|> char '_')
+parseName = skip >> many1 (alphaNum <|> char '_')
 
 parseNum :: Parser Word32
 parseNum = do
@@ -133,8 +138,19 @@ parseNum = do
   digits <- many1 digit
   return $ fromIntegral (read digits :: Integer)
 
+skip :: Parser ()
+skip = skipMany (parseSpace <|> parseComment) where
+  parseSpace = (try $ do
+    space
+    return ()) <?> "space"
+  parseComment = (try $ do
+    string "//"
+    skipMany (noneOf "\n")
+    char '\n'
+    return ()) <?> "comment"
+
 consume :: String -> Parser String
-consume str = spaces >> string str
+consume str = skip >> string str
 
 -- Main Entry Point
 -- ----------------

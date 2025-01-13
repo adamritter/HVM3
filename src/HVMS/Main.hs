@@ -55,7 +55,7 @@ cliRun filePath showStats = do
     end <- getCPUTime
     let diff = fromIntegral (end - start) / (10^9) :: Double
     itr <- incItr
-    let len  = 0 -- RNOD_END -- TODO: expose this via FFI
+    len <- rnodEnd
     let mips = (fromIntegral itr / 1000000.0) / (diff / 1000.0)
     putStrLn $ "ITRS: " ++ show itr
     putStrLn $ "TIME: " ++ show diff ++ "ms"
