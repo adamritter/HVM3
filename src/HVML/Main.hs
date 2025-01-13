@@ -9,6 +9,7 @@ module Main where
 import Crypto.Hash.MD5 (hash)
 import Control.Monad (when, forM_)
 import Data.FileEmbed
+import Data.List (partition, isPrefixOf)
 import Data.Time.Clock
 import Data.Word
 import Foreign.C.Types
@@ -35,7 +36,6 @@ import Text.Printf
 import Data.IORef
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as MS
-import Data.Either (isRight)
 
 runtime_c :: String
 runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
@@ -53,16 +53,17 @@ main :: IO ()
 main = do
   args <- getArgs
   result <- case args of
-    ("run" : file : args) -> do
-      let compiled = "-c" `elem` args
-      let collapse = "-C" `elem` args
-      let search   = "-S" `elem` args
-      let stats    = "-s" `elem` args
-      let debug    = "-d" `elem` args
+    ("run" : file : rest) -> do
+      let (flags, strArgs) = partition ("-" `isPrefixOf`) rest
+      let compiled = "-c" `elem` flags
+      let collapse = "-C" `elem` flags
+      let search   = "-S" `elem` flags
+      let stats    = "-s" `elem` flags
+      let debug    = "-d" `elem` flags
       let mode | collapse  = Collapse
                | search    = Search
                | otherwise = Normalize
-      cliRun file debug compiled mode stats
+      cliRun file debug compiled mode stats strArgs
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -76,7 +77,7 @@ printHelp :: IO (Either String ())
 printHelp = do
   putStrLn "HVM-Lazy usage:"
   putStrLn "  hvml help       # Shows this help message"
-  putStrLn "  hvml run <file> # Evals main"
+  putStrLn "  hvml run <file> [flags] [string args...] # Evals main"
   putStrLn "    -t # Returns the type (experimental)"
   putStrLn "    -c # Runs with compiled mode (fast)"
   putStrLn "    -C # Collapse the result to a list of λ-Terms"
@@ -88,12 +89,14 @@ printHelp = do
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> IO (Either String ())
-cliRun filePath debug compiled mode showStats = do
+cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> [String] -> IO (Either String ())
+cliRun filePath debug compiled mode showStats strArgs = do
   -- Initialize the HVM
   hvmInit
   code <- readFile filePath
-  book <- doParseBook code
+  -- Wrap the main function with any cli arguments
+  let codeA = code ++ "\n@__main = @main(" ++ unwords (map (\s -> "\"" ++ s ++ "\"") strArgs) ++ ")"
+  book <- doParseBook codeA
   -- Create the C file content
   let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
@@ -138,9 +141,15 @@ cliRun filePath debug compiled mode showStats = do
   when (not $ MS.member "main" (namToFid book)) $ do
     putStrLn "Error: 'main' not found."
     exitWith (ExitFailure 1)
+  -- Abort when wrong number of strArgs
+  let ((_, mainArgs), _) = mget (fidToFun book) (mget (namToFid book) "main")
+  when (length strArgs /= length mainArgs) $ do
+    putStrLn $ "Error: 'main' expects " ++ show (length mainArgs)
+              ++ " arguments, found " ++ show (length strArgs)
+    exitWith (ExitFailure 1)
   -- Normalize main
   init <- getCPUTime
-  root <- doInjectCoreAt book (Ref "main" (mget (namToFid book) "main") []) 0 []
+  root <- doInjectCoreAt book (Ref "__main" (mget (namToFid book) "__main") []) 0 []
   rxAt <- if compiled
     then return (reduceCAt debug)
     else return (reduceAt debug)
@@ -182,7 +191,7 @@ cliRun filePath debug compiled mode showStats = do
 
 genMain :: Book -> String
 genMain book =
-  let mainFid = mget (namToFid book) "main"
+  let mainFid = mget (namToFid book) "__main"
       registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ mget (fidToNam book) fid ++ "_f);" | fid <- MS.keys (fidToFun book)]
   in unlines
     [ "int main() {"
