@@ -460,8 +460,8 @@ static void interact_duplam(Loc a_loc, Loc b_loc) {
 static void interact_dupnul(Loc a_loc) {
   Loc dp1 = port(1, a_loc);
   Loc dp2 = port(2, a_loc);
-  move(dp1, term_new(W32, 0, a_loc));
-  move(dp2, term_new(W32, 0, a_loc));
+  move(dp1, term_new(NUL, 0, a_loc));
+  move(dp2, term_new(NUL, 0, a_loc));
 }
 
 static void interact_dupw32(Loc a_loc, u32 n) {
@@ -471,29 +471,34 @@ static void interact_dupw32(Loc a_loc, u32 n) {
   move(dp2, term_new(W32, 0, n));
 }
 
-static void interact_matnul(Loc a_loc, Lab num_arms) {
+static void interact_dupref(Loc a_loc, Loc b_loc) {
+  move(port(1, a_loc), term_new(REF, 0, b_loc));
+  move(port(2, a_loc), term_new(REF, 0, b_loc));
+}
+
+static void interact_matnul(Loc a_loc, Lab mat_len) {
   move(port(1, a_loc), term_new(NUL, 0, 0));
-  for (u32 i = 0; i < num_arms; i++) {
+  for (u32 i = 0; i < mat_len; i++) {
     link(term_new(ERA, 0, 0), take(port(i + 2, a_loc)));
   }
 }
 
-static void interact_matw32(Loc a_loc, Lab num_arms, u32 n) {
-  u32 i_arm = (n < num_arms - 1) ? n : (num_arms - 1);
-  for (u32 i = 0; i < num_arms; i++) {
+static void interact_matw32(Loc mat_loc, Lab mat_len, u32 n) {
+  u32 i_arm = (n < mat_len - 1) ? n : (mat_len - 1);
+  for (u32 i = 0; i < mat_len; i++) {
     if (i != i_arm) {
-      link(term_new(ERA, 0, 0), take(port(2 + i, a_loc)));
+      link(term_new(ERA, 0, 0), take(port(2 + i, mat_loc)));
     }
   }
 
-  Loc ret = port(1, a_loc);
-  Term arm = take(port(2 + i_arm, a_loc));
+  Loc ret = port(1, mat_loc);
+  Term arm = take(port(2 + i_arm, mat_loc));
 
-  if (i_arm < num_arms - 1) {
+  if (i_arm < mat_len - 1) {
     move(ret, arm);
   } else {
     Loc app = alloc_node(2);
-    set(app + 0, term_new(W32, 0, n - (num_arms - 1)));
+    set(app + 0, term_new(W32, 0, n - (mat_len - 1)));
     set(app + 1, term_new(SUB, 0, 0));
     move(ret, term_new(VAR, 0, port(2, app)));
 
@@ -501,8 +506,30 @@ static void interact_matw32(Loc a_loc, Lab num_arms, u32 n) {
   }
 }
 
-static void interact_matsup(Loc a_loc, Loc b_loc) {
-  printf("unimplemented\n");
+static void interact_matsup(Loc mat_loc, Lab mat_len, Loc sup_loc) {
+  Loc ma0 = alloc_node(1 + mat_len);
+  Loc ma1 = alloc_node(1 + mat_len);
+
+  Loc sup = alloc_node(2);
+
+  set(port(1, sup), term_new(VAR, 0, port(1, ma1)));
+  set(port(2, sup), term_new(VAR, 0, port(1, ma0)));
+  set(port(1, ma0), term_new(SUB, 0, 0));
+  set(port(1, ma1), term_new(SUB, 0, 0));
+
+  for (u64 i = 0; i < mat_len; i++) {
+    Loc dui = alloc_node(2);
+    set(port(1, dui),     term_new(SUB, 0, 0));
+    set(port(2, dui),     term_new(SUB, 0, 0));
+    set(port(2 + i, ma0), term_new(VAR, 0, port(2, dui)));
+    set(port(2 + i, ma1), term_new(VAR, 0, port(1, dui)));
+
+    link(term_new(DUP, 0, dui), take(port(2 + i, mat_loc)));
+  }
+
+  move(port(1, mat_loc), term_new(SUP, 0, sup));
+  link(term_new(MAT, mat_len, ma0), take(port(2, sup_loc)));
+  link(term_new(MAT, mat_len, ma1), take(port(1, sup_loc)));
 }
 
 
@@ -562,7 +589,8 @@ static void interact(Term neg, Term pos) {
         case NUL: interact_dupnul(neg_loc); break;
         case W32: interact_dupw32(neg_loc, pos_loc); break;
         // TODO(enricozb): dup-ref optimization
-        case REF: link(neg, expand_ref(pos_loc)); break;
+        case REF: interact_dupref(neg_loc, pos_loc); break;
+        // case REF: link(neg, expand_ref(pos_loc)); break;
         case SUP: interact_dupsup(neg_loc, pos_loc); break;
       }
       break;
@@ -572,7 +600,7 @@ static void interact(Term neg, Term pos) {
         case NUL: interact_matnul(neg_loc, term_lab(neg)); break;
         case W32: interact_matw32(neg_loc, term_lab(neg), pos_loc); break;
         case REF: link(neg, expand_ref(pos_loc)); break;
-        case SUP: interact_matsup(neg_loc, pos_loc); break;
+        case SUP: interact_matsup(neg_loc, term_lab(neg), pos_loc); break;
       }
       break;
     case ERA:
@@ -601,7 +629,7 @@ static int normal_step() {
   Term neg = take(loc + 0);
   Term pos = take(loc + 1);
 
-  // printf("\n\nINTERACT %s ~ %s\n\n", tag_to_str(neg), tag_to_str(pos));
+  // printf("\n\n%04lX: INTERACT %s ~ %s\n\n", inc_itr(), tag_to_str(neg), tag_to_str(pos));
 
   interact(neg, pos);
 
