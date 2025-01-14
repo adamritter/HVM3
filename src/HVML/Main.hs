@@ -94,9 +94,7 @@ cliRun filePath debug compiled mode showStats strArgs = do
   -- Initialize the HVM
   hvmInit
   code <- readFile filePath
-  -- Wrap the main function with any cli arguments
-  let codeA = code ++ "\n@__main = @main(" ++ unwords (map (\s -> "\"" ++ s ++ "\"") strArgs) ++ ")"
-  book <- doParseBook codeA
+  book <- doParseBook code
   -- Create the C file content
   let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))
@@ -149,7 +147,9 @@ cliRun filePath debug compiled mode showStats strArgs = do
     exitWith (ExitFailure 1)
   -- Normalize main
   init <- getCPUTime
-  root <- doInjectCoreAt book (Ref "__main" (mget (namToFid book) "__main") []) 0 []
+  -- Convert string arguments to Core terms and inject them at runtime
+  let args = map (\str -> foldr (\c acc -> Ctr "#Cons" [Chr c, acc]) (Ctr "#Nil" []) str) strArgs
+  root <- doInjectCoreAt book (Ref "main" (mget (namToFid book) "main") args) 0 []
   rxAt <- if compiled
     then return (reduceCAt debug)
     else return (reduceAt debug)
@@ -191,7 +191,7 @@ cliRun filePath debug compiled mode showStats strArgs = do
 
 genMain :: Book -> String
 genMain book =
-  let mainFid = mget (namToFid book) "__main"
+  let mainFid = mget (namToFid book) "main"
       registerFuncs = unlines ["  hvm_define(" ++ show fid ++ ", " ++ mget (fidToNam book) fid ++ "_f);" | fid <- MS.keys (fidToFun book)]
   in unlines
     [ "int main() {"
