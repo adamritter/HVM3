@@ -9,7 +9,7 @@ module Main where
 import Crypto.Hash.MD5 (hash)
 import Control.Monad (when, forM_)
 import Data.FileEmbed
-import Data.List (partition, isPrefixOf)
+import Data.List (partition, isPrefixOf, take, find)
 import Data.Time.Clock
 import Data.Word
 import Foreign.C.Types
@@ -36,6 +36,9 @@ import Text.Printf
 import Data.IORef
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as MS
+import Text.Read (readMaybe)
+
+import Debug.Trace
 
 runtime_c :: String
 runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
@@ -45,8 +48,7 @@ runtime_c = $(embedStringFile "./src/HVML/Runtime.c")
 
 data RunMode
   = Normalize
-  | Collapse
-  | Search
+  | Collapse (Maybe Int)
   deriving Eq
 
 main :: IO ()
@@ -54,16 +56,14 @@ main = do
   args <- getArgs
   result <- case args of
     ("run" : file : rest) -> do
-      let (flags, strArgs) = partition ("-" `isPrefixOf`) rest
-      let compiled = "-c" `elem` flags
-      let collapse = "-C" `elem` flags
-      let search   = "-S" `elem` flags
-      let stats    = "-s" `elem` flags
-      let debug    = "-d" `elem` flags
-      let mode | collapse  = Collapse
-               | search    = Search
-               | otherwise = Normalize
-      cliRun file debug compiled mode stats strArgs
+      let (flags,sArgs) = partition ("-" `isPrefixOf`) rest
+      let compiled      = "-c" `elem` flags
+      let collapseFlag  = Data.List.find (isPrefixOf "-C") flags >>= parseCollapseFlag
+      let stats         = "-s" `elem` flags
+      let debug         = "-d" `elem` flags
+      let hideQuotes    = "-Q" `elem` flags
+      let mode          = case collapseFlag of { Just n -> Collapse n ; Nothing -> Normalize }
+      cliRun file debug compiled mode stats hideQuotes sArgs
     ["help"] -> printHelp
     _ -> printHelp
   case result of
@@ -73,24 +73,32 @@ main = do
     Right _ -> do
       exitWith ExitSuccess
 
+parseCollapseFlag :: String -> Maybe (Maybe Int)
+parseCollapseFlag ('-':'C':rest) = 
+  case rest of
+    "" -> Just Nothing
+    n  -> Just (readMaybe n)
+parseCollapseFlag _ = Nothing
+
 printHelp :: IO (Either String ())
 printHelp = do
   putStrLn "HVM-Lazy usage:"
   putStrLn "  hvml help       # Shows this help message"
   putStrLn "  hvml run <file> [flags] [string args...] # Evals main"
-  putStrLn "    -t # Returns the type (experimental)"
-  putStrLn "    -c # Runs with compiled mode (fast)"
-  putStrLn "    -C # Collapse the result to a list of λ-Terms"
-  putStrLn "    -S # Search (collapse, then print the 1st λ-Term)"
-  putStrLn "    -s # Show statistics"
-  putStrLn "    -d # Print execution steps (debug mode)"
+  putStrLn "    -t  # Returns the type (experimental)"
+  putStrLn "    -c  # Runs with compiled mode (fast)"
+  putStrLn "    -C  # Collapse the result to a list of λ-Terms"
+  putStrLn "    -CN # Same as above, but show only first N results"
+  putStrLn "    -s  # Show statistics"
+  putStrLn "    -d  # Print execution steps (debug mode)"
+  putStrLn "    -Q  # Hide quotes in output"
   return $ Right ()
 
 -- CLI Commands
 -- ------------
 
-cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> [String] -> IO (Either String ())
-cliRun filePath debug compiled mode showStats strArgs = do
+cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> Bool -> [String] -> IO (Either String ())
+cliRun filePath debug compiled mode showStats hideQuotes strArgs = do
   -- Initialize the HVM
   hvmInit
   code <- readFile filePath
@@ -153,25 +161,28 @@ cliRun filePath debug compiled mode showStats strArgs = do
   rxAt <- if compiled
     then return (reduceCAt debug)
     else return (reduceAt debug)
-  vals <- if mode == Collapse || mode == Search
-    then doCollapseFlatAt rxAt book 0
-    else do
+  vals <- case mode of
+    Collapse _ -> doCollapseFlatAt rxAt book 0
+    Normalize -> do
       core <- doExtractCoreAt rxAt book 0
       return [(doLiftDups core)]
-  -- Print all collapsed results
-  when (mode == Collapse) $ do
-    lastItrs <- newIORef 0
-    forM_ vals $ \ term -> do
-      currItrs <- getItr
-      prevItrs <- readIORef lastItrs
-      -- printf "%012d %012d %s\n" currItrs (currItrs - prevItrs) (showCore term)
-      printf "%s\n" (showCore term)
-      writeIORef lastItrs currItrs
-  -- Prints just the first collapsed result
-  when (mode == Search || mode == Normalize) $ do
-    putStrLn $ showCore (head vals)
-  when (mode /= Normalize) $ do
-    putStrLn ""
+  -- Print results
+  case mode of
+    Collapse limit -> do
+      lastItrs <- newIORef 0
+      let limitedVals = maybe id Data.List.take limit vals
+      forM_ limitedVals $ \ term -> do
+        currItrs <- getItr
+        prevItrs <- readIORef lastItrs
+        let output = if hideQuotes then removeQuotes (showCore term) else showCore term
+        printf "%s\n" output
+        writeIORef lastItrs currItrs
+      putStrLn ""
+    Normalize -> do
+      let output = if hideQuotes
+                   then removeQuotes (showCore (head vals))
+                   else showCore (head vals)
+      putStrLn output
   -- Prints total time
   end <- getCPUTime
   -- Show stats
@@ -209,3 +220,8 @@ genMain book =
     , "  return 0;"
     , "}"
     ]
+
+removeQuotes :: String -> String
+removeQuotes s = case s of
+  '"':rest -> init rest  -- Remove first and last quote if present
+  _        -> s          -- Otherwise return as-is
