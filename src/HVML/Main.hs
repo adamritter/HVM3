@@ -6,8 +6,8 @@
 
 module Main where
 
-import Crypto.Hash.MD5 (hash)
-import Control.Monad (when, forM_)
+import Control.Monad (guard, when, forM_)
+import Control.Monad.Trans.Maybe (runMaybeT, MaybeT(..))
 import Data.FileEmbed
 import Data.List (partition, isPrefixOf)
 import Data.Time.Clock
@@ -34,7 +34,6 @@ import System.Posix.DynamicLinker
 import System.Process (callCommand)
 import Text.Printf
 import Data.IORef
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.Map.Strict as MS
 
 runtime_c :: String
@@ -115,15 +114,13 @@ cliRun filePath debug compiled mode showStats strArgs = do
     let fName = last $ words $ map (\c -> if c == '/' then ' ' else c) filePath
     let cPath = ".build/" ++ fName ++ ".c"
     let oPath = ".build/" ++ fName ++ ".so"
-    oldFile <- tryIOError (readFile cPath)
-    oldLib  <- tryIOError (dlopen oPath [RTLD_NOW])
-    bookLib <- case (oldFile, oldLib) of
-      -- Use the cache if the hash of the .c file matches
-      (Right old, Right lib) | hash (C8.pack old) == hash (C8.pack mainC) -> do
-        return lib
-      -- Otherwise, recompile
-      (old, lib) -> do
-        either (\_ -> return ()) dlclose lib
+    cache <- runMaybeT $ do
+      oldFile <- MaybeT $ either (\_ -> Nothing) Just <$> tryIOError (readFile cPath)
+      guard (oldFile == mainC)
+      MaybeT $ either (\_ -> Nothing) Just <$> tryIOError (dlopen oPath [RTLD_NOW])
+    bookLib <- case cache of
+      Just cache -> return cache
+      Nothing -> do
         writeFile cPath mainC
         callCommand $ "gcc -O2 -fPIC -shared " ++ cPath ++ " -o " ++ oPath
         dlopen oPath [RTLD_NOW]
