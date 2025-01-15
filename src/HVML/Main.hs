@@ -28,7 +28,7 @@ import System.CPUTime
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(ExitSuccess, ExitFailure))
 import System.IO
-import System.IO (readFile)
+import System.IO (readFile')
 import System.IO.Error (tryIOError)
 import System.Posix.DynamicLinker
 import System.Process (callCommand)
@@ -92,7 +92,7 @@ cliRun :: FilePath -> Bool -> Bool -> RunMode -> Bool -> [String] -> IO (Either 
 cliRun filePath debug compiled mode showStats strArgs = do
   -- Initialize the HVM
   hvmInit
-  code <- readFile filePath
+  code <- readFile' filePath
   book <- doParseBook code
   -- Create the C file content
   let decls = compileHeaders book
@@ -115,9 +115,9 @@ cliRun filePath debug compiled mode showStats strArgs = do
     let cPath = ".build/" ++ fName ++ ".c"
     let oPath = ".build/" ++ fName ++ ".so"
     cache <- runMaybeT $ do
-      oldFile <- MaybeT $ either (\_ -> Nothing) Just <$> tryIOError (readFile cPath)
+      oldFile <- MaybeT $ (either (\_ -> Nothing) Just) <$> tryIOError (readFile' cPath)
       guard (oldFile == mainC)
-      MaybeT $ either (\_ -> Nothing) Just <$> tryIOError (dlopen oPath [RTLD_NOW])
+      MaybeT $ (either (\_ -> Nothing) Just) <$> tryIOError (dlopen oPath [RTLD_NOW])
     bookLib <- case cache of
       Just cache -> return cache
       Nothing -> do
