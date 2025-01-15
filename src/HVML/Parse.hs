@@ -458,16 +458,15 @@ parseTopImp = do
   path <- many1 (noneOf "\n\r")
   skip
   st <- getState
-  if MS.member path (imported st)
-    then return []
-    else do
+  case MS.lookup path (imported st) of
+    Just _  -> return []
+    Nothing -> do
       contents <- liftIO $ readFile path
       modifyState (\s -> s { imported = MS.insert path () (imported s) })
       st <- getState
       result <- liftIO $ runParserT parseBookWithState st path contents
       case result of
-        Left err -> do
-          fail $ show err
+        Left err -> fail $ show err
         Right (importedDefs, importedState) -> do
           putState importedState
           return importedDefs
