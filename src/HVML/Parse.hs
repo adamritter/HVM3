@@ -461,9 +461,11 @@ parseADTCtr = do
 
 parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do
+  skip
   defs <- many $ do
+    def <- choice [parseTopImp, parseTopADT, parseTopDef]
     skip
-    choice [parseTopImp, parseTopADT, parseTopDef]
+    return def
   try $ skip >> eof
   return $ concat defs
 
