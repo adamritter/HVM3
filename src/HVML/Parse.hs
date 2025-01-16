@@ -5,12 +5,14 @@ module HVML.Parse where
 import Control.Monad (foldM, forM, forM_, when)
 import Control.Monad.State
 import Data.Either (isLeft)
+import Data.Maybe (fromMaybe)
 import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Word
 import Debug.Trace
 import HVML.Show
+import HVML.Check (checkVars)
 import HVML.Type
 import Highlight (highlightError)
 import System.Console.ANSI
@@ -25,16 +27,49 @@ import qualified Data.Map.Strict as MS
 -- Core Parsers
 -- ------------
 
+data VarUsage = Bound | Used
+
 data ParserState = ParserState
   { pCidToAri  :: MS.Map Word64 Word64
   , pCidToLen  :: MS.Map Word64 Word64
   , pCtrToCid  :: MS.Map String Word64
   , pCidToADT  :: MS.Map Word64 Word64
   , imported   :: MS.Map String ()
+  , varUsages  :: MS.Map String VarUsage
   , freshLabel :: Word64
   }
 
 type ParserM = ParsecT String ParserState IO
+
+bindVars :: [String] -> ParserM m -> ParserM m
+bindVars vars parse = do
+  st <- getState
+  let prev  = varUsages st
+  let bound = MS.fromList [(var, Bound) | var <- vars]
+  putState st {varUsages = MS.union bound prev}
+
+  val <- parse
+
+  st <- getState
+  let curr  = varUsages st
+  let bound = MS.fromList [(var, Bound) | var <- vars]
+  putState st {varUsages = MS.union (MS.difference curr bound) prev}
+
+  return val
+
+useVar :: String -> ParserM ()
+useVar var = do
+  st <- getState
+  putState st {varUsages = MS.insert var Used (varUsages st)}
+
+checkVar :: String -> ParserM ()
+checkVar var = do
+  st <- getState
+  case (var, MS.lookup var $ varUsages st) of
+    ('&' : _, Just _)     -> return ()
+    (_,       Just Bound) -> useVar var >>= (\_ -> return ())
+    (_,       Just Used)  -> fail $ "Variable " ++ show var ++ " used more than once"
+    (_,       Nothing)    -> fail $ "Unbound var " ++ show var
 
 parseCore :: ParserM Core
 parseCore = do
@@ -48,9 +83,9 @@ parseCore = do
 
     'λ' -> do
       consume "λ"
-      vr0 <- parseName1
-      bod <- parseCore
-      return $ Lam vr0 bod
+      var <- parseName1
+      bod <- bindVars [var] parseCore
+      return $ Lam var bod
 
     '(' -> do
       next <- lookAhead (anyChar >> anyChar)
@@ -105,8 +140,10 @@ parseCore = do
             [(num :: Word64, "")] -> do
               return $ Sup num tm0 tm1
             otherwise -> do
+              checkVar ("&" ++ name)
               return $ Ref "SUP" _SUP_F_ [Var ("&" ++ name), tm0, tm1]
         Nothing -> do
+          checkVar ("&" ++ name)
           return $ Var ("&" ++ name)
 
     '!' -> do
@@ -124,7 +161,8 @@ parseCore = do
           consume "}"
           consume "="
           val <- parseCore
-          bod <- parseCore
+          bod <- bindVars [dp0, dp1] parseCore
+
           if null nam then do
             num <- genFreshLabel
             return $ Dup num dp0 dp1 val bod
@@ -141,7 +179,7 @@ parseCore = do
             consume "="
             return nam
           val <- parseCore
-          bod <- parseCore
+          bod <- bindVars [fromMaybe "_" nam] parseCore
           case nam of
             Just nam -> return $ Let STRI nam val bod
             Nothing  -> return $ Let STRI "_" val bod
@@ -151,14 +189,14 @@ parseCore = do
           nam <- parseName1
           consume "="
           val <- parseCore
-          bod <- parseCore
+          bod <- bindVars [nam] parseCore
           return $ Let PARA nam val bod
 
         _ -> do
           nam <- parseName1
           consume "="
           val <- parseCore
-          bod <- parseCore
+          bod <- bindVars [nam] parseCore
           return $ Let LAZY nam val bod
 
     '#' -> parseCtr
@@ -176,7 +214,7 @@ parseCore = do
       name <- parseName1
       case reads (filter (/= '_') name) of
         [(num, "")] -> return $ U32 (fromIntegral (num :: Integer))
-        _           -> return $ Var name
+        _           -> checkVar name >>= \_ -> return $ Var name
 
 parseRef :: ParserM Core
 parseRef = do
@@ -219,9 +257,9 @@ parseMat = do
       parseCore
     case val of
       Just v  -> return (key, v)
-      Nothing -> return (key, Var key)
+      Nothing -> checkVar key >> return (key, Var key)
   consume "{"
-  css <- many $ do
+  css <- many $ bindVars (map fst mov) $ do
     closeWith "}"
     skip
     next <- lookAhead anyChar
@@ -237,7 +275,7 @@ parseMat = do
         consume "}"
         return fds
       consume ":"
-      bod <- parseCore
+      bod <- bindVars fds parseCore
       return ('#':ctr, fds, bod)
     -- Parse numeric or default case
     else do
@@ -251,8 +289,9 @@ parseMat = do
         -- Default case
         otherwise -> do
           consume ":"
-          bod <- parseCore
+          bod <- bindVars [nam] parseCore
           return ("_", [nam], bod)
+
   consume "}"
   css <- forM css $ \ (ctr, fds, bod) -> do
     st <- getState
@@ -381,7 +420,7 @@ parseDef = do
     return args
   skip
   consume "="
-  core <- parseCore
+  core <- bindVars (map snd args) parseCore
   -- trace ("parsed: " ++ showCore core) $ do
   return (name, ((copy,args), core))
 
@@ -473,7 +512,7 @@ parseTopImp = do
 
 doParseBook :: String -> IO Book
 doParseBook code = do
-  result <- runParserT p (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
+  result <- runParserT p (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
   case result of
     Right (defs, st) -> do
       return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
@@ -488,7 +527,7 @@ doParseBook code = do
 
 doParseCore :: String -> IO Core
 doParseCore code = do
-  result <- runParserT parseCore (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
+  result <- runParserT parseCore (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
   case result of
     Right core -> return core
     Left err -> do
