@@ -101,7 +101,7 @@ cliRun filePath debug compiled mode showStats hideQuotes strArgs = do
   -- Initialize the HVM
   hvmInit
   code <- readFile' filePath
-  book <- doParseBook code
+  book <- doParseBook filePath code
   -- Create the C file content
   let decls = compileHeaders book
   let funcs = map (\ (fid, _) -> compile book fid) (MS.toList (fidToFun book))

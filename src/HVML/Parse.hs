@@ -397,12 +397,10 @@ parseName1 = skip >> many1 (alphaNum <|> char '_' <|> char '$' <|> char '&')
 parseDef :: ParserM (String, ((Bool, [(Bool, String)]), Core))
 parseDef = do
   copy <- option False $ do
-    try $ do
-      consume "!"
-      return True
-  try $ do
+    string "!"
     skip
-    consume "@"
+    return True
+  string "@"
   name <- parseName
   args <- option [] $ do
     try $ string "("
@@ -425,9 +423,7 @@ parseDef = do
 
 parseADT :: ParserM ()
 parseADT = do
-  try $ do
-    skip
-    consume "data"
+  string "data"
   name <- parseName
   skip
   consume "{"
@@ -465,8 +461,9 @@ parseADTCtr = do
 
 parseBook :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseBook = do
-  skip
-  defs <- many $ choice [parseTopImp, parseTopADT, parseTopDef]
+  defs <- many $ do
+    skip
+    choice [parseTopImp, parseTopADT, parseTopDef]
   try $ skip >> eof
   return $ concat defs
 
@@ -489,12 +486,9 @@ parseTopDef = do
 -- FIXME: this is ugly code, improve it
 parseTopImp :: ParserM [(String, ((Bool, [(Bool,String)]), Core))]
 parseTopImp = do
-  try $ do
-    skip
-    string "import"
-    skipMany1 space
+  string "import"
+  space
   path <- many1 (noneOf "\n\r")
-  skip
   st <- getState
   case MS.lookup path (imported st) of
     Just _  -> return []
@@ -504,19 +498,22 @@ parseTopImp = do
       st <- getState
       result <- liftIO $ runParserT parseBookWithState st path contents
       case result of
-        Left err -> fail $ show err
+        Left err -> do
+          liftIO $ showParseError path contents err
+          fail $ "encountered the above error when importing file " ++ show path
         Right (importedDefs, importedState) -> do
           putState importedState
+          skip
           return importedDefs
 
-doParseBook :: String -> IO Book
-doParseBook code = do
+doParseBook :: String -> String -> IO Book
+doParseBook filePath code = do
   result <- runParserT p (ParserState MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty 0) "" code
   case result of
     Right (defs, st) -> do
       return $ createBook defs (pCtrToCid st) (pCidToAri st) (pCidToLen st) (pCidToADT st)
     Left err -> do
-      showParseError "" code err
+      showParseError filePath code err
       return $ Book MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty MS.empty
   where
     p = do
@@ -721,7 +718,7 @@ extractExpectedTokens err =
         failMsg = [msg | Message msg <- msgs]
         expectedMsgs = [msg | Expect msg <- msgs, msg /= "space", msg /= "Comment"]
     in if not (null failMsg)
-       then head failMsg 
+       then head failMsg
        else if null expectedMsgs
             then "syntax error"
             else intercalate " | " expectedMsgs
@@ -732,14 +729,16 @@ showParseError filename input err = do
   let lin = sourceLine pos
   let col = sourceColumn pos
   let errorMsg = extractExpectedTokens err
-  putStrLn $ setSGRCode [SetConsoleIntensity BoldIntensity] ++ "\nPARSE_ERROR" ++ setSGRCode [Reset]
+  putStr $ setSGRCode [SetConsoleIntensity BoldIntensity] ++ "\nPARSE_ERROR" ++ setSGRCode [Reset]
+  putStr " ("
+  putStr $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
+  putStrLn ")"
   if any isMessage (errorMessages err)
     then putStrLn $ "- " ++ errorMsg
     else do
       putStrLn $ "- expected: " ++ errorMsg
       putStrLn $ "- detected:"
   putStrLn $ highlightError (lin, col) (lin, col + 1) input
-  putStrLn $ setSGRCode [SetUnderlining SingleUnderline] ++ filename ++ setSGRCode [Reset]
   where
     isMessage (Message _) = True
     isMessage _ = False
