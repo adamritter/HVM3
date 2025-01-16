@@ -12,7 +12,6 @@ import Data.Maybe
 import Data.Word
 import Debug.Trace
 import HVML.Show
-import HVML.Check (checkVars)
 import HVML.Type
 import Highlight (highlightError)
 import System.Console.ANSI
