@@ -1,6 +1,7 @@
 module HVMS.Show where
 
 import Data.Word
+import Data.List
 import Numeric (showHex)
 import HVMS.Type
 
@@ -14,13 +15,18 @@ pcoreToString PNul           = "*"
 pcoreToString (PLam var bod) = "(" ++ ncoreToString var ++ " " ++ pcoreToString bod ++ ")"
 pcoreToString (PSup t1 t2)   = "{" ++ pcoreToString t1 ++ " " ++ pcoreToString t2 ++ "}"
 pcoreToString (PU32 num)     = show num
+pcoreToString (PI32 num)     = show num
+pcoreToString (PF32 num)     = show num
 
 ncoreToString :: NCore -> String
 ncoreToString (NSub nam)        = nam
 ncoreToString NEra              = "*"
-ncoreToString (NApp arg ret)    = "(" ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
-ncoreToString (NDup d1 d2)      = "{" ++ ncoreToString d1 ++ " " ++ ncoreToString d2 ++ "}"
-ncoreToString (NOp2 op arg ret) = "(" ++ operToString op ++ " " ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
+ncoreToString (NApp arg ret)    = "("  ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
+ncoreToString (NDup d1 d2)      = "{"  ++ ncoreToString d1  ++ " " ++ ncoreToString d2  ++ "}"
+ncoreToString (NOp2 op arg ret) = "("  ++ operToString op   ++ " " ++ pcoreToString arg ++ " " ++ ncoreToString ret ++ ")"
+ncoreToString (NMat ret arms)   = "?(" ++ ncoreToString ret ++ " " ++ armsString ++ ")"
+  where
+    armsString = intercalate " " (map pcoreToString arms)
 
 operToString :: Oper -> String
 operToString OP_ADD = "+"
