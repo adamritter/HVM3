@@ -318,7 +318,7 @@ _LOG_F_ :: Lab
 _LOG_F_ = 0xFFD
 
 primitives :: [(String, Lab)]
-primitives = 
+primitives =
   [ ("SUP", _SUP_F_)
   , ("DUP", _DUP_F_)
   , ("LOG", _LOG_F_)
