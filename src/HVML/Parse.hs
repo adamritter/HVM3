@@ -66,6 +66,7 @@ checkVar var = do
   st <- getState
   case (var, MS.lookup var $ varUsages st) of
     ('&' : _, Just _)     -> return ()
+    ('$' : _, Nothing)    -> bindVars [var] (return ()) -- Globals dont have a declaration
     (_,       Just Bound) -> useVar var >>= (\_ -> return ())
     (_,       Just Used)  -> fail $ "Variable " ++ show var ++ " used more than once"
     (_,       Nothing)    -> fail $ "Unbound var " ++ show var
