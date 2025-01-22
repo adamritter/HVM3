@@ -1,6 +1,8 @@
 module HVMS.Type where
 
 import Data.Word
+import GHC.Float
+import GHC.Int
 import Foreign.C.String
 import qualified Data.Map.Strict as MS
 
@@ -16,6 +18,8 @@ data PCore
   | PLam NCore PCore
   | PSup PCore PCore
   | PU32 Word32
+  | PI32 Int32
+  | PF32 Float
   deriving (Show, Eq)
 
 data NCore
@@ -72,7 +76,9 @@ data Tag
   | REF
   | OPX
   | OPY
-  | W32
+  | U32
+  | I32
+  | F32
   | MAT
   deriving (Enum, Eq, Show)
 
@@ -152,3 +158,15 @@ foreign import ccall unsafe "Runtime.c dump_buff"
 
 termOper :: Term -> Oper
 termOper term = (toEnum (fromIntegral (termLab term)))
+
+foreign import ccall unsafe "Runtime.c u32_to_i32"
+  word32ToInt32 :: Word32 -> Int32
+
+foreign import ccall unsafe "Runtime.c u32_to_f32"
+  word32ToFloat :: Word32 -> Float
+
+foreign import ccall unsafe "Runtime.c i32_to_u32"
+  int32ToWord32 :: Int32 -> Word32
+
+foreign import ccall unsafe "Runtime.c f32_to_u32"
+  floatToWord32 :: Float -> Word32
