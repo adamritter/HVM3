@@ -44,15 +44,28 @@ bindVars :: [String] -> ParserM m -> ParserM m
 bindVars vars parse = do
   st <- getState
   let prev  = varUsages st
-  let bound = MS.fromList [(var, Bound) | var <- vars]
-  putState st {varUsages = MS.union bound prev}
+  -- scopeless vars, regular vars
+  let (svars, rvars) = partition (\v -> head v == '$') vars
+
+  -- bind all scopeless vars
+  prev <- foldM
+    (\usgs var -> do
+      case MS.lookup var usgs  of
+        Just Bound -> fail $ "Scopeless variable " ++ show var ++ " has already been bound"
+        _          -> return $ MS.insert var Bound usgs
+    )
+    prev
+    svars
+
+  let tempBound = MS.fromList [(var, Bound) | var <- rvars]
+
+  putState st {varUsages = MS.union tempBound prev}
 
   val <- parse
 
   st <- getState
   let curr  = varUsages st
-  let bound = MS.fromList [(var, Bound) | var <- vars]
-  putState st {varUsages = MS.union (MS.difference curr bound) prev}
+  putState st {varUsages = MS.union (MS.difference curr tempBound) prev}
 
   return val
 
@@ -65,9 +78,9 @@ checkVar :: String -> ParserM ()
 checkVar var = do
   st <- getState
   case (var, MS.lookup var $ varUsages st) of
-    ('&' : _, Just _)     -> return ()
-    ('$' : _, Nothing)    -> bindVars [var] (return ()) -- Globals dont have a declaration
-    (_,       Just Bound) -> useVar var >>= (\_ -> return ())
+    ('&' : _, Just _)     -> return () -- &-vars can be used multiple times
+    ('$' : _, Nothing)    -> useVar var *> return () -- $-vars can be used before definition
+    (_,       Just Bound) -> useVar var *> return ()
     (_,       Just Used)  -> fail $ "Variable " ++ show var ++ " used more than once"
     (_,       Nothing)    -> fail $ "Unbound var " ++ show var
 
