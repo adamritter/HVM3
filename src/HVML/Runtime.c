@@ -1,5 +1,6 @@
 //./Type.hs//
 
+#include <inttypes.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>

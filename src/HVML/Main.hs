@@ -209,7 +209,7 @@ genMain book =
     , "  Term root = term_new(REF, "++show mainFid++", 0);"
     , "  normal(root);"
     , "  double time = (double)(clock() - start) / CLOCKS_PER_SEC * 1000;"
-    , "  printf(\"WORK: %llu interactions\\n\", get_itr());"
+    , "  printf(\"WORK: %\"PRIu64\" interactions\\n\", get_itr());"
     , "  printf(\"TIME: %.3fs seconds\\n\", time / 1000.0);"
     , "  printf(\"SIZE: %u nodes\\n\", get_len());"
     , "  printf(\"PERF: %.3f MIPS\\n\", (get_itr() / 1000000.0) / (time / 1000.0));"
