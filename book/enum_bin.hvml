@@ -109,28 +109,28 @@ data Pair { #Pair{fst snd} }
 // Lt two Bins (a < b)
 @lt(a b) = @lt_go(0 a b)
 
-@lt_go(k a b) = ~a !b {
+@lt_go(&k a b) = ~a !b {
   #E: ~b {
-    #E: k
+    #E: &k
     #O{bp}: 1
     #I{bp}: 1
   }
-  #O: λap ~b {
+  #O: λap ~b !ap {
     #E: 0
-    #O{bp}: @lt_go(k ap bp)
+    #O{bp}: @lt_go(&k ap bp)
     #I{bp}: @lt_go(1 ap bp)
   }
-  #I: λap ~b {
+  #I: λap ~b !ap {
     #E: 0
     #O{bp}: @lt_go(0 ap bp)
-    #I{bp}: @lt_go(k ap bp)
+    #I{bp}: @lt_go(&k ap bp)
   }
 }
 
 // Take the first N bits of a Bin
 @take(n b) = ~n {
   0: #E
-  p: ~b {
+  p: ~b !p {
     #O{bp}: #O{@take(p bp)}
     #I{bp}: #I{@take(p bp)}
     #E: #E

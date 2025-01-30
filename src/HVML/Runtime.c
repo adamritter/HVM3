@@ -302,9 +302,8 @@ Term reduce_ref_sup(Term ref, u32 idx) {
     if (i != idx) {
       // Duplicate argument
       Term arg = got(ref_loc + i);
-      Loc dup_loc = alloc_node(2);
+      Loc dup_loc = alloc_node(1);
       set(dup_loc + 0, arg);
-      set(dup_loc + 1, term_new(SUB, 0, 0));
       set(ref_loc + i, term_new(DP0, sup_lab, dup_loc));
       set(ref1_loc + i, term_new(DP1, sup_lab, dup_loc));
     } else {
@@ -383,14 +382,13 @@ Term reduce_app_sup(Term app, Term sup) {
   Term arg    = got(app_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   //Loc su0     = alloc_node(2);
   //Loc ap0     = alloc_node(2);
   Loc ap0     = app_loc;
   Loc su0     = sup_loc;
   Loc ap1     = alloc_node(2);
   set(du0 + 0, arg);
-  set(du0 + 1, term_new(SUB, 0, 0));
   set(ap0 + 0, tm0);
   set(ap0 + 1, term_new(DP0, sup_lab, du0));
   set(ap1 + 0, tm1);
@@ -426,10 +424,8 @@ Term reduce_dup_era(Term dup, Term era) {
   //printf("reduce_dup_era "); print_term(dup); printf("\n");
   inc_itr();
   Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   sub(dup_loc + 0, era);
-  sub(dup_loc + 1, era);
-  return term_rem_bit(got(dup_loc + dup_num));
+  return term_rem_bit(era);
 }
 
 // ! &L{r s} = λx(f)
@@ -443,25 +439,27 @@ Term reduce_dup_lam(Term dup, Term lam) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc lam_loc = term_loc(lam);
   Term bod    = got(lam_loc + 0);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   Loc lm0     = alloc_node(1);
   Loc lm1     = alloc_node(1);
   Loc su0     = alloc_node(2);
   set(du0 + 0, bod);
-  set(du0 + 1, term_new(SUB, 0, 0));
   //set(lm0 + 0, term_new(SUB, 0, 0));
   set(lm0 + 0, term_new(DP0, dup_lab, du0));
   //set(lm1 + 0, term_new(SUB, 0, 0));
   set(lm1 + 0, term_new(DP1, dup_lab, du0));
   set(su0 + 0, term_new(VAR, 0, lm0));
   set(su0 + 1, term_new(VAR, 0, lm1));
-  sub(dup_loc + 0, term_new(LAM, 0, lm0));
-  sub(dup_loc + 1, term_new(LAM, 0, lm1));
   sub(lam_loc + 0, term_new(SUP, dup_lab, su0));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(LAM, 0, lm1));
+    return term_new(LAM, 0, lm0);
+  } else {
+    sub(dup_loc + 0, term_new(LAM, 0, lm0));
+    return term_new(LAM, 0, lm1);
+  }
 }
 
 // ! &L{x y} = &R{a b}
@@ -479,34 +477,39 @@ Term reduce_dup_sup(Term dup, Term sup) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Lab sup_lab = term_lab(sup);
   Loc sup_loc = term_loc(sup);
   if (dup_lab == sup_lab) {
     Term tm0 = got(sup_loc + 0);
     Term tm1 = got(sup_loc + 1);
-    sub(dup_loc + 0, tm0);
-    sub(dup_loc + 1, tm1);
-    return term_rem_bit(got(dup_loc + dup_num));
+    if (term_tag(dup) == DP0) {
+      sub(dup_loc + 0, tm1);
+      return term_rem_bit(tm0);
+    } else {
+      sub(dup_loc + 0, tm0);
+      return term_rem_bit(tm1);
+    }
   } else {
-    Loc du0 = alloc_node(2);
-    Loc du1 = alloc_node(2);
+    Loc du0 = alloc_node(1);
+    Loc du1 = alloc_node(1);
     //Loc su0 = alloc_node(2);
     Loc su0 = sup_loc;
     Loc su1 = alloc_node(2);
     Term tm0 = take(sup_loc + 0);
     Term tm1 = take(sup_loc + 1);
     set(du0 + 0, tm0);
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(du1 + 0, tm1);
-    set(du1 + 1, term_new(SUB, 0, 0));
     set(su0 + 0, term_new(DP0, dup_lab, du0));
     set(su0 + 1, term_new(DP0, dup_lab, du1));
     set(su1 + 0, term_new(DP1, dup_lab, du0));
     set(su1 + 1, term_new(DP1, dup_lab, du1));
-    sub(dup_loc + 0, term_new(SUP, sup_lab, su0));
-    sub(dup_loc + 1, term_new(SUP, sup_lab, su1));
-    return term_rem_bit(got(dup_loc + dup_num));
+    if (term_tag(dup) == DP0) {
+      sub(dup_loc + 0, term_new(SUP, sup_lab, su1));
+      return term_new(SUP, sup_lab, su0);
+    } else {
+      sub(dup_loc + 0, term_new(SUP, sup_lab, su0));
+      return term_new(SUP, sup_lab, su1);
+    }
   }
 }
 
@@ -523,7 +526,6 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ctr_loc = term_loc(ctr);
   Lab ctr_lab = term_lab(ctr);
   u64 ctr_ari = HVM.cari[ctr_lab];
@@ -531,15 +533,18 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   Loc ctr0    = ctr_loc;
   Loc ctr1    = alloc_node(ctr_ari);
   for (u64 i = 0; i < ctr_ari; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(ctr_loc + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(ctr0 + i, term_new(DP0, dup_lab, du0));
     set(ctr1 + i, term_new(DP1, dup_lab, du0));
   }
-  sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
-  sub(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr1));
+    return term_new(CTR, ctr_lab, ctr0);
+  } else {
+    sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
+    return term_new(CTR, ctr_lab, ctr1);
+  }
 }
 
 // ! &L{x y} = 123
@@ -550,10 +555,8 @@ Term reduce_dup_w32(Term dup, Term w32) {
   //printf("reduce_dup_w32 "); print_term(dup); printf("\n");
   inc_itr();
   Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   sub(dup_loc + 0, w32);
-  sub(dup_loc + 1, w32);
-  return term_rem_bit(got(dup_loc + dup_num));
+  return term_rem_bit(w32);
 }
 
 // ! &L{x y} = @foo(a b c ...)
@@ -569,22 +572,24 @@ Term reduce_dup_ref(Term dup, Term ref) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ref_loc = term_loc(ref);
   Lab ref_lab = term_lab(ref);
   u64 ref_ari = HVM.fari[ref_lab];
   Loc ref0    = ref_loc;
   Loc ref1    = alloc_node(ref_ari);
   for (u64 i = 0; i < ref_ari; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(ref_loc + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(ref0 + i, term_new(DP0, dup_lab, du0));
     set(ref1 + i, term_new(DP1, dup_lab, du0));
   }
-  sub(dup_loc + 0, term_new(REF, ref_lab, ref0));
-  sub(dup_loc + 1, term_new(REF, ref_lab, ref1));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(REF, ref_lab, ref1));
+    return term_new(REF, ref_lab, ref0);
+  } else {
+    sub(dup_loc + 0, term_new(REF, ref_lab, ref0));
+    return term_new(REF, ref_lab, ref1);
+  }
 }
 
 // ~ * {K0 K1 K2 ...} 
@@ -632,9 +637,8 @@ Term reduce_mat_sup(Term mat, Term sup) {
   set(mat0 + 0, tm0);
   set(mat1 + 0, tm1);
   for (u64 i = 0; i < mat_len; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(mat_loc + 1 + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(mat0 + 1 + i, term_new(DP0, sup_lab, du0));
     set(mat1 + 1 + i, term_new(DP1, sup_lab, du0));
   }
@@ -745,14 +749,13 @@ Term reduce_opx_sup(Term opx, Term sup) {
   Term nmy    = got(opx_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   //Loc op0     = alloc_node(2);
   //Loc op1     = alloc_node(2);
   Loc op0     = opx_loc;
   Loc op1     = sup_loc;
   Loc su0     = alloc_node(2);
   set(du0 + 0, nmy);
-  set(du0 + 1, term_new(SUB, 0, 0));
   set(op0 + 0, tm0);
   set(op0 + 1, term_new(DP0, sup_lab, du0));
   set(op1 + 0, tm1);
@@ -948,7 +951,7 @@ Term reduce(Term term) {
       }
 
       case DP1: {
-        Term sb1 = got(loc + 1);
+        Term sb1 = got(loc + 0);
         if (term_get_bit(sb1) == 0) {
           HVM.sbuf[(*spos)++] = next;
           next = got(loc + 0);
@@ -1196,9 +1199,8 @@ Term DUP_f(Term ref) {
   }
   Term val = got(ref_loc + 1);
   Term bod = got(ref_loc + 2);
-  Loc dup = alloc_node(2);
+  Loc dup = alloc_node(1);
   set(dup + 0, val);
-  set(dup + 1, term_new(SUB, 0, 0));
   Term bod_term = got(ref_loc + 2);
   if (term_tag(bod_term) == LAM) {
     Loc lam1_loc = term_loc(bod_term);

@@ -126,7 +126,7 @@ reduceAt debug book host = do
           reduceAt debug book host
 
     DP1 -> do
-      sb1 <- got (loc + 1)
+      sb1 <- got (loc + 0)
       if termGetBit sb1 == 0
         then do
           val <- reduceAt debug book (loc + 0)
@@ -199,14 +199,13 @@ reduceRefAt_DupF book host loc ari = do
   lab <- reduceAt False book (loc + 0)
   val <- got (loc + 1)
   bod <- got (loc + 2)
-  dup <- allocNode 2
+  dup <- allocNode 1
   case tagT (termTag lab) of
     W32 -> do
       when (termLoc lab >= 0x1000000) $ do
         error "RUNTIME_ERROR: dynamic DUP label too large"
-      -- Create the DUP node with value and SUB
+      -- Create the DUP node with value
       set (dup + 0) val
-      set (dup + 1) (termNew _SUB_ 0 0)
       -- Create first APP node for (APP bod DP0)
       app1 <- allocNode 2
       set (app1 + 0) bod

@@ -150,8 +150,7 @@ compileFullCore book fid (Sup lab tm0 tm1) host = do
 
 compileFullCore book fid (Dup lab dp0 dp1 val bod) host = do
   dupNam <- fresh "dup"
-  emit $ "Loc " ++ dupNam ++ " = alloc_node(2);"
-  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
+  emit $ "Loc " ++ dupNam ++ " = alloc_node(1);"
   bind dp0 $ "term_new(DP0, " ++ show lab ++ ", " ++ dupNam ++ " + 0)"
   bind dp1 $ "term_new(DP1, " ++ show lab ++ ", " ++ dupNam ++ " + 0)"
   valT <- compileFullCore book fid val (dupNam ++ " + 0")
@@ -391,10 +390,9 @@ compileFastBody book fid term@(Dup lab dp0 dp1 val bod) ctx stop itr reuse = do
   emit $ "} else {"
   tabInc
   dupNam <- fresh "dup"
-  dupLoc <- compileFastAlloc 2 reuse
+  dupLoc <- compileFastAlloc 1 reuse
   emit $ "Loc " ++ dupNam ++ " = " ++ dupLoc ++ ";"
   emit $ "set(" ++ dupNam ++ " + 0, " ++ valNam ++ ");"
-  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
   emit $ dp0Nam ++ " = term_new(DP0, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   emit $ dp1Nam ++ " = term_new(DP1, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   tabDec
@@ -540,10 +538,9 @@ compileFastCore book fid (Dup lab dp0 dp1 val bod) reuse = do
   tabDec
   emit $ "} else {"
   tabInc
-  dupLoc <- compileFastAlloc 2 reuse
+  dupLoc <- compileFastAlloc 1 reuse
   emit $ "Loc " ++ dupNam ++ " = " ++ dupLoc ++ ";"
   emit $ "set(" ++ dupNam ++ " + 0, " ++ valNam ++ ");"
-  emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
   emit $ dp0Nam ++ " = term_new(DP0, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   emit $ dp1Nam ++ " = term_new(DP1, " ++ show lab ++ ", " ++ dupNam ++ " + 0);"
   tabDec
@@ -657,7 +654,7 @@ compileFastCore book fid (Ref rNam rFid rArg) reuse = do
     let [lab, val, Lam x (Lam y body)] = rArg
     dupNam <- fresh "dup"
     labNam <- fresh "lab"
-    dupLoc <- compileFastAlloc 2 reuse
+    dupLoc <- compileFastAlloc 1 reuse
     labT <- compileFastCore book fid lab reuse
     emit $ "Term " ++ labNam ++ " = reduce(" ++ labT ++ ");"
     emit $ "if (term_tag(" ++ labNam ++ ") != W32) {"
@@ -667,7 +664,6 @@ compileFastCore book fid (Ref rNam rFid rArg) reuse = do
     emit $ "Loc " ++ dupNam ++ " = " ++ dupLoc ++ ";"
     valT <- compileFastCore book fid val reuse
     emit $ "set(" ++ dupNam ++ " + 0, " ++ valT ++ ");"
-    emit $ "set(" ++ dupNam ++ " + 1, term_new(SUB, 0, 0));"
     bind x $ "term_new(DP0, term_loc(" ++ labNam ++ "), " ++ dupNam ++ " + 0)"
     bind y $ "term_new(DP1, term_loc(" ++ labNam ++ "), " ++ dupNam ++ " + 0)"
     compileFastCore book fid body reuse

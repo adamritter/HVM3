@@ -143,11 +143,11 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     DP1 -> do
       let loc = termLoc term
       let lab = termLab term
-      sb1 <- got (loc+1)
+      sb1 <- got (loc+0)
       if termGetBit sb1 /= 0
       then do
-        set (loc + 1) (termRemBit sb1)
-        collapseDupsAt state reduceAt book (loc + 1)
+        set (loc + 0) (termRemBit sb1)
+        collapseDupsAt state reduceAt book (loc + 0)
       else do
         let newPaths = IM.alter (Just . maybe [1] (1:)) (fromIntegral lab) paths
         collapseDupsAt (newPaths) reduceAt book (loc + 0)

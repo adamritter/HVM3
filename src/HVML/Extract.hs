@@ -70,11 +70,11 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- return $ "$" ++ show (loc + 0)
+        name <- return $ "$" ++ show (loc + 0) ++ "_0"
         return $ Var name
       else do
-        dp0 <- return $ "$" ++ show (loc + 0)
-        dp1 <- return $ "$" ++ show (loc + 1)
+        dp0 <- return $ "$" ++ show (loc + 0) ++ "_0"
+        dp1 <- return $ "$" ++ show (loc + 0) ++ "_1"
         val <- extractCoreAt dupsRef reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp0)
@@ -85,11 +85,11 @@ extractCoreAt dupsRef reduceAt book host = unsafeInterleaveIO $ do
       dups <- readIORef dupsRef
       if IS.member (fromIntegral loc) dups
       then do
-        name <- return $ "$" ++ show (loc + 1)
+        name <- return $ "$" ++ show (loc + 0) ++ "_1"
         return $ Var name
       else do
-        dp0 <- return $ "$" ++ show (loc + 0)
-        dp1 <- return $ "$" ++ show (loc + 1)
+        dp0 <- return $ "$" ++ show (loc + 0) ++ "_0"
+        dp1 <- return $ "$" ++ show (loc + 0) ++ "_1"
         val <- extractCoreAt dupsRef reduceAt book loc
         modifyIORef' dupsRef (IS.insert (fromIntegral loc))
         return $ Dup lab dp0 dp1 val (Var dp1)
