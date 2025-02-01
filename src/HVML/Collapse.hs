@@ -1,6 +1,5 @@
 -- //./Type.hs//
-
--- FIXME: when SUP labels have large vals, this takes a lot of time.
+-- //./Extract.hs//
 
 module HVML.Collapse where
 
@@ -9,6 +8,7 @@ import Control.Monad.IO.Class
 import Data.Char (chr, ord)
 import Data.IORef
 import Data.Word
+import Debug.Trace
 import GHC.Conc
 import HVML.Show
 import HVML.Type
@@ -16,8 +16,6 @@ import System.Exit (exitFailure)
 import System.IO.Unsafe (unsafeInterleaveIO)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as MS
-
-import Debug.Trace
 
 -- The Collapse Monad
 -- ------------------
@@ -43,7 +41,6 @@ bind k f = fork k IM.empty where
     let lft = fork x $ IM.alter (\x -> Just (maybe (putO id) putO x)) (fromIntegral k) paths in
     let rgt = fork y $ IM.alter (\x -> Just (maybe (putI id) putI x)) (fromIntegral k) paths in
     CSup k lft rgt 
-
   -- pass :: Collapse b -> IntMap Bin -> Collapse b
   pass CEra         paths = CEra
   pass (CVal v)     paths = CVal v
@@ -52,10 +49,8 @@ bind k f = fork k IM.empty where
     Just (I p) -> pass y (IM.insert (fromIntegral k) p paths)
     Just E     -> CSup k x y
     Nothing    -> CSup k x y
-
   -- putO :: (Bin -> Bin) -> (Bin -> Bin)
   putO bs = \x -> bs (O x)
-
   -- putI :: (Bin -> Bin) -> (Bin -> Bin) 
   putI bs = \x -> bs (I x)
 
@@ -82,9 +77,11 @@ instance Monad Collapse where
 -- -------------
 
 collapseDupsAt :: IM.IntMap [Int] -> ReduceAt -> Book -> Loc -> HVM Core
+
 collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
   term <- reduceAt book host
   case tagT (termTag term) of
+
     ERA -> do
       return Era
 
@@ -146,11 +143,11 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     DP1 -> do
       let loc = termLoc term
       let lab = termLab term
-      sb1 <- got (loc+1)
+      sb1 <- got (loc+0)
       if termGetBit sb1 /= 0
       then do
-        set (loc + 1) (termRemBit sb1)
-        collapseDupsAt state reduceAt book (loc + 1)
+        set (loc + 0) (termRemBit sb1)
+        collapseDupsAt state reduceAt book (loc + 0)
       else do
         let newPaths = IM.alter (Just . maybe [1] (1:)) (fromIntegral lab) paths
         collapseDupsAt (newPaths) reduceAt book (loc + 0)
@@ -158,20 +155,43 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     CTR -> do
       let loc = termLoc term
       let lab = termLab term
-      let cid = u12v2X lab
-      let ari = u12v2Y lab
+      let cid = lab
+      let nam = MS.findWithDefault "?" cid (cidToCtr book)
+      let ari = mget (cidToAri book) cid
       let aux = if ari == 0 then [] else [loc + i | i <- [0..ari-1]]
       fds0 <- forM aux (collapseDupsAt state reduceAt book)
-      return $ Ctr cid fds0
+      return $ Ctr nam fds0
 
     MAT -> do
       let loc = termLoc term
-      let len = u12v2X $ termLab term
-      let aux = if len == 0 then [] else [loc + 1 + i | i <- [0..len-1]]
+      let lab = termLab term
+      let cid = lab
+      let len = fromIntegral $ mget (cidToLen book) cid
       val0 <- collapseDupsAt state reduceAt book (loc + 0)
-      css0 <- forM aux $ \h -> do
-        bod <- collapseDupsAt state reduceAt book h
-        return $ ("#", [], bod) -- TODO: recover constructor and fields
+      css0 <- forM [0..len-1] $ \i -> do
+        let ctr = mget (cidToCtr book) (cid + i)
+        let ari = fromIntegral $ mget (cidToAri book) (cid + i)
+        let fds = if ari == 0 then [] else ["$" ++ show (loc + 1 + j) | j <- [0..ari-1]]
+        bod0 <- collapseDupsAt state reduceAt book (loc + 1 + i)
+        return (ctr, fds, bod0)
+      return $ Mat val0 [] css0
+
+    IFL -> do
+      let loc = termLoc term
+      let lab = termLab term
+      val0 <- collapseDupsAt state reduceAt book (loc + 0)
+      cs00 <- collapseDupsAt state reduceAt book (loc + 1)
+      cs10 <- collapseDupsAt state reduceAt book (loc + 2)
+      return $ Mat val0 [] [(mget (cidToCtr book) lab, [], cs00), ("_", [], cs10)]
+
+    SWI -> do
+      let loc = termLoc term
+      let lab = termLab term
+      let len = fromIntegral $ mget (cidToLen book) lab
+      val0 <- collapseDupsAt state reduceAt book (loc + 0)
+      css0 <- forM [0..len-1] $ \i -> do
+        bod0 <- collapseDupsAt state reduceAt book (loc + 1 + i)
+        return (show i, [], bod0)
       return $ Mat val0 [] css0
 
     W32 -> do
@@ -199,10 +219,10 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
     REF -> do
       let loc = termLoc term
       let lab = termLab term
-      let fid = u12v2X lab
-      let ari = u12v2Y lab
+      let fid = lab
+      let ari = funArity book fid
       arg0 <- mapM (collapseDupsAt state reduceAt book) [loc + i | i <- [0..ari-1]]
-      let name = MS.findWithDefault "?" fid (idToName book)
+      let name = MS.findWithDefault "?" fid (fidToNam book)
       return $ Ref name fid arg0
 
     tag -> do
@@ -214,25 +234,34 @@ collapseDupsAt state@(paths) reduceAt book host = unsafeInterleaveIO $ do
 -- -------------
 
 collapseSups :: Book -> Core -> Collapse Core
+
 collapseSups book core = case core of
-  Var name -> return $ Var name
+
+  Var name -> do
+    return $ Var name
+
   Ref name fid args -> do
     args <- mapM (collapseSups book) args
     return $ Ref name fid args
+
   Lam name body -> do
     body <- collapseSups book body
     return $ Lam name body
+
   App fun arg -> do
     fun <- collapseSups book fun
     arg <- collapseSups book arg
     return $ App fun arg
+
   Dup lab x y val body -> do
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Dup lab x y val body
-  Ctr cid fields -> do
+
+  Ctr nam fields -> do
     fields <- mapM (collapseSups book) fields
-    return $ Ctr cid fields
+    return $ Ctr nam fields
+
   Mat val mov css -> do
     val <- collapseSups book val
     mov <- mapM (\(key, expr) -> do
@@ -242,20 +271,26 @@ collapseSups book core = case core of
       bod <- collapseSups book bod
       return (ctr, fds, bod)) css
     return $ Mat val mov css
+
   U32 val -> do
     return $ U32 val
+
   Chr val -> do
     return $ Chr val
+
   Op2 op x y -> do
     x <- collapseSups book x
     y <- collapseSups book y
     return $ Op2 op x y
+
   Let mode name val body -> do
     val <- collapseSups book val
     body <- collapseSups book body
     return $ Let mode name val body
+
   Era -> do
     CEra
+
   Sup lab tm0 tm1 -> do
     let tm0' = collapseSups book tm0
     let tm1' = collapseSups book tm1

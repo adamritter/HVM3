@@ -4,11 +4,15 @@ import HVMS.Type
 import HVMS.Show (operToString)
 
 import Data.Word
+import GHC.Int
+import GHC.Float
+import Text.Read (readMaybe)
 import Text.Parsec
 import Text.Parsec.String
 
 import Debug.Trace
 import qualified Data.Map.Strict as MS
+import qualified Control.Applicative as Applicative
 
 -- Core Parser
 -- ----------
@@ -37,7 +41,7 @@ parsePCore = do
       name <- parseName
       return $ PRef name
     _ -> do
-      fmap PU32 parseNum <|> fmap PVar parseName
+      parseNum <|> fmap PVar parseName
 
 parseNCore :: Parser NCore
 parseNCore = do
@@ -67,16 +71,15 @@ parseNCore = do
       dp2 <- parseNCore
       consume "}"
       return $ NDup dp1 dp2
+    '?' -> do
+      consume "?("
+      ret  <- parseNCore
+      arms <- many1 parsePCore
+      consume ")"
+      return $ NMat ret arms
     _ -> do
       name <- parseName
       return $ NSub name
-
-parseOper :: Parser Oper
-parseOper = do
-  let opers :: [Oper] = enumFrom (toEnum 0)
-  let operParser op = string' (operToString op) >> return op
-  choice $ map operParser opers
-
 
 parseDex :: Parser Dex
 parseDex = do
@@ -108,13 +111,13 @@ parseDef = do
   name <- parseName
   consume "="
   net <- parseNet
-  spaces
+  skip
   return (name, net)
 
 parseBook :: Parser Book
 parseBook = do
   defs <- many parseDef
-  spaces
+  skip
   eof
   return $ Book (MS.fromList defs)
 
@@ -122,19 +125,48 @@ parseBook = do
 -- ---------
 
 peekNextChar :: Parser Char
-peekNextChar = spaces >> lookAhead anyChar
+peekNextChar = skip >> lookAhead anyChar
 
 parseName :: Parser String
-parseName = spaces >> many1 (alphaNum <|> char '_')
+parseName = skip >> many1 (alphaNum <|> char '_')
 
-parseNum :: Parser Word32
+parseOper :: Parser Oper
+parseOper = do
+  let opers :: [Oper] = enumFrom (toEnum 0)
+  let operParser op = string' (operToString op) >> return op
+  choice $ map operParser opers
+
+parseNum :: Parser PCore
 parseNum = do
-  spaces
-  digits <- many1 digit
-  return $ fromIntegral (read digits :: Integer)
+  head <- digit <|> oneOf "+-"
+  tail <- many (alphaNum <|> oneOf ".-+")
+  let num = (head : tail)
+
+  case readMaybeNumeric num of
+    Just core -> return core
+    Nothing   -> fail $ "Invalid num " ++ show num
+
+readMaybeNumeric :: String -> Maybe PCore
+readMaybeNumeric text = do
+  let (<|>) = (Applicative.<|>)
+
+  fmap PU32 (readMaybe text :: Maybe Word32) <|>
+    fmap PI32 (readMaybe text :: Maybe Int32) <|>
+    fmap PF32 (readMaybe text :: Maybe Float)
+
+skip :: Parser ()
+skip = skipMany (parseSpace <|> parseComment) where
+  parseSpace = (try $ do
+    space
+    return ()) <?> "space"
+  parseComment = (try $ do
+    string "//"
+    skipMany (noneOf "\n")
+    char '\n'
+    return ()) <?> "comment"
 
 consume :: String -> Parser String
-consume str = spaces >> string str
+consume str = skip >> string str
 
 -- Main Entry Point
 -- ----------------

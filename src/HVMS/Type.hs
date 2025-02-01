@@ -1,6 +1,8 @@
 module HVMS.Type where
 
 import Data.Word
+import GHC.Float
+import GHC.Int
 import Foreign.C.String
 import qualified Data.Map.Strict as MS
 
@@ -16,6 +18,8 @@ data PCore
   | PLam NCore PCore
   | PSup PCore PCore
   | PU32 Word32
+  | PI32 Int32
+  | PF32 Float
   deriving (Show, Eq)
 
 data NCore
@@ -24,6 +28,7 @@ data NCore
   | NApp PCore NCore
   | NOp2 Oper  PCore NCore
   | NDup NCore NCore
+  | NMat NCore [PCore]
   deriving (Show, Eq)
 
 data Oper
@@ -53,25 +58,31 @@ data Book = Book
 -- Runtime Types
 -- -------------
 
-type Tag  = Word8
+type Tag_ = Word8
 type Lab  = Word32
 type Loc  = Word32
 type Term = Word64
 
+data Tag
+  = VOID
+  | VAR
+  | SUB
+  | NUL
+  | ERA
+  | LAM
+  | APP
+  | SUP
+  | DUP
+  | REF
+  | OPX
+  | OPY
+  | U32
+  | I32
+  | F32
+  | MAT
+  deriving (Enum, Eq, Show)
+
 -- Runtime constants
-_VAR_, _SUB_, _NUL_, _ERA_, _LAM_, _APP_, _SUP_, _DUP_, _REF_, _OPX_, _OPY_, _W32_ :: Tag
-_VAR_ = 0x01
-_SUB_ = 0x02
-_NUL_ = 0x03
-_ERA_ = 0x04
-_LAM_ = 0x05
-_APP_ = 0x06
-_SUP_ = 0x07
-_DUP_ = 0x08
-_REF_ = 0x09
-_OPX_ = 0x0A
-_OPY_ = 0x0B
-_W32_ = 0x0C
 
 _VOID_ :: Term
 _VOID_ = 0x0
@@ -84,10 +95,14 @@ foreign import ccall unsafe "Runtime.c hvm_free"
   hvmFree :: IO ()
 
 foreign import ccall unsafe "Runtime.c term_new"
-  termNew :: Tag -> Lab -> Loc -> Term
+  termNew_ :: Tag_ -> Lab -> Loc -> Term
+termNew :: Tag -> Lab -> Loc -> Term
+termNew tag lab loc = termNew_ (fromIntegral (fromEnum tag) :: Tag_) lab loc
 
 foreign import ccall unsafe "Runtime.c term_tag"
-  termTag :: Term -> Tag
+  termTag_ :: Term -> Tag_
+termTag :: Term -> Tag
+termTag term = toEnum $ (fromIntegral (termTag_ term))
 
 foreign import ccall unsafe "Runtime.c term_lab"
   termLab :: Term -> Lab
@@ -97,6 +112,11 @@ foreign import ccall unsafe "Runtime.c term_loc"
 
 foreign import ccall unsafe "Runtime.c def_new"
   defNew :: CString -> IO ()
+
+foreign import ccall unsafe "Runtime.c def_name"
+  defName_ :: Loc -> IO CString
+defName :: Loc -> IO String
+defName loc = defName_ loc >>= peekCString
 
 foreign import ccall unsafe "Runtime.c swap"
   swap :: Loc -> Term -> IO Term
@@ -116,6 +136,9 @@ foreign import ccall unsafe "Runtime.c rbag_ini"
 foreign import ccall unsafe "Runtime.c rbag_end"
   rbagEnd :: IO Loc
 
+foreign import ccall unsafe "Runtime.c rnod_end"
+  rnodEnd :: IO Loc
+
 -- foreign import ccall unsafe "Runtime.c take"
 --   take :: Loc -> IO Term
 
@@ -130,3 +153,20 @@ foreign import ccall unsafe "Runtime.c normalize"
 
 foreign import ccall unsafe "Runtime.c dump_buff"
   dumpBuff :: IO ()
+
+-- Convenience Functions
+
+termOper :: Term -> Oper
+termOper term = (toEnum (fromIntegral (termLab term)))
+
+foreign import ccall unsafe "Runtime.c u32_to_i32"
+  word32ToInt32 :: Word32 -> Int32
+
+foreign import ccall unsafe "Runtime.c u32_to_f32"
+  word32ToFloat :: Word32 -> Float
+
+foreign import ccall unsafe "Runtime.c i32_to_u32"
+  int32ToWord32 :: Int32 -> Word32
+
+foreign import ccall unsafe "Runtime.c f32_to_u32"
+  floatToWord32 :: Float -> Word32

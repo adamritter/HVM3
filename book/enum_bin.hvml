@@ -109,28 +109,28 @@ data Pair { #Pair{fst snd} }
 // Lt two Bins (a < b)
 @lt(a b) = @lt_go(0 a b)
 
-@lt_go(k a b) = ~a !b {
+@lt_go(&k a b) = ~a !b {
   #E: ~b {
-    #E: k
+    #E: &k
     #O{bp}: 1
     #I{bp}: 1
   }
-  #O: λap ~b {
+  #O: λap ~b !ap {
     #E: 0
-    #O{bp}: @lt_go(k ap bp)
+    #O{bp}: @lt_go(&k ap bp)
     #I{bp}: @lt_go(1 ap bp)
   }
-  #I: λap ~b {
+  #I: λap ~b !ap {
     #E: 0
     #O{bp}: @lt_go(0 ap bp)
-    #I{bp}: @lt_go(k ap bp)
+    #I{bp}: @lt_go(&k ap bp)
   }
 }
 
 // Take the first N bits of a Bin
 @take(n b) = ~n {
   0: #E
-  p: ~b {
+  p: ~b !p {
     #O{bp}: #O{@take(p bp)}
     #I{bp}: #I{@take(p bp)}
     #E: #E
@@ -295,49 +295,17 @@ data Pair { #Pair{fst snd} }
 //@B = @cat(@bin(@H 19489) @bin(@H 0))
 //@P = @bin(@S 485724347)
 
-// 32:
-@K = 15
-@H = 16
-@S = 32
-@X = @cat(@all1(@H) @bin(@H 0))
-@Y = @cat(@all2(@H) @bin(@H 0))
-@A = @cat(@bin(@K 47791) @bin(@H 0))
-@B = @cat(@bin(@H 54881) @bin(@H 0))
-@P = @bin(@S 2622817871)
+//// 32:
+//@K = 15
+//@H = 16
+//@S = 32
+//@X = @cat(@all1(@H) @bin(@H 0))
+//@Y = @cat(@all2(@H) @bin(@H 0))
+//@A = @cat(@bin(@K 47791) @bin(@H 0))
+//@B = @cat(@bin(@H 54881) @bin(@H 0))
+//@P = @bin(@S 2622817871)
 
 @main = 
   ! cond = @eq(@mul(@X @Y) @P)
   ! not1 = @not(@eq(@X @bin(@S 1)))
   @if(@and(cond not1) λt(t @u32(@X) @u32(@Y)) *)
-
-  //λt(t @u32(@X) @u32(@mul(@X @B)))
-
-// Solve: X * Y = P mod 2^32
-//@main =
-  //! solved = @eq(@mul(@X @Y) @P)
-  //@if(solved λt(t (@X) (@Y)) *)
-
-//@main = @lt(@bin(32 155) @bin(32 155))
-
-//@main = @u32(@mul(@bin(32 1234) @bin(32 4321)))
-
-
-
-
-// printing all solutions
-//    4 bits ->     23416 itrs ~ 
-//    8 bits ->    137738 itrs ~ 538
-//    9 bits ->    334663 itrs ~ 653
-//   10 bits ->    813044 itrs ~ 793
-//   11 bits ->   2002681 itrs ~ 977
-//   12 bits ->   4799018 itrs ~ 1171
-//   16 bits -> 138896024 itrs ~ 2119
-
-//    8 bits ->      3813 itrs
-//   16 bits ->     26944 itrs
-//   32 bits ->    250514 itrs
-//   64 bits ->   2652646 itrs
-//  128 bits ->  31219719 itrs (1 second)
-//  256 bits -> 430236928 itrs (10 seconds)
-
-//2048 bits -> 

@@ -309,5 +309,3 @@ data Maybe {
 @main =
   ! solved = @eq(@nf(#App{@X @A}) @B 0)
   @when(solved @do_show_term(@X))
-
-//@main = @X

@@ -1,5 +1,6 @@
 //./Type.hs//
 
+#include <inttypes.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -11,15 +12,14 @@ typedef uint8_t  Tag;
 typedef uint32_t Lab;
 typedef uint32_t Loc;
 typedef uint64_t Term;
+typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
-
 typedef _Atomic(Term) ATerm;
 
 // Runtime Types
 // -------------
 
-// Global State Type
 typedef struct {
   Term*  sbuf; // reduction stack buffer
   u64*   spos; // reduction stack position
@@ -27,10 +27,13 @@ typedef struct {
   u64*   size; // global node length
   u64*   itrs; // interaction count
   u64*   frsh; // fresh dup label count
-  Term (*book[4096])(Term); // functions
+  Term (*book[65536])(Term); // functions
+  u16    cari[65536]; // arity of each constructor
+  u16    clen[65536]; // case length of each constructor
+  u16    cadt[65536]; // ADT id of each constructor
+  u16    fari[65536]; // arity of each function
 } State;
 
-// Global State Value
 static State HVM = {
   .sbuf = NULL,
   .spos = NULL,
@@ -38,7 +41,11 @@ static State HVM = {
   .size = NULL,
   .itrs = NULL,
   .frsh = NULL,
-  .book = {NULL}
+  .book = {NULL},
+  .cari = {0},
+  .clen = {0},
+  .cadt = {0},
+  .fari = {0},
 };
 
 // Constants
@@ -52,14 +59,16 @@ static State HVM = {
 #define LET 0x05
 #define APP 0x06
 #define MAT 0x08
-#define OPX 0x09
-#define OPY 0x0A
-#define ERA 0x0B
-#define LAM 0x0C
-#define SUP 0x0D
-#define CTR 0x0F
-#define W32 0x10
-#define CHR 0x11
+#define IFL 0x09
+#define SWI 0x0A
+#define OPX 0x0B
+#define OPY 0x0C
+#define ERA 0x0D
+#define LAM 0x0E
+#define SUP 0x0F
+#define CTR 0x10
+#define W32 0x11
+#define CHR 0x12
 
 #define OP_ADD 0x00
 #define OP_SUB 0x01
@@ -81,7 +90,6 @@ static State HVM = {
 #define DUP_F 0xFFF
 #define SUP_F 0xFFE
 #define LOG_F 0xFFD
-#define FRESH_F 0xFFC
 
 #define LAZY 0x0
 #define STRI 0x1
@@ -227,6 +235,8 @@ void print_tag(Tag tag) {
     case LET: printf("LET"); break;
     case CTR: printf("CTR"); break;
     case MAT: printf("MAT"); break;
+    case IFL: printf("IFL"); break;
+    case SWI: printf("SWI"); break;
     case W32: printf("W32"); break;
     case CHR: printf("CHR"); break;
     case OPX: printf("OPX"); break;
@@ -271,8 +281,8 @@ Term reduce_ref_sup(Term ref, u32 idx) {
   inc_itr();
   Loc ref_loc = term_loc(ref);
   Lab ref_lab = term_lab(ref);
-  u64 fun_id = u12v2_x(ref_lab);
-  u64 arity  = u12v2_y(ref_lab);
+  u64 fun_id = ref_lab;
+  u64 arity  = HVM.fari[fun_id];
   if (idx >= arity) {
     printf("ERROR: Invalid index in reduce_ref_sup\n");
     exit(1);
@@ -292,9 +302,8 @@ Term reduce_ref_sup(Term ref, u32 idx) {
     if (i != idx) {
       // Duplicate argument
       Term arg = got(ref_loc + i);
-      Loc dup_loc = alloc_node(2);
+      Loc dup_loc = alloc_node(1);
       set(dup_loc + 0, arg);
-      set(dup_loc + 1, term_new(SUB, 0, 0));
       set(ref_loc + i, term_new(DP0, sup_lab, dup_loc));
       set(ref1_loc + i, term_new(DP1, sup_lab, dup_loc));
     } else {
@@ -373,14 +382,13 @@ Term reduce_app_sup(Term app, Term sup) {
   Term arg    = got(app_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   //Loc su0     = alloc_node(2);
   //Loc ap0     = alloc_node(2);
   Loc ap0     = app_loc;
   Loc su0     = sup_loc;
   Loc ap1     = alloc_node(2);
   set(du0 + 0, arg);
-  set(du0 + 1, term_new(SUB, 0, 0));
   set(ap0 + 0, tm0);
   set(ap0 + 1, term_new(DP0, sup_lab, du0));
   set(ap1 + 0, tm1);
@@ -416,10 +424,8 @@ Term reduce_dup_era(Term dup, Term era) {
   //printf("reduce_dup_era "); print_term(dup); printf("\n");
   inc_itr();
   Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   sub(dup_loc + 0, era);
-  sub(dup_loc + 1, era);
-  return term_rem_bit(got(dup_loc + dup_num));
+  return term_rem_bit(era);
 }
 
 // ! &L{r s} = λx(f)
@@ -433,25 +439,27 @@ Term reduce_dup_lam(Term dup, Term lam) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc lam_loc = term_loc(lam);
   Term bod    = got(lam_loc + 0);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   Loc lm0     = alloc_node(1);
   Loc lm1     = alloc_node(1);
   Loc su0     = alloc_node(2);
   set(du0 + 0, bod);
-  set(du0 + 1, term_new(SUB, 0, 0));
   //set(lm0 + 0, term_new(SUB, 0, 0));
   set(lm0 + 0, term_new(DP0, dup_lab, du0));
   //set(lm1 + 0, term_new(SUB, 0, 0));
   set(lm1 + 0, term_new(DP1, dup_lab, du0));
   set(su0 + 0, term_new(VAR, 0, lm0));
   set(su0 + 1, term_new(VAR, 0, lm1));
-  sub(dup_loc + 0, term_new(LAM, 0, lm0));
-  sub(dup_loc + 1, term_new(LAM, 0, lm1));
   sub(lam_loc + 0, term_new(SUP, dup_lab, su0));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(LAM, 0, lm1));
+    return term_new(LAM, 0, lm0);
+  } else {
+    sub(dup_loc + 0, term_new(LAM, 0, lm0));
+    return term_new(LAM, 0, lm1);
+  }
 }
 
 // ! &L{x y} = &R{a b}
@@ -469,34 +477,39 @@ Term reduce_dup_sup(Term dup, Term sup) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Lab sup_lab = term_lab(sup);
   Loc sup_loc = term_loc(sup);
   if (dup_lab == sup_lab) {
     Term tm0 = got(sup_loc + 0);
     Term tm1 = got(sup_loc + 1);
-    sub(dup_loc + 0, tm0);
-    sub(dup_loc + 1, tm1);
-    return term_rem_bit(got(dup_loc + dup_num));
+    if (term_tag(dup) == DP0) {
+      sub(dup_loc + 0, tm1);
+      return term_rem_bit(tm0);
+    } else {
+      sub(dup_loc + 0, tm0);
+      return term_rem_bit(tm1);
+    }
   } else {
-    Loc du0 = alloc_node(2);
-    Loc du1 = alloc_node(2);
+    Loc du0 = alloc_node(1);
+    Loc du1 = alloc_node(1);
     //Loc su0 = alloc_node(2);
     Loc su0 = sup_loc;
     Loc su1 = alloc_node(2);
     Term tm0 = take(sup_loc + 0);
     Term tm1 = take(sup_loc + 1);
     set(du0 + 0, tm0);
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(du1 + 0, tm1);
-    set(du1 + 1, term_new(SUB, 0, 0));
     set(su0 + 0, term_new(DP0, dup_lab, du0));
     set(su0 + 1, term_new(DP0, dup_lab, du1));
     set(su1 + 0, term_new(DP1, dup_lab, du0));
     set(su1 + 1, term_new(DP1, dup_lab, du1));
-    sub(dup_loc + 0, term_new(SUP, sup_lab, su0));
-    sub(dup_loc + 1, term_new(SUP, sup_lab, su1));
-    return term_rem_bit(got(dup_loc + dup_num));
+    if (term_tag(dup) == DP0) {
+      sub(dup_loc + 0, term_new(SUP, sup_lab, su1));
+      return term_new(SUP, sup_lab, su0);
+    } else {
+      sub(dup_loc + 0, term_new(SUP, sup_lab, su0));
+      return term_new(SUP, sup_lab, su1);
+    }
   }
 }
 
@@ -513,23 +526,25 @@ Term reduce_dup_ctr(Term dup, Term ctr) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ctr_loc = term_loc(ctr);
   Lab ctr_lab = term_lab(ctr);
-  u64 ctr_ari = u12v2_y(ctr_lab);
+  u64 ctr_ari = HVM.cari[ctr_lab];
   //Loc ctr0    = alloc_node(ctr_ari);
   Loc ctr0    = ctr_loc;
   Loc ctr1    = alloc_node(ctr_ari);
   for (u64 i = 0; i < ctr_ari; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(ctr_loc + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(ctr0 + i, term_new(DP0, dup_lab, du0));
     set(ctr1 + i, term_new(DP1, dup_lab, du0));
   }
-  sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
-  sub(dup_loc + 1, term_new(CTR, ctr_lab, ctr1));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr1));
+    return term_new(CTR, ctr_lab, ctr0);
+  } else {
+    sub(dup_loc + 0, term_new(CTR, ctr_lab, ctr0));
+    return term_new(CTR, ctr_lab, ctr1);
+  }
 }
 
 // ! &L{x y} = 123
@@ -540,10 +555,8 @@ Term reduce_dup_w32(Term dup, Term w32) {
   //printf("reduce_dup_w32 "); print_term(dup); printf("\n");
   inc_itr();
   Loc dup_loc = term_loc(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   sub(dup_loc + 0, w32);
-  sub(dup_loc + 1, w32);
-  return term_rem_bit(got(dup_loc + dup_num));
+  return term_rem_bit(w32);
 }
 
 // ! &L{x y} = @foo(a b c ...)
@@ -559,22 +572,24 @@ Term reduce_dup_ref(Term dup, Term ref) {
   inc_itr();
   Loc dup_loc = term_loc(dup);
   Lab dup_lab = term_lab(dup);
-  Tag dup_num = term_tag(dup) == DP0 ? 0 : 1;
   Loc ref_loc = term_loc(ref);
   Lab ref_lab = term_lab(ref);
-  u64 ref_ari = u12v2_y(ref_lab);
+  u64 ref_ari = HVM.fari[ref_lab];
   Loc ref0    = ref_loc;
-  Loc ref1    = alloc_node(1 + ref_ari);
+  Loc ref1    = alloc_node(ref_ari);
   for (u64 i = 0; i < ref_ari; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(ref_loc + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(ref0 + i, term_new(DP0, dup_lab, du0));
     set(ref1 + i, term_new(DP1, dup_lab, du0));
   }
-  sub(dup_loc + 0, term_new(REF, ref_lab, ref0));
-  sub(dup_loc + 1, term_new(REF, ref_lab, ref1));
-  return term_rem_bit(got(dup_loc + dup_num));
+  if (term_tag(dup) == DP0) {
+    sub(dup_loc + 0, term_new(REF, ref_lab, ref1));
+    return term_new(REF, ref_lab, ref0);
+  } else {
+    sub(dup_loc + 0, term_new(REF, ref_lab, ref0));
+    return term_new(REF, ref_lab, ref1);
+  }
 }
 
 // ~ * {K0 K1 K2 ...} 
@@ -606,13 +621,14 @@ Term reduce_mat_lam(Term mat, Term lam) {
 Term reduce_mat_sup(Term mat, Term sup) {
   //printf("reduce_mat_sup "); print_term(mat); printf("\n");
   inc_itr();
+  Tag mat_tag = term_tag(mat);
+  Lab mat_lab = term_lab(mat);
   Loc mat_loc = term_loc(mat);
   Loc sup_loc = term_loc(sup);
   Lab sup_lab = term_lab(sup);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Lab mat_lab = term_lab(mat);
-  u64 mat_len = u12v2_x(mat_lab);
+  u64 mat_len = mat_tag == SWI ? mat_lab : mat_tag == IFL ? 2 : HVM.clen[mat_lab];
   Loc mat1    = alloc_node(1 + mat_len);
   //Loc mat0    = alloc_node(1 + mat_len);
   //Loc sup0    = alloc_node(2);
@@ -621,32 +637,28 @@ Term reduce_mat_sup(Term mat, Term sup) {
   set(mat0 + 0, tm0);
   set(mat1 + 0, tm1);
   for (u64 i = 0; i < mat_len; i++) {
-    Loc du0 = alloc_node(2);
+    Loc du0 = alloc_node(1);
     set(du0 + 0, got(mat_loc + 1 + i));
-    set(du0 + 1, term_new(SUB, 0, 0));
     set(mat0 + 1 + i, term_new(DP0, sup_lab, du0));
     set(mat1 + 1 + i, term_new(DP1, sup_lab, du0));
   }
-  set(sup0 + 0, term_new(MAT, mat_lab, mat0));
-  set(sup0 + 1, term_new(MAT, mat_lab, mat1));
+  set(sup0 + 0, term_new(mat_tag, mat_lab, mat0));
+  set(sup0 + 1, term_new(mat_tag, mat_lab, mat1));
   return term_new(SUP, sup_lab, sup0);
 }
 
-// ~ #N{x y z ...} {K0 K1 K2 ...} 
-// ------------------------------ MAT-CTR
-// (((KN x) y) z ...)
 Term reduce_mat_ctr(Term mat, Term ctr) {
-  //printf("reduce_mat_ctr "); print_term(mat); printf("\n");
   inc_itr();
+  Tag mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
   Lab mat_lab = term_lab(mat);
   // If-Let
-  if (u12v2_y(mat_lab) > 0) {
+  if (mat_tag == IFL) {
     Loc ctr_loc = term_loc(ctr);
     Lab ctr_lab = term_lab(ctr);
-    u64 mat_ctr = u12v2_y(mat_lab) - 1;
-    u64 ctr_num = u12v2_x(ctr_lab);
-    u64 ctr_ari = u12v2_y(ctr_lab);
+    u64 mat_ctr = mat_lab;
+    u64 ctr_num = ctr_lab;
+    u64 ctr_ari = HVM.cari[ctr_num];
     if (mat_ctr == ctr_num) {
       Term app = got(mat_loc + 1);
       for (u64 i = 0; i < ctr_ari; i++) {
@@ -668,9 +680,12 @@ Term reduce_mat_ctr(Term mat, Term ctr) {
   } else {
     Loc ctr_loc = term_loc(ctr);
     Lab ctr_lab = term_lab(ctr);
-    u64 ctr_num = u12v2_x(ctr_lab);
-    u64 ctr_ari = u12v2_y(ctr_lab);
-    Term app = got(mat_loc + 1 + ctr_num);
+    u64 ctr_num = ctr_lab;
+    u64 ctr_ari = HVM.cari[ctr_num];
+    u64 adt_id  = HVM.cadt[ctr_num];
+    u64 mat_ctr = mat_lab;
+    u64 cse_idx = ctr_num - mat_ctr;
+    Term app = got(mat_loc + 1 + cse_idx);
     for (u64 i = 0; i < ctr_ari; i++) {
       Loc new_app = alloc_node(2);
       set(new_app + 0, app);
@@ -691,7 +706,7 @@ Term reduce_mat_w32(Term mat, Term w32) {
   Lab mat_tag = term_tag(mat);
   Loc mat_loc = term_loc(mat);
   Lab mat_lab = term_lab(mat);
-  u64 mat_len = u12v2_x(mat_lab);
+  u64 mat_len = mat_lab;
   u64 w32_val = term_loc(w32);
   if (w32_val < mat_len - 1) {
     return got(mat_loc + 1 + w32_val);
@@ -734,14 +749,13 @@ Term reduce_opx_sup(Term opx, Term sup) {
   Term nmy    = got(opx_loc + 1);
   Term tm0    = got(sup_loc + 0);
   Term tm1    = got(sup_loc + 1);
-  Loc du0     = alloc_node(2);
+  Loc du0     = alloc_node(1);
   //Loc op0     = alloc_node(2);
   //Loc op1     = alloc_node(2);
   Loc op0     = opx_loc;
   Loc op1     = sup_loc;
   Loc su0     = alloc_node(2);
   set(du0 + 0, nmy);
-  set(du0 + 1, term_new(SUB, 0, 0));
   set(op0 + 0, tm0);
   set(op0 + 1, term_new(DP0, sup_lab, du0));
   set(op1 + 0, tm1);
@@ -863,7 +877,9 @@ Term reduce(Term term) {
   Term next = term;
   u64  stop = *HVM.spos;
   u64* spos = HVM.spos;
+
   while (1) {
+
     //printf("NEXT "); print_term(term); printf("\n");
     //printf("PATH ");
     //for (u64 i = 0; i < *spos; ++i) {
@@ -875,7 +891,9 @@ Term reduce(Term term) {
     Tag tag = term_tag(next);
     Lab lab = term_lab(next);
     Loc loc = term_loc(next);
+
     switch (tag) {
+
       case LET: {
         switch (lab) {
           case LAZY: {
@@ -884,7 +902,7 @@ Term reduce(Term term) {
           }
           case STRI: {
             HVM.sbuf[(*spos)++] = next;
-            next = got(loc + 1);
+            next = got(loc + 0);
             continue;
           }
           case PARA: {
@@ -893,26 +911,33 @@ Term reduce(Term term) {
           }
         }
       }
+
       case APP: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
-      case MAT: {
+
+      case MAT:
+      case IFL:
+      case SWI: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
+
       case OPX: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 0);
         continue;
       }
+
       case OPY: {
         HVM.sbuf[(*spos)++] = next;
         next = got(loc + 1);
         continue;
       }
+
       case DP0: {
         Term sb0 = got(loc + 0);
         if (term_get_bit(sb0) == 0) {
@@ -924,8 +949,9 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case DP1: {
-        Term sb1 = got(loc + 1);
+        Term sb1 = got(loc + 0);
         if (term_get_bit(sb1) == 0) {
           HVM.sbuf[(*spos)++] = next;
           next = got(loc + 0);
@@ -935,6 +961,7 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case VAR: {
         Term sub = got(loc);
         if (term_get_bit(sub) == 0) {
@@ -944,11 +971,14 @@ Term reduce(Term term) {
           continue;
         }
       }
+
       case REF: {
         next = reduce_ref(next); // TODO
         continue;
       }
+
       default: {
+
         if ((*spos) == stop) {
           break;
         } else {
@@ -957,10 +987,12 @@ Term reduce(Term term) {
           Lab  plab = term_lab(prev);
           Loc  ploc = term_loc(prev);
           switch (ptag) {
+
             case LET: {
               next = reduce_let(prev, next);
               continue;
             }
+
             case APP: {
               switch (tag) {
                 case ERA: next = reduce_app_era(prev, next); continue;
@@ -973,6 +1005,7 @@ Term reduce(Term term) {
               }
               break;
             }
+
             case DP0:
             case DP1: {
               switch (tag) {
@@ -986,7 +1019,10 @@ Term reduce(Term term) {
               }
               break;
             }
-            case MAT: {
+
+            case MAT:
+            case IFL:
+            case SWI: {
               switch (tag) {
                 case ERA: next = reduce_mat_era(prev, next); continue;
                 case LAM: next = reduce_mat_lam(prev, next); continue;
@@ -997,6 +1033,7 @@ Term reduce(Term term) {
                 default: break;
               }
             }
+
             case OPX: {
               switch (tag) {
                 case ERA: next = reduce_opx_era(prev, next); continue;
@@ -1008,6 +1045,7 @@ Term reduce(Term term) {
                 default: break;
               }
             }
+
             case OPY: {
               switch (tag) {
                 case ERA: next = reduce_opy_era(prev, next); continue;
@@ -1018,13 +1056,15 @@ Term reduce(Term term) {
                 case CHR: next = reduce_opy_w32(prev, next); continue;
                 default: break;
               }
-            } 
+            }
+
             default: break;
           }
           break;
         }
       }
     }
+
     if ((*HVM.spos) == stop) {
       return next;
     } else {
@@ -1036,13 +1076,17 @@ Term reduce(Term term) {
         case APP: set(hloc + 0, next); break;
         case DP0: set(hloc + 0, next); break;
         case DP1: set(hloc + 0, next); break;
-        case MAT: set(hloc + 0, next); break;
+        case LET: set(hloc + 0, next); break;
+        case MAT:
+        case IFL:
+        case SWI: set(hloc + 0, next); break;
         case OPX: set(hloc + 0, next); break;
         case OPY: set(hloc + 1, next); break;
       }
       *HVM.spos = stop;
       return HVM.sbuf[stop];
     }
+
   }
   printf("retr: ERR\n");
   return 0;
@@ -1060,12 +1104,14 @@ Term normal(Term term) {
   Lab lab = term_lab(wnf);
   Loc loc = term_loc(wnf);
   switch (tag) {
+
     case LAM: {
       Term bod = got(loc + 0);
       bod = normal(bod);
       set(loc + 1, bod);
       return wnf;
     }
+
     case APP: {
       Term fun = got(loc + 0);
       Term arg = got(loc + 1);
@@ -1075,6 +1121,7 @@ Term normal(Term term) {
       set(loc + 1, arg);
       return wnf;
     }
+
     case SUP: {
       Term tm0 = got(loc + 0);
       Term tm1 = got(loc + 1);
@@ -1084,6 +1131,7 @@ Term normal(Term term) {
       set(loc + 1, tm1);
       return wnf;
     }
+
     case DP0:
     case DP1: {
       Term val = got(loc + 0);
@@ -1091,9 +1139,10 @@ Term normal(Term term) {
       set(loc + 0, val);
       return wnf;
     }
+
     case CTR: {
-      u64 cid = u12v2_x(lab);
-      u64 ari = u12v2_y(lab);
+      u64 cid = lab;
+      u64 ari = HVM.cari[cid];
       for (u64 i = 0; i < ari; i++) {
         Term arg = got(loc + i);
         arg = normal(arg);
@@ -1101,17 +1150,22 @@ Term normal(Term term) {
       }
       return wnf;
     }
-    case MAT: {
-      u64 mat_len = u12v2_x(lab);
-      for (u64 i = 0; i <= mat_len; i++) {
+
+    case MAT:
+    case IFL:
+    case SWI: {
+      u64 len = tag == SWI ? lab : tag == IFL ? 2 : HVM.clen[lab];
+      for (u64 i = 0; i <= len; i++) {
         Term arg = got(loc + i);
         arg = normal(arg);
         set(loc + i, arg);
       }
       return wnf;
     }
+
     default:
       return wnf;
+
   }
 }
 
@@ -1145,9 +1199,8 @@ Term DUP_f(Term ref) {
   }
   Term val = got(ref_loc + 1);
   Term bod = got(ref_loc + 2);
-  Loc dup = alloc_node(2);
+  Loc dup = alloc_node(1);
   set(dup + 0, val);
-  set(dup + 1, term_new(SUB, 0, 0));
   Term bod_term = got(ref_loc + 2);
   if (term_tag(bod_term) == LAM) {
     Loc lam1_loc = term_loc(bod_term);
@@ -1176,11 +1229,6 @@ Term LOG_f(Term ref) {
   exit(0);
 }
 
-Term FRESH_f(Term ref) {
-  printf("TODO: FRESH_f");
-  exit(0);
-}
-
 // Runtime Memory
 // --------------
 
@@ -1199,7 +1247,12 @@ void hvm_init() {
   HVM.book[SUP_F] = SUP_f;
   HVM.book[DUP_F] = DUP_f;
   HVM.book[LOG_F] = LOG_f;
-  HVM.book[FRESH_F] = FRESH_f;
+  for (int i = 0; i < 65536; i++) {
+    HVM.cari[i] = 0;
+    HVM.clen[i] = 0;
+    HVM.cadt[i] = 0;
+    HVM.fari[i] = 0;
+  }
 }
 
 void hvm_free() {
@@ -1222,12 +1275,31 @@ void hvm_set_state(State* hvm) {
   HVM.size = hvm->size;
   HVM.itrs = hvm->itrs;
   HVM.frsh = hvm->frsh;
-  for (int i = 0; i < 4096; i++) {
+  for (int i = 0; i < 65536; i++) {
     HVM.book[i] = hvm->book[i];
+    HVM.fari[i] = hvm->fari[i];
+    HVM.cari[i] = hvm->cari[i];
+    HVM.clen[i] = hvm->clen[i];
+    HVM.cadt[i] = hvm->cadt[i];
   }
 }
 
 void hvm_define(u64 fid, Term (*func)()) {
   //printf("defined %llu %p\n", fid, func);
   HVM.book[fid] = func;
+}
+
+void hvm_set_cari(u64 cid, u16 arity) {
+  HVM.cari[cid] = arity;
+}
+
+void hvm_set_fari(u64 fid, u16 arity) {
+  HVM.fari[fid] = arity;
+}
+
+void hvm_set_clen(u64 cid, u16 cases) {
+  HVM.clen[cid] = cases;
+}
+void hvm_set_cadt(u64 cid, u16 adt) {
+  HVM.cadt[cid] = adt;
 }
